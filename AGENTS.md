@@ -1,11 +1,13 @@
 # AGENTS.md
 
-本项目的 AI 协作约定。开始工作前请先阅读本文件。这是一个 **Unity** 项目。你应该已经连接到 unity-mcp 和 coplay-mcp。
-每次修改代码后，你应该需要让Unity重新编译脚本，检查编译期控制台报错，之后运行，检查运行时控制台报错。
+本项目的 AI 协作约定。开始工作前请先阅读本文件。这是一个 **Unity** 项目。你应该已经连接到 unity-mcp。
+优先考虑使用 unity-mcp 来操作工程。
 
 ## 项目目标
 
 本项目的目标是实现是一个 FairyGUI 的三方 SDK，叫做 NanamiUI，基于 uGUI。希望能完美还原 FairyGUI 的效果，让用户可以继续用 FairyGUI Editor 做编辑器，用基于 uGUI 的 NanamiUI SDK 做 Runtime。
+每个组件转换后是一个 prefab。
+可以像 FairyGUI 自带的生成代码功能那样根据 FairyGUI 工程结构生成出对应的 C# 代码。
 
 ## 目录结构
 
@@ -15,7 +17,7 @@ Editor：转换的脚本，命名空间为 NanamiUI.Editor。
 Runtime：运行时 SDK，命名空间为 NanamiUI。包含基础组件的定义，例如 Controller 等。
 
 转换生成的产物根目录应该在 Assets/{FairyGUI项目名，这里叫UIProject}。有下列子目录：
-Assets：需要用到的字体、图片等资源文件，保持以前的目录结构。也包含转换后的组件，每个组件是一个 prefab。
+Assets：需要用到的字体、图片等资源文件，也包含转换后的组件，每个组件是一个 prefab。保持以前的目录结构。
 Scripts：codegen 生成的代码。
 
 ## 代码结构
