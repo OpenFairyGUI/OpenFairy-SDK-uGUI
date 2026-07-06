@@ -28,7 +28,7 @@ SDK (Assets/Plugins/NanamiUI/Runtime) 里包含每个基础组件的定义，跟
 ## codegen
 类似于 FairyGUI 自带的 codegen 功能一样，NanamiUI 也可以根据 FairyGUI 工程结构，预先生成脚本。
 每个工程里自定义组件会生成出一个类，继承自 Component。里面会有每个子物体的静态引用，通过 prefab 序列化的方式预先挂上去。
-每个 Controller 会生成一个类，类名为 {组件名}.{Controller名}，单独一个文件。每个 Controller 还会生成一个 Enum，类名为 {组件名}.{Controller名}.Page 对应于那个 Controller 的每个页，Enum 嵌套在拥有它的组件类内。这个 Enum 就是生成的Controller 继承 Controller<T> 的泛型类型。这样生成的每个具体 Controller 就不再是泛型了，可以挂在 GameObject 上了。
+每个 Controller 会生成一个类，类名为 {组件名}_{Controller名}，单独一个文件。每个 Controller 还会生成一个 Enum {组件名}_{Controller名}.Page 对应于那个 Controller 的每个页，Enum 嵌套在 Controller 类内。这个 Enum 就是生成的Controller 继承 Controller<T> 的泛型类型。这样生成的每个具体 Controller 就不再是泛型了，可以挂在 GameObject 上了。
 
 ## 代码风格
 
