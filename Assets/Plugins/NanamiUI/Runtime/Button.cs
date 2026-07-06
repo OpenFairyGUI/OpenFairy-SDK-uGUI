@@ -1,11 +1,12 @@
+using System;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 
 namespace NanamiUI
 {
-    public class Button : Component, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
+    public abstract class Button<T> : Component, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler where T : struct, Enum
     {
-        public Controller controller;
+        public Controller<T> controller;
         public Text titleText;
         public UnityEvent onClick = new();
 
@@ -47,10 +48,10 @@ namespace NanamiUI
 
         private void SetState(string page)
         {
-            if (page == "over" && !controller.HasPage("over"))
-                page = "up";
-            if (controller.HasPage(page))
-                controller.SelectedPage = page;
+            if (Enum.TryParse(page, out T value))
+            {
+                controller.page = value;
+            }
         }
     }
 }

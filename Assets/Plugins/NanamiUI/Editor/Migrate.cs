@@ -29,6 +29,19 @@ namespace NanamiUI.Editor
             public string Scale9Grid;
         }
 
+        private class ControllerData
+        {
+            public string Name;
+            public Type PageType;
+            public string[] PageIds;
+            public object[] PageValues;
+            public int Selected;
+            public List<object> Gears = new();
+            public object Value;
+
+            public string FieldName => Field(Name);
+        }
+
         private static readonly Dictionary<string, Resource> Resources = new();
         private static CommonSettings _settings;
 
@@ -142,23 +155,31 @@ namespace NanamiUI.Editor
             foreach (var controller in xml.Elements("controller"))
             {
                 var cname = Identifier(controller.Attribute("name").Value);
-                var members = PageNames(controller).Select((page, i) => page == "" ? $"Page{i}" : Identifier(Cap(page)));
-                if (used.Add(cname))
-                    fields.Add($"        public {name}_{cname} {cname};");
-                WriteScript($"{Path.GetDirectoryName(path)}/{name}_{cname}.cs".Replace('\\', '/'),
-                    $"namespace {component.Package}\n{{\n    public class {name}_{cname} : NanamiUI.Controller<{name}_{cname}.Page>\n    {{\n        public enum Page {{ {string.Join(", ", members)} }}\n    }}\n}}\n");
+                DeleteScript($"{Path.GetDirectoryName(path)}/{name}_{cname}.cs".Replace('\\', '/'));
+                if (used.Add(Field(cname)))
+                {
+                    fields.Add($"        public enum {cname}");
+                    fields.Add("        {");
+                    fields.AddRange(PageMembers(controller).Select(page => $"            {page.Member},"));
+                    fields.Add("        }");
+                    fields.Add($"        public Controller<{cname}> {Field(cname)};");
+                }
             }
 
             foreach (var child in xml.Element("displayList")?.Elements() ?? Enumerable.Empty<XElement>())
             {
                 var fieldName = Identifier(child.Attribute("name").Value);
                 var fieldType = FieldType(child, component.PackageId);
-                if (fieldType != null && used.Add(fieldName))
-                    fields.Add($"        public {fieldType} {fieldName};");
+                if (fieldType != null && used.Add(Field(fieldName)))
+                    fields.Add($"        public {fieldType} {Field(fieldName)};");
             }
 
-            var baseType = xml.Attribute("extention")?.Value == "Button" ? "NanamiUI.Button" : "NanamiUI.Component";
+            var baseType = xml.Attribute("extention")?.Value == "Button"
+                ? $"NanamiUI.Button<{name}.{Identifier(xml.Element("controller").Attribute("name").Value)}>"
+                : "NanamiUI.Component";
             var code = new StringBuilder();
+            if (xml.Elements("controller").Any())
+                code.AppendLine("using NanamiUI;");
             code.AppendLine("using UnityEngine;");
             code.AppendLine("using UnityEngine.UI;");
             code.AppendLine();
@@ -179,6 +200,12 @@ namespace NanamiUI.Editor
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             if (!File.Exists(path) || File.ReadAllText(path) != text)
                 File.WriteAllText(path, text);
+        }
+
+        private static void DeleteScript(string path)
+        {
+            if (File.Exists(path))
+                AssetDatabase.DeleteAsset(path);
         }
 
         private static string FieldType(XElement child, string packageId) => child.Name.LocalName switch
@@ -204,25 +231,28 @@ namespace NanamiUI.Editor
                 if (xml.Attribute("overflow")?.Value == "hidden")
                     root.AddComponent<RectMask2D>();
 
-                var comp = (Component)root.AddComponent(FindType($"{component.Package}.{Identifier(root.name)}"));
+                var componentType = FindType($"{component.Package}.{Identifier(root.name)}");
+                var comp = (Component)root.AddComponent(componentType);
 
-                var controllers = new Dictionary<string, Controller>();
-                var pageIds = new Dictionary<Controller, string[]>();
-                var gears = new Dictionary<Controller, List<Gear>>();
+                var controllers = new Dictionary<string, ControllerData>();
                 foreach (var element in xml.Elements("controller"))
                 {
-                    var cname = element.Attribute("name").Value;
-                    var controller = (Controller)root.AddComponent(FindType($"{component.Package}.{Identifier(root.name)}_{Identifier(cname)}"));
-                    controller.pageNames = PageNames(element);
-                    controller.selected = int.Parse(element.Attribute("selected")?.Value ?? "0");
-                    pageIds[controller] = element.Attribute("pages").Value.Split(',').Where((_, i) => i % 2 == 0).ToArray();
-                    controllers[cname] = controller;
-                    gears[controller] = new List<Gear>();
+                    var name = Identifier(element.Attribute("name").Value);
+                    var pages = PageMembers(element).ToArray();
+                    var pageType = componentType.GetNestedType(name);
+                    controllers[element.Attribute("name").Value] = new ControllerData
+                    {
+                        Name = name,
+                        PageType = pageType,
+                        PageIds = pages.Select(page => page.Id).ToArray(),
+                        PageValues = pages.Select(page => Enum.Parse(pageType, page.Member)).ToArray(),
+                        Selected = int.Parse(element.Attribute("selected")?.Value ?? "0"),
+                    };
                 }
 
                 var children = new List<(XElement Xml, GameObject Go)>();
                 foreach (var element in xml.Element("displayList")?.Elements() ?? Enumerable.Empty<XElement>())
-                    children.Add((element, CreateChild(element, rt, component, controllers, pageIds, gears)));
+                    children.Add((element, CreateChild(element, rt, component, controllers)));
 
                 foreach (var (element, go) in children)
                     if (element.Name.LocalName == "group")
@@ -230,28 +260,24 @@ namespace NanamiUI.Editor
                             if (member.Attribute("group")?.Value == element.Attribute("id").Value)
                                 memberGo.transform.SetParent(go.transform, true);
 
-                foreach (var (controller, list) in gears)
-                {
-                    controller.gears = list.ToArray();
-                    foreach (var gear in controller.gears)
-                        gear.Apply(controller.selected);
-                }
+                foreach (var controller in controllers.Values)
+                    BuildController(controller);
 
-                if (comp is Button button)
+                if (IsButton(comp.GetType()))
                 {
-                    button.controller = controllers.GetValueOrDefault("button");
-                    button.titleText = children.FirstOrDefault(c => c.Xml.Attribute("name").Value == "title").Go?.GetComponent<Text>();
+                    comp.GetType().GetField("controller").SetValue(comp, controllers["button"].Value);
+                    comp.GetType().GetField("titleText").SetValue(comp, children.FirstOrDefault(c => c.Xml.Attribute("name").Value == "title").Go?.GetComponent<Text>());
                 }
 
                 var byName = new Dictionary<string, GameObject>();
                 foreach (var (element, go) in children)
-                    byName.TryAdd(Identifier(element.Attribute("name").Value), go);
+                    byName.TryAdd(Field(element.Attribute("name").Value), go);
 
                 foreach (var field in comp.GetType().GetFields())
                 {
-                    var controller = controllers.FirstOrDefault(pair => Identifier(pair.Key) == field.Name).Value;
-                    if (controller != null && field.FieldType.IsInstanceOfType(controller))
-                        field.SetValue(comp, controller);
+                    var controller = controllers.Values.FirstOrDefault(data => data.FieldName == field.Name);
+                    if (controller != null)
+                        field.SetValue(comp, controller.Value);
                     else if (byName.TryGetValue(field.Name, out var go))
                         field.SetValue(comp, field.FieldType == typeof(RectTransform) ? go.transform : (object)go.GetComponent(field.FieldType));
                 }
@@ -267,7 +293,7 @@ namespace NanamiUI.Editor
         }
 
         private static GameObject CreateChild(XElement element, RectTransform parent, Resource owner,
-            Dictionary<string, Controller> controllers, Dictionary<Controller, string[]> pageIds, Dictionary<Controller, List<Gear>> gears)
+            Dictionary<string, ControllerData> controllers)
         {
             var name = element.Attribute("name").Value;
             var size = Pair(element, "size");
@@ -342,7 +368,7 @@ namespace NanamiUI.Editor
                     go.name = name;
                     size ??= ((RectTransform)go.transform).sizeDelta;
                     if (element.Element("Button")?.Attribute("title") is { } title)
-                        go.GetComponent<Button>().Title = title.Value;
+                        SetButtonTitle(go, title.Value);
                     break;
                 }
                 default:
@@ -361,12 +387,12 @@ namespace NanamiUI.Editor
                     continue;
 
                 var controller = controllers[gearXml.Attribute("controller").Value];
-                Gear gear;
-                if (kind == "gearDisplay")
-                    gear = go.AddComponent<GearDisplay>();
-                else
+                var gearType = (kind == "gearDisplay" ? typeof(GearDisplay<>) : typeof(GearXY<>)).MakeGenericType(controller.PageType);
+                var gear = Activator.CreateInstance(gearType);
+                gearType.GetField("target").SetValue(gear, go);
+                gearType.GetField("pages").SetValue(gear, PageValues(controller, gearXml.Attribute("pages")?.Value));
+                if (kind == "gearXY")
                 {
-                    var xy = go.AddComponent<GearXY>();
                     var rt = (RectTransform)go.transform;
                     var origin = Pair(element, "xy") ?? Vector2.zero;
                     Vector2 Convert(string pair)
@@ -376,16 +402,49 @@ namespace NanamiUI.Editor
                             float.Parse(parts[0], CultureInfo.InvariantCulture) - origin.x,
                             origin.y - float.Parse(parts[1], CultureInfo.InvariantCulture));
                     }
-                    xy.values = gearXml.Attribute("values").Value.Split('|').Select(Convert).ToArray();
-                    xy.defaultValue = gearXml.Attribute("default") is { } def ? Convert(def.Value) : rt.anchoredPosition;
-                    gear = xy;
+                    gearType.GetField("values").SetValue(gear, gearXml.Attribute("values").Value.Split('|').Select(Convert).ToArray());
+                    gearType.GetField("defaultValue").SetValue(gear, gearXml.Attribute("default") is { } def ? Convert(def.Value) : rt.anchoredPosition);
                 }
-                gear.pages = (gearXml.Attribute("pages")?.Value.Split(',') ?? Array.Empty<string>())
-                    .Select(id => Array.IndexOf(pageIds[controller], id)).ToArray();
-                gears[controller].Add(gear);
+                controller.Gears.Add(gear);
             }
 
             return go;
+        }
+
+        private static void BuildController(ControllerData data)
+        {
+            var gearType = typeof(Gear<>).MakeGenericType(data.PageType);
+            var gears = Array.CreateInstance(gearType, data.Gears.Count);
+            for (var i = 0; i < data.Gears.Count; i++)
+                gears.SetValue(data.Gears[i], i);
+
+            var controllerType = typeof(Controller<>).MakeGenericType(data.PageType);
+            data.Value = Activator.CreateInstance(controllerType);
+            controllerType.GetField("gears").SetValue(data.Value, gears);
+            controllerType.GetProperty("page").SetValue(data.Value, data.PageValues[data.Selected]);
+        }
+
+        private static Array PageValues(ControllerData controller, string ids)
+        {
+            var parts = ids?.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+            var values = Array.CreateInstance(controller.PageType, parts.Length);
+            for (var i = 0; i < parts.Length; i++)
+                values.SetValue(controller.PageValues[Array.IndexOf(controller.PageIds, parts[i])], i);
+            return values;
+        }
+
+        private static void SetButtonTitle(GameObject go, string title)
+        {
+            var button = go.GetComponents<UnityEngine.Component>().First(component => IsButton(component.GetType()));
+            button.GetType().GetProperty("Title").SetValue(button, title);
+        }
+
+        private static bool IsButton(Type type)
+        {
+            for (var t = type; t != null; t = t.BaseType)
+                if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Button<>))
+                    return true;
+            return false;
         }
 
         private static void SetRect(RectTransform rt, XElement element, Vector2 size, RectTransform parent)
@@ -451,8 +510,12 @@ namespace NanamiUI.Editor
         private static IEnumerable<XElement> DisplayList(string file) =>
             XDocument.Load(file).Root.Element("displayList")?.Elements() ?? Enumerable.Empty<XElement>();
 
-        private static string[] PageNames(XElement controller) =>
-            controller.Attribute("pages").Value.Split(',').Where((_, i) => i % 2 == 1).ToArray();
+        private static IEnumerable<(string Id, string Member)> PageMembers(XElement controller)
+        {
+            var parts = controller.Attribute("pages").Value.Split(',');
+            for (var i = 0; i < parts.Length; i += 2)
+                yield return (parts[i], Identifier(parts[i + 1] == "" ? parts[i] : parts[i + 1]));
+        }
 
         private static GameObject NewChild(string name, RectTransform parent, params Type[] components)
         {
@@ -494,7 +557,7 @@ namespace NanamiUI.Editor
             return char.IsDigit(id[0]) ? "_" + id : id;
         }
 
-        private static string Cap(string name) => char.ToUpper(name[0]) + name[1..];
+        private static string Field(string name) => $"m_{Identifier(name)}";
 
         private static string AssetPath(string file) =>
             $"{OutputRoot}/Assets/{Path.GetRelativePath($"{UiRoot}/assets", file).Replace('\\', '/')}";

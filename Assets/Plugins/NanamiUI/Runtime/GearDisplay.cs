@@ -2,8 +2,9 @@ using System;
 
 namespace NanamiUI
 {
-    public class GearDisplay : Gear
+    [Serializable]
+    public class GearDisplay<T> : Gear<T> where T : struct, Enum
     {
-        public override void Apply(int page) => gameObject.SetActive(pages.Length == 0 || Array.IndexOf(pages, page) >= 0);
+        public override void Apply(T page) => target.SetActive(pages.Length == 0 || Array.IndexOf(pages, page) >= 0);
     }
 }

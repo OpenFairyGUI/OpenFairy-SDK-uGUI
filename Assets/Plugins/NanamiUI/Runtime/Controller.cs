@@ -3,38 +3,23 @@ using UnityEngine;
 
 namespace NanamiUI
 {
-    public abstract class Controller : MonoBehaviour
+    [Serializable]
+    public struct Controller<T> where T : struct, Enum
     {
-        public string[] pageNames;
-        public Gear[] gears;
-        public int selected;
+        [SerializeField]
+        private T _page;
+        [SerializeReference]
+        public Gear<T>[] gears;
 
-        public int SelectedIndex
+        public T page
         {
-            get => selected;
+            get => _page;
             set
             {
-                selected = value;
+                _page = value;
                 foreach (var gear in gears)
                     gear.Apply(value);
             }
-        }
-
-        public string SelectedPage
-        {
-            get => pageNames[selected];
-            set => SelectedIndex = Array.IndexOf(pageNames, value);
-        }
-
-        public bool HasPage(string page) => Array.IndexOf(pageNames, page) >= 0;
-    }
-
-    public abstract class Controller<T> : Controller where T : Enum
-    {
-        public T Selected
-        {
-            get => (T)Enum.ToObject(typeof(T), selected);
-            set => SelectedIndex = Convert.ToInt32(value);
         }
     }
 }

@@ -1,11 +1,14 @@
+using System;
 using UnityEngine;
 
 namespace NanamiUI
 {
-    public abstract class Gear : MonoBehaviour
+    [Serializable]
+    public abstract class Gear<T> where T : struct, Enum
     {
-        public int[] pages;
+        public GameObject target;
+        public T[] pages;
 
-        public abstract void Apply(int page);
+        public abstract void Apply(T page);
     }
 }

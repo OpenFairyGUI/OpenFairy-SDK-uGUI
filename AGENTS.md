@@ -22,13 +22,16 @@ Scripts：codegen 生成的代码。
 
 ## 代码结构
 SDK (Assets/Plugins/NanamiUI/Runtime) 里包含每个基础组件的定义，跟 FairyGUI SDK 里的 GObject 子类 1:1 对应，有 Text、Button、Label 等。
-他们都是 UIBehaviour 的子类，也可以继承 UnityEngine.UI.Selectable、UnityEngine.UI.Button 这些更具体的，看怎样弄会让SDK代码最简单。 
-有个 abstract 的 Controller<T>: MonoBehavior 。
+他们都是 UIBehaviour 的子类，也可以继承 UnityEngine.UI.Selectable、UnityEngine.UI.Button 这些更具体的，看怎样弄会让SDK代码最简单。
+Controller 是 struct Controller<T> where T : struct, Enum，不是 MonoBehaviour。
+Gear 及其子类也不是 MonoBehaviour，并且是泛型，泛型类型是对应 Controller 的 enum。
+Button 也是泛型，泛型类型是对应 Controller 的 enum。
 
 ## codegen
 类似于 FairyGUI 自带的 codegen 功能一样，NanamiUI 也可以根据 FairyGUI 工程结构，预先生成脚本。
-每个工程里自定义组件会生成出一个类，继承自 Component。里面会有每个子物体的静态引用，通过 prefab 序列化的方式预先挂上去。
-每个 Controller 会生成一个类，类名为 {组件名}_{Controller名}，单独一个文件。每个 Controller 还会生成一个 Enum {组件名}_{Controller名}.Page 对应于那个 Controller 的每个页，Enum 嵌套在 Controller 类内。这个 Enum 就是生成的Controller 继承 Controller<T> 的泛型类型。这样生成的每个具体 Controller 就不再是泛型了，可以挂在 GameObject 上了。
+每个工程里自定义组件会生成出一个类，继承自 Component。里面会有每个子物体的引用，通过 prefab 序列化的方式预先挂上去，字段名加 m_ 前缀。
+每个 Controller 不再生成单独的类。组件类里直接生成一个同名 enum，枚举值对应 Controller 的每个页；组件类里再生成 Controller<该 enum> 字段，字段名加 m_ 前缀。
+Button 组件继承 Button<对应 Controller enum>。
 
 ## 代码风格
 

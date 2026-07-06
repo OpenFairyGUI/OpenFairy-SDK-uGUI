@@ -3,15 +3,16 @@ using UnityEngine;
 
 namespace NanamiUI
 {
-    public class GearXY : Gear
+    [Serializable]
+    public class GearXY<T> : Gear<T> where T : struct, Enum
     {
         public Vector2[] values;
         public Vector2 defaultValue;
 
-        public override void Apply(int page)
+        public override void Apply(T page)
         {
             var index = Array.IndexOf(pages, page);
-            ((RectTransform)transform).anchoredPosition = index >= 0 ? values[index] : defaultValue;
+            ((RectTransform)target.transform).anchoredPosition = index >= 0 ? values[index] : defaultValue;
         }
     }
 }
