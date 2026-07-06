@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 namespace NanamiUI
@@ -16,7 +16,9 @@ namespace NanamiUI
             var index = Array.IndexOf(pages, page);
             var rt = (RectTransform)target.transform;
             var scale = index >= 0 ? scales[index] : defaultScale;
-            rt.sizeDelta = index >= 0 ? sizes[index] : defaultSize;
+            var size = index >= 0 ? sizes[index] : defaultSize;
+            rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
+            rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
             rt.localScale = new Vector3(scale.x, scale.y, 1);
         }
     }

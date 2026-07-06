@@ -6,29 +6,37 @@
 
 截图脚本会在 Play Mode 中启用场景里的 `Stage Camera` 和 `UIPanel`，再为每个页面单独创建 FairyGUI `GRoot` 内容，避免 FairyGUI 侧空白或页面串图。
 
-| 页面 | NanamiUI 状态 | 说明 |
+差异像素占比为 2026-07-07 全量截图的实测值（diff 中任一通道 >1/255 即计入，包含反锯齿噪声；纯反锯齿差异的页面约 1%~3%）。
+
+| 页面 | 差异占比 | 说明 |
 | --- | --- | --- |
-| Main | 基础完成 | 已生成 Main prefab，并接入 `NanamiUI.Example.BasicsMain`。支持点击按钮进入已迁移页面，Back 返回。 |
-| Button | 基础完成 | 支持标题、图标、Common/Check/Radio、hover/down/selected/grayed 状态。示例里的 RadioGroup 和 tab 已接业务逻辑。 |
-| Image | 基础完成 | 支持普通图片、九宫格、平铺、flipX/flipY、透明度、置灰。 |
-| Graph | 部分完成 | 已生成页面和基础矩形 graph；FairyGUI 示例里的 pie、polygon、line mesh 等运行时代码尚未实现。 |
-| MovieClip | 未迁移 | Main 中保留入口；NanamiUI 暂无对应 Demo_MovieClip prefab。 |
-| Depth | 未迁移 | Main 中保留入口；NanamiUI 暂无对应 Demo_Depth prefab。 |
-| Loader | 部分完成 | 支持静态图片和 movieclip 首帧；动态加载、播放、外部 URL 行为尚未完整实现。 |
-| List | 未迁移 | Main 中保留入口；NanamiUI 暂无 List runtime 与 Demo_List prefab。 |
-| ProgressBar | 未迁移 | Main 中保留入口；NanamiUI 暂无 ProgressBar runtime 与 Demo_ProgressBar prefab。 |
-| Slider | 未迁移 | Main 中保留入口；NanamiUI 暂无 Slider runtime 与 Demo_Slider prefab。 |
-| ComboBox | 未迁移 | Main 中保留入口；NanamiUI 暂无 ComboBox runtime 与 Demo_ComboBox prefab。 |
-| Clip&Scroll | 未迁移 | Main 中保留入口；NanamiUI 暂无 ScrollPane/裁剪滚动示例。 |
-| Controller | 未迁移 | Main 中保留入口；Controller 结构存在，但 Demo_Controller prefab 尚未纳入迁移。 |
-| Relation | 未迁移 | Main 中保留入口；基础 relation 已支持一部分，Demo_Relation prefab 尚未纳入迁移。 |
-| Label | 基础完成 | 支持 title、titleColor、icon；movieclip icon 取首帧。 |
-| Popup | 未迁移 | Main 中保留入口；NanamiUI 暂无 Popup/Window 管理实现。 |
-| Window | 未迁移 | Main 中保留入口；NanamiUI 暂无 Window 示例。 |
-| Drag&Drop | 未迁移 | Main 中保留入口；NanamiUI 暂无拖拽逻辑。 |
-| Component | 未迁移 | Main 中保留入口；Demo_Component prefab 尚未纳入迁移。 |
-| Grid | 未迁移 | Main 中保留入口；NanamiUI 暂无 Grid/List runtime。 |
-| Text | 部分完成 | 支持基础动态字体文字、对齐、描边；rich text、link、input text 等交互尚未完整实现。 |
+| Main | 2.85% | 完成。差异全部为动态字体反锯齿噪声。 |
+| Button | 2.59% | 完成。含 grayed 控制器约定、OnOffButton gearXY 默认值。 |
+| Image | 16.07% | 基本完成。主要残差：FairyGUI 图集 duplicate padding 使平铺单元有 ~1px 重叠（已知差异，见下），另有九宫格渐变 banding。 |
+| Graph | 0.16% | 完成。矩形/圆角/椭圆/多边形/正多边形/skew 全部像素级一致。 |
+| MovieClip | 0.51% | 完成。jta 多帧解析 + 播放。 |
+| Depth | 2.36% | 完成（静态）。 |
+| Loader | 1.18% | 完成。fill/align/movieclip。 |
+| List | 3.61% | 完成。四种布局与 FairyGUI 一致；截图环境无滚动条（UIConfig 未配置）。 |
+| ProgressBar | 0.58% | 完成。reverse、径向填充、ani 关联跟随。 |
+| Slider | 0.12% | 完成。 |
+| ComboBox | 0.16% | 完成（静态，下拉交互未实现）。 |
+| Clip&Scroll | 6.19% | 基本完成。overflow/margin/自定义遮罩一致；残差为底部小字号文本个别断行差 1 字。 |
+| Controller | 3.31% | 完成。gearAni/gearFontSize/gearDisplay2。 |
+| Relation | 1.78% | 完成。Relation 增量跟随（构建时烘焙 + 运行时轮询）。 |
+| Label | 1.58% | 完成。 |
+| Popup | 0.19% | 完成（静态，弹出交互未实现）。 |
+| Window | 0.40% | 完成（静态，弹窗交互未实现）。 |
+| Drag&Drop | 1.29% | 完成（静态，拖拽交互未实现）。 |
+| Component | 2.56% | 完成。 |
+| Grid | 1.66% | 完成。GridItem 星级进度、勾选框、movieclip。 |
+| Text | 5.54% | 基本完成。UBB/渐变/描边/阴影/位图字体（两种 fnt 格式）/行内图片/链接样式/输入 prompt；残差为 UBB 混合字号段落断行差 1 字与行内图片行基线 2~3px。 |
+
+## 已知差异
+
+- **平铺（tile）图片**：FairyGUI 发布图集带 duplicate padding，平铺单元间有 ~1px 内容重叠；NanamiUI 用原图平铺无重叠。视觉差异细微，暂不复刻。
+- **动态字体反锯齿**：两侧各自创建动态字体图集，边缘像素有 1/255 级差异，diff 中呈空心轮廓，无视觉差异。
+- **截图环境无滚动条**：截图脚本不跑 BasicsMain.Awake，FairyGUI 的 UIConfig 滚动条未配置，因此 Migrate 侧滚动条常量（`VerticalScrollBar`/`HorizontalScrollBar`）也置 null。给真实项目使用时把这两个常量配上即可生成滚动条（机制已实现）。
 
 ## 截图输出约定
 

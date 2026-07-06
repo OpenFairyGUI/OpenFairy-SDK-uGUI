@@ -17,7 +17,7 @@ namespace NanamiUI
             set
             {
                 _page = value;
-                foreach (var gear in gears)
+                foreach (var gear in gears ?? Array.Empty<Gear<T>>())
                     gear.Apply(value);
             }
         }

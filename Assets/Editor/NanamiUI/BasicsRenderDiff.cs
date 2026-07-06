@@ -243,6 +243,7 @@ namespace NanamiUI.Editor
                 var camera = cameraObject.AddComponent<Camera>();
                 camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = Color.clear;
+                camera.cullingMask = 1; // 只渲染 Default 层，隔离场景里的 FairyGUI 舞台
                 camera.orthographic = true;
                 camera.orthographicSize = size.y * 0.5f;
                 camera.transform.position = new Vector3(size.x * 0.5f, -size.y * 0.5f, -10);
@@ -271,6 +272,10 @@ namespace NanamiUI.Editor
                 if (page.Component == "Main")
                     instance.transform.Find("btn_Back").gameObject.SetActive(true);
 
+                // 先预热字体图集再布局，避免图集在渲染同帧内扩容导致网格失效。
+                foreach (var text in instance.GetComponentsInChildren<NanamiUI.Text>(true))
+                    text.WarmUp();
+                Canvas.ForceUpdateCanvases();
                 Canvas.ForceUpdateCanvases();
                 rt = RenderTexture.GetTemporary(size.x, size.y, 24, RenderTextureFormat.ARGB32);
                 camera.targetTexture = rt;
