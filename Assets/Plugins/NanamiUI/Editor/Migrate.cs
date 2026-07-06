@@ -135,6 +135,7 @@ namespace NanamiUI.Editor
         {
             var xml = XDocument.Load(component.File).Root;
             var name = Identifier(Path.GetFileNameWithoutExtension(component.File));
+            var path = ScriptPath(component.File);
             var used = new HashSet<string>();
             var types = new List<string>();
             var fields = new List<string>();
@@ -144,9 +145,10 @@ namespace NanamiUI.Editor
                 var cname = Identifier(controller.Attribute("name").Value);
                 var members = PageNames(controller).Select((page, i) => page == "" ? $"Page{i}" : Identifier(Cap(page)));
                 types.Add($"        public enum {Cap(cname)}Page {{ {string.Join(", ", members)} }}");
-                types.Add($"        public class {Cap(cname)}Controller : NanamiUI.Controller<{Cap(cname)}Page> {{ }}");
                 if (used.Add(cname))
-                    fields.Add($"        public {Cap(cname)}Controller {cname};");
+                    fields.Add($"        public {name}{Cap(cname)}Controller {cname};");
+                WriteScript($"{Path.GetDirectoryName(path)}/{name}{Cap(cname)}Controller.cs".Replace('\\', '/'),
+                    $"namespace {component.Package}\n{{\n    public class {name}{Cap(cname)}Controller : NanamiUI.Controller<{name}.{Cap(cname)}Page> {{ }}\n}}\n");
             }
 
             foreach (var child in xml.Element("displayList")?.Elements() ?? Enumerable.Empty<XElement>())
@@ -175,9 +177,12 @@ namespace NanamiUI.Editor
             code.AppendLine("    }");
             code.AppendLine("}");
 
-            var path = ScriptPath(component.File);
+            WriteScript(path, code.ToString());
+        }
+
+        private static void WriteScript(string path, string text)
+        {
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            var text = code.ToString();
             if (!File.Exists(path) || File.ReadAllText(path) != text)
                 File.WriteAllText(path, text);
         }
@@ -213,7 +218,7 @@ namespace NanamiUI.Editor
                 foreach (var element in xml.Elements("controller"))
                 {
                     var cname = element.Attribute("name").Value;
-                    var controller = (Controller)root.AddComponent(FindType($"{component.Package}.{Identifier(root.name)}+{Cap(Identifier(cname))}Controller"));
+                    var controller = (Controller)root.AddComponent(FindType($"{component.Package}.{Identifier(root.name)}{Cap(Identifier(cname))}Controller"));
                     controller.pageNames = PageNames(element);
                     controller.selected = int.Parse(element.Attribute("selected")?.Value ?? "0");
                     pageIds[controller] = element.Attribute("pages").Value.Split(',').Where((_, i) => i % 2 == 0).ToArray();
