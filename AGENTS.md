@@ -9,7 +9,7 @@
 - **命令行工具**：系统已安装 `ripgrep`（`rg`）和 `coreutils`，有需要请直接调用。如果命令找不到，用 winget 安装：
   - `winget install BurntSushi.ripgrep.MSVC`
   - `winget install uutils.coreutils`
-- **项目类型**：这是一个 **Unity** 项目。你应该已经连接到 unity-mcp；如果没有，请提示用户先从 Package Manager 安装 `com.unity.ai.assistant` 包，然后在 Project Settings - AI - Unity MCP Server 里面进行配置。
+- **项目类型**：这是一个 **Unity** 项目。你应该已经连接到 MCP for Unity；如果没有，请提示用户安装。
 
 ## 项目目标
 
