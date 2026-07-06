@@ -1,45 +1,56 @@
-using UnityEditor;
-using UnityEngine.UIElements;
+using UnityEngine.Events;
+using UnityEngine.EventSystems;
 
 namespace NanamiUI
 {
-    [UxmlElement]
-    public partial class Button : VisualElement
+    public class Button : Component, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
     {
-        private string _src;
-        private string _title;
+        public Controller controller;
+        public Text titleText;
+        public UnityEvent onClick = new();
 
-        [UxmlAttribute]
-        public string src
+        private bool _down, _over;
+
+        public string Title
         {
-            get => _src;
-            set
-            {
-                _src = value;
-                AssetDatabase.LoadAssetAtPath<VisualTreeAsset>("Assets/UI/" + _src).CloneTree(this);
-                ApplyTitle();
-            }
+            get => titleText.text;
+            set => titleText.text = value;
         }
 
-        [UxmlAttribute]
-        public string title
+        public void OnPointerDown(PointerEventData eventData)
         {
-            get => _title;
-            set
-            {
-                _title = value;
-                ApplyTitle();
-            }
+            _down = true;
+            SetState("down");
         }
 
-        private void ApplyTitle()
+        public void OnPointerUp(PointerEventData eventData)
         {
-            if (_title == null)
-                return;
+            _down = false;
+            SetState(_over ? "over" : "up");
+        }
 
-            var label = this.Q<Text>("title");
-            if (label != null)
-                label.text = _title;
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            _over = true;
+            if (!_down)
+                SetState("over");
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            _over = false;
+            if (!_down)
+                SetState("up");
+        }
+
+        public void OnPointerClick(PointerEventData eventData) => onClick.Invoke();
+
+        private void SetState(string page)
+        {
+            if (page == "over" && !controller.HasPage("over"))
+                page = "up";
+            if (controller.HasPage(page))
+                controller.SelectedPage = page;
         }
     }
 }
