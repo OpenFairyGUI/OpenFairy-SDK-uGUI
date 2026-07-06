@@ -4,6 +4,8 @@
 
 运行方式：Unity 菜单 `Tools/NanamiUI/Capture Basics Render Diff`。
 
+截图脚本会在 Play Mode 中启用场景里的 `Stage Camera` 和 `UIPanel`，再为每个页面单独创建 FairyGUI `GRoot` 内容，避免 FairyGUI 侧空白或页面串图。
+
 | 页面 | NanamiUI 状态 | 说明 |
 | --- | --- | --- |
 | Main | 基础完成 | 已生成 Main prefab，并接入 `NanamiUI.Example.BasicsMain`。支持点击按钮进入已迁移页面，Back 返回。 |

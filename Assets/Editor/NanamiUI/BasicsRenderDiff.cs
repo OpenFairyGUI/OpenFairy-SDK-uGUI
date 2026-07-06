@@ -19,6 +19,14 @@ namespace NanamiUI.Editor
         private const string PendingKey = "NanamiUI.BasicsRenderDiff.Pending";
         private const string ExitPlayModeKey = "NanamiUI.BasicsRenderDiff.ExitPlayMode";
 
+        private static int _pageIndex;
+        private static bool _running;
+        private static bool _pageReady;
+        private static bool _exitWhenDone;
+        private static UIPanel _fairyPanel;
+        private static GComponent _fairyView;
+        private static Camera _fairyCamera;
+
         private static readonly Page[] Pages =
         {
             new("Main", "Main"),
@@ -49,12 +57,13 @@ namespace NanamiUI.Editor
         {
             if (!EditorApplication.isPlaying)
             {
+                _exitWhenDone = true;
                 SessionState.SetBool(PendingKey, true);
                 SessionState.SetBool(ExitPlayModeKey, true);
                 EditorApplication.EnterPlaymode();
                 return;
             }
-            CaptureAllNow();
+            StartCapture();
         }
 
         [InitializeOnLoadMethod]
@@ -69,55 +78,141 @@ namespace NanamiUI.Editor
             if (state != PlayModeStateChange.EnteredPlayMode || !SessionState.GetBool(PendingKey, false))
                 return;
 
+            _exitWhenDone = SessionState.GetBool(ExitPlayModeKey, false);
             SessionState.SetBool(PendingKey, false);
-            EditorApplication.delayCall += () =>
-            {
-                CaptureAllNow();
-                if (SessionState.GetBool(ExitPlayModeKey, false))
-                {
-                    SessionState.SetBool(ExitPlayModeKey, false);
-                    EditorApplication.ExitPlaymode();
-                }
-            };
+            EditorApplication.delayCall += StartCapture;
         }
 
-        private static void CaptureAllNow()
+        private static void StartCapture()
         {
+            if (_running)
+                return;
+
             Directory.CreateDirectory(DocsDir);
             UIConfig.defaultFont = "Microsoft YaHei";
             NanamiUI.Text.defaultFont = "Microsoft YaHei";
             if (UIPackage.GetByName(PackageName) == null)
                 UIPackage.AddPackage(FairyPackage);
+            PrepareFairyScene();
 
-            foreach (var page in Pages)
+            _pageIndex = 0;
+            _pageReady = false;
+            _running = true;
+            EditorApplication.update -= CaptureNext;
+            EditorApplication.update += CaptureNext;
+        }
+
+        private static void CaptureNext()
+        {
+            if (!EditorApplication.isPlaying)
             {
-                var size = PageSize(page);
-                var fairy = CaptureFairy(page, size);
-                var nanami = CaptureNanami(page, size);
-                var diff = Diff(fairy, nanami);
-                var name = SafeName(page.Name);
-                Save(fairy, $"{DocsDir}/{name}_fairygui.png");
-                Save(nanami, $"{DocsDir}/{name}_nanami.png");
-                Save(diff, $"{DocsDir}/{name}_diff.png");
-                UnityEngine.Object.DestroyImmediate(fairy);
-                UnityEngine.Object.DestroyImmediate(nanami);
-                UnityEngine.Object.DestroyImmediate(diff);
+                StopCapture();
+                return;
             }
 
-            AssetDatabase.Refresh();
-            Debug.Log($"NanamiUI Basics render diff saved to {DocsDir}.");
+            if (_pageIndex >= Pages.Length)
+            {
+                StopCapture();
+                Debug.Log($"NanamiUI Basics render diff saved to {DocsDir}.");
+                if (_exitWhenDone || SessionState.GetBool(ExitPlayModeKey, false))
+                {
+                    _exitWhenDone = false;
+                    SessionState.SetBool(ExitPlayModeKey, false);
+                    EditorApplication.isPlaying = false;
+                }
+                return;
+            }
+
+            var page = Pages[_pageIndex++];
+            var size = PageSize(page);
+            if (!_pageReady)
+            {
+                PrepareFairyPage(page, size);
+                _pageReady = true;
+                _pageIndex--;
+                return;
+            }
+
+            var fairy = CaptureFairy(page, size);
+            var nanami = CaptureNanami(page, size);
+            var diff = Diff(fairy, nanami);
+            var name = SafeName(page.Name);
+            Save(fairy, $"{DocsDir}/{name}_fairygui.png");
+            Save(nanami, $"{DocsDir}/{name}_nanami.png");
+            Save(diff, $"{DocsDir}/{name}_diff.png");
+            UnityEngine.Object.DestroyImmediate(fairy);
+            UnityEngine.Object.DestroyImmediate(nanami);
+            UnityEngine.Object.DestroyImmediate(diff);
+            _pageReady = false;
+            Debug.Log($"Captured Basics render diff {_pageIndex}/{Pages.Length}: {page.Name}");
+        }
+
+        private static void StopCapture()
+        {
+            if (_fairyView != null)
+            {
+                _fairyView.Dispose();
+                _fairyView = null;
+            }
+            _running = false;
+            EditorApplication.update -= CaptureNext;
+        }
+
+        private static void PrepareFairyScene()
+        {
+            var stageCameras = UnityEngine.Object.FindObjectsByType<StageCamera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var stageCamera = stageCameras.FirstOrDefault(stage => stage.GetComponents<Component>().Any(component => component.GetType().Name == "UniversalAdditionalCameraData"))
+                ?? stageCameras.First();
+            stageCamera.gameObject.SetActive(true);
+            stageCamera.enabled = true;
+            _fairyCamera = stageCamera.GetComponent<Camera>();
+            _fairyCamera.enabled = true;
+
+            _fairyPanel = UnityEngine.Object.FindObjectsByType<UIPanel>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .First(panel => panel.packageName == PackageName);
+            _fairyPanel.gameObject.SetActive(true);
+            _fairyPanel.enabled = true;
+            _fairyPanel.packageName = PackageName;
+            _fairyPanel.componentName = string.Empty;
+            _fairyPanel.CreateUI();
+        }
+
+        private static void PrepareFairyPage(Page page, Vector2Int size)
+        {
+            var stage = Stage.inst;
+            var stageCamera = _fairyCamera.GetComponent<StageCamera>();
+            var unitsPerPixel = StageCamera.DefaultCameraSize * 2 / size.y;
+            stage.SetSize(size.x, size.y);
+            stage.cachedTransform.localScale = new Vector3(unitsPerPixel, unitsPerPixel, unitsPerPixel);
+            GRoot.inst.ApplyContentScaleFactor();
+            stageCamera.unitsPerPixel = unitsPerPixel;
+            _fairyCamera.orthographic = true;
+            _fairyCamera.orthographicSize = StageCamera.DefaultCameraSize;
+            _fairyCamera.aspect = (float)size.x / size.y;
+            _fairyCamera.transform.position = new Vector3(_fairyCamera.orthographicSize * _fairyCamera.aspect, -_fairyCamera.orthographicSize, -10);
+            _fairyCamera.clearFlags = CameraClearFlags.SolidColor;
+            _fairyCamera.backgroundColor = Color.clear;
+            _fairyCamera.cullingMask = 1 << LayerMask.NameToLayer(StageCamera.LayerName);
+
+            if (_fairyView != null)
+                _fairyView.Dispose();
+            GRoot.inst.RemoveChildren(0, -1, true);
+            var view = UIPackage.CreateObject(PackageName, page.Component).asCom;
+            GRoot.inst.AddChild(view);
+            view.SetXY(0, 0);
+            view.EnsureBoundsCorrect();
+            _fairyView = view;
         }
 
         private static Texture2D CaptureFairy(Page page, Vector2Int size)
         {
-            GComponent view = null;
+            RenderTexture rt = null;
             try
             {
-                view = UIPackage.CreateObject(PackageName, page.Component).asCom;
-                GRoot.inst.AddChild(view);
-                view.SetXY(0, 0);
-                view.EnsureBoundsCorrect();
-                return view.displayObject.GetScreenShot(null, 1);
+                rt = RenderTexture.GetTemporary(size.x, size.y, 24, RenderTextureFormat.ARGB32);
+                _fairyCamera.targetTexture = rt;
+                _fairyCamera.Render();
+                return Read(rt);
             }
             catch (Exception e)
             {
@@ -126,8 +221,10 @@ namespace NanamiUI.Editor
             }
             finally
             {
-                if (view != null)
-                    GRoot.inst.RemoveChild(view, true);
+                if (_fairyCamera != null)
+                    _fairyCamera.targetTexture = null;
+                if (rt != null)
+                    RenderTexture.ReleaseTemporary(rt);
             }
         }
 
@@ -165,12 +262,14 @@ namespace NanamiUI.Editor
                 canvasRt.sizeDelta = size;
                 canvasRt.position = Vector3.zero;
 
-                instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+                instance = UnityEngine.Object.Instantiate(prefab, canvasRt, false);
                 var rtInstance = (RectTransform)instance.transform;
-                rtInstance.SetParent(canvasRt, false);
                 rtInstance.anchorMin = rtInstance.anchorMax = rtInstance.pivot = new Vector2(0, 1);
                 rtInstance.anchoredPosition = Vector2.zero;
+                rtInstance.sizeDelta = size;
                 rtInstance.localScale = Vector3.one;
+                if (page.Component == "Main")
+                    instance.transform.Find("btn_Back").gameObject.SetActive(true);
 
                 Canvas.ForceUpdateCanvases();
                 rt = RenderTexture.GetTemporary(size.x, size.y, 24, RenderTextureFormat.ARGB32);
