@@ -16,6 +16,9 @@ namespace NanamiUI.TestSupport
         private GameObject _instance;
         private Vector2Int _size;
 
+        public GameObject Instance => _instance;
+        public Camera Camera => _camera;
+
         public void Setup()
         {
             Time.timeScale = 1;
@@ -32,7 +35,8 @@ namespace NanamiUI.TestSupport
             _camera.farClipPlane = 30;
             _camera.enabled = false; // 只用于手动 Render
 
-            _canvas = new GameObject("NanamiUI Golden Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+            // GraphicRaycaster 供交互驱动取相机（其 eventCamera = 画布 worldCamera），静态截图不用它。
+            _canvas = new GameObject("NanamiUI Golden Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             var canvas = _canvas.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.worldCamera = _camera;
@@ -46,15 +50,31 @@ namespace NanamiUI.TestSupport
 
         public void LoadPage(ParityPage page)
         {
-            _size = ParityCatalog.PageSize(page);
+            LoadComponent(page.Package, page.Component);
+            if (_instance == null)
+                return;
+            foreach (var transition in _instance.GetComponents<Transition>())
+                if (transition.transitionName == "t0")
+                    transition.Play();
+        }
+
+        // 实例化烘焙态 prefab（不播 t0）。交互测试在此基础上驱动目标；null（prefab 缺失）由调用方判失败。
+        public void LoadComponent(string package, string component)
+        {
+            _size = ParityCatalog.PageSize(package, component);
             _canvasRt.sizeDelta = _size;
 
             // PlayMode 测试程序集是全平台的，AssetDatabase 只在编辑器可用；golden 测试只在编辑器 play mode 跑。
 #if UNITY_EDITOR
-            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(ParityCatalog.PrefabPath(page));
+            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(ParityCatalog.PrefabPath(package, component));
 #else
             GameObject prefab = null;
 #endif
+            if (prefab == null)
+            {
+                _instance = null;
+                return;
+            }
             _instance = Object.Instantiate(prefab, _canvasRt, false);
             var rt = (RectTransform)_instance.transform;
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
@@ -62,15 +82,18 @@ namespace NanamiUI.TestSupport
             rt.localScale = Vector3.one;
             foreach (var text in _instance.GetComponentsInChildren<NanamiUI.Text>(true))
                 text.WarmUp();
-            foreach (var transition in _instance.GetComponents<Transition>())
-                if (transition.transitionName == "t0")
-                    transition.Play();
+        }
+
+        // 相机摆位：正交、覆盖整页，画布左上角落在 world 原点（与快照/截图坐标约定一致）。
+        public void PlaceCamera()
+        {
+            _camera.orthographicSize = _size.y * 0.5f;
+            _camera.transform.position = new Vector3(_size.x * 0.5f, -_size.y * 0.5f, -10);
         }
 
         public Texture2D Capture()
         {
-            _camera.orthographicSize = _size.y * 0.5f;
-            _camera.transform.position = new Vector3(_size.x * 0.5f, -_size.y * 0.5f, -10);
+            PlaceCamera();
             Canvas.ForceUpdateCanvases();
 
             var rt = RenderTexture.GetTemporary(_size.x, _size.y, 24, RenderTextureFormat.ARGB32);

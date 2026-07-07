@@ -81,3 +81,22 @@
 - 2026-07-08 首次全扫 **17/17 通过**，阈值已按实测收紧（见 `ParityCatalog` 尾注）。
 
 **拆 asmdef 的坑**：把 `Runtime/` 从 Assembly-CSharp 拆成独立 asmdef 后，`GearXY` 的 `rt.DOAnchorPos()` 编译失败——该扩展定义在 DOTween 松散模块 `DOTweenModuleUI.cs`（编在 Assembly-CSharp），Runtime 独立后够不到。已改用核心 `DOTween.To()`（在 `DOTween.dll` 内，自动引用可用）。
+
+## 交互几何回归（PlayMode，2026-07-08 新增）
+
+静态 golden 已保证"任意状态渲成像素 = FairyGUI"，故交互测试只比**几何快照**不比像素（组合原理）。产物：`Assets/Tests/Support/GeometrySnapshot.cs`、`InteractionDriver.cs`、`ParityCatalog.InteractionCase[]`、`Assets/Tests/PlayMode/InteractionGeometryTests.cs`、`BasicsRenderDiff` 里的 FairyGUI 侧 dump。
+
+- **流程**：实例化烘焙态 prefab → 经真实 handler 把目标驱动到某交互态（NanamiUI 只用非泛型 Runtime 面 `Slider`/`IPointerClickHandler`/`IPointerDownHandler`，因测试程序集够不到生成的 `UI.{包}` 类型）→ settle 掉 gear 缓动 → 快照目标子树几何（`path/rect/active/text`，相对目标左上、页面设计像素、y 向下）→ 与 FairyGUI 参照比（参照⊆实测，epsilon 默认 1.5px）。
+- **参照**：`Generate Golden References` 同一趟额外写 `{case}.geo.json`（同 gitignore、按需现生成）。FairyGUI 有效可见性取 `displayObject.parent!=null && displayObject.visible`（**非** `GObject.visible`，后者恒 true）。missing 参照现在 `Assert.Fail`（不再静默 Ignore；静态也改了）。
+- **首批 5 case**：Slider 横/竖拖到值、Checkbox 勾选、Common 按钮按下。**22/22 通过**（17 静态 + 5 交互）。
+- **无头跑**：`Tools/NanamiUI/Run PlayMode Tests`（`Assets/Editor/NanamiUI/TestRunner/`），结果写 `Temp/NanamiUIPlayModeResults.txt`。
+
+## SDK 修复：运行时 gears 反序列化为 null（2026-07-08）
+
+交互测试首跑即抓到真 bug：点 checkbox → `Controller.page` 遍历 gears → **NRE**。根因是 asmdef 拆分把 NanamiUI 移出 `Assembly-CSharp-firstpass` 后，**拆分前烘焙的 prefab** 的 `[SerializeReference]` 仍记旧程序集，Unity 找不到类型 → gears 数组元素全 null。静态 golden 没抓到（烘焙期把 gear 结果烤进 prefab，运行时不重跑 gears）。已把 36 个 prefab 里 `ns: NanamiUI, asm: Assembly-CSharp-firstpass` 改写为 `asm: NanamiUI.Runtime` 修复。**运行时所有 gears/控制器切页现已可用。** 详见 AGENTS.md 与记忆。
+
+### 尚未覆盖 / 下一步
+
+- **动画 gears（GearXY/Size/Look）的交互终态**：这些 gear 运行时经 DOTween 缓动。NanamiUI 侧 settle 帧数已覆盖；但 FairyGUI 侧 dump 是**同步一帧**，不会 settle FairyGUI 的 GTweener，故带缓动的交互态（如 OnOffButton 拨钮滑动、切页 gearXY）参照会取到未 settle 的位置。需把 dump 改成推帧 settle（或 kill-complete FairyGUI tweener）才能覆盖。
+- **被运行时阻塞的交互**：List 滚动、ComboBox 下拉、Window/Popup、Drag&Drop、Text 链接点击——需先建对应 Runtime（ScrollPane/GRoot 覆盖层/Window/PopupMenu/DragDropManager）。
+- **Controller 按名切页驱动**：泛型 `Controller<T>` + 生成类型不可达，暂用 Button 间接覆盖；需要时给 SDK 加非泛型按名取 controller 面（对标 FairyGUI `GComponent.GetController`）。

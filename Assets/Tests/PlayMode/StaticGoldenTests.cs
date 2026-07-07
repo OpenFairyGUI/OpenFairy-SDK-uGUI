@@ -8,8 +8,8 @@ using UnityEngine.TestTools;
 
 namespace NanamiUI.Tests
 {
-    // 静态 golden 回归：逐页渲 NanamiUI 末帧，与提交的 FairyGUI golden PNG 比，差异占比超每页阈值即失败。
-    // golden 由 Tools/NanamiUI/Promote FairyGUI Captures to Golden 生成（缺图的页跳过）。
+    // 静态 golden 回归：逐页渲 NanamiUI 末帧，与 FairyGUI golden PNG 比，差异占比超每页阈值即失败。
+    // golden 由 Tools/NanamiUI/Generate Golden References 生成（gitignore、按需现生成）；缺图即失败，不静默跳过。
     public class StaticGoldenTests
     {
         public static IEnumerable<ParityPage> Pages => ParityCatalog.StaticPages;
@@ -39,9 +39,10 @@ namespace NanamiUI.Tests
         {
             var goldenPath = ParityCatalog.GoldenPath(page);
             if (!File.Exists(goldenPath))
-                Assert.Ignore($"No golden for {page.Name}. Run Tools/NanamiUI/Promote FairyGUI Captures to Golden.");
+                Assert.Fail($"No golden for {page.Name}. Run Tools/NanamiUI/Generate Golden References.");
 
             _rig.LoadPage(page);
+            Assert.IsNotNull(_rig.Instance, $"Prefab missing: {ParityCatalog.PrefabPath(page)}");
             for (var i = 0; i < ParityCatalog.SettleFrames; i++)
                 yield return null;
 

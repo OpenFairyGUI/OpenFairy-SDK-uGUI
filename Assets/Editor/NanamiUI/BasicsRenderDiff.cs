@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Xml.Linq;
@@ -175,6 +176,8 @@ namespace NanamiUI.Editor
 
             if (_pageIndex >= Pages.Length)
             {
+                if (_writeGolden)
+                    DumpInteractionGoldens();
                 StopCapture();
                 Debug.Log($"NanamiUI Basics render diff saved to {DocsDir}.");
                 if (_exitWhenDone || SessionState.GetBool(ExitPlayModeKey, false))
@@ -591,6 +594,84 @@ namespace NanamiUI.Editor
         }
 
         private static string SafeName(string name) => name.Replace("&", "_").Replace("/", "_");
+
+        // 交互几何参照：对每个 case 建 FairyGUI 视图、驱动到该态、快照目标子树几何写 JSON。
+        // 与静态 golden 同一趟 Generate 生成；FairyGUI 是规格，NanamiUI 侧测试时现算再比。
+        // 首批交互（slider value / checkbox 显隐）为瞬时终态，故同步一帧完成即可，无需推帧。
+        private static void DumpInteractionGoldens()
+        {
+            foreach (var c in ParityCatalog.Interactions)
+            {
+                if (UIPackage.GetByName(c.Package) == null)
+                    UIPackage.AddPackage($"UI/{c.Package}");
+                var view = UIPackage.CreateObject(c.Package, c.Component).asCom;
+                GRoot.inst.AddChild(view);
+                view.SetXY(0, 0);
+                view.EnsureBoundsCorrect();
+                var target = view.GetChild(c.Target);
+                DriveFairy(target, c.Action, c.Param);
+                var snapshot = FromFairy(target);
+                snapshot.Save(ParityCatalog.GeometryPath(c));
+                view.Dispose();
+            }
+            Debug.Log($"Wrote {ParityCatalog.Interactions.Length} interaction geometry references to {ParityCatalog.ReferenceDir}.");
+        }
+
+        private static void DriveFairy(GObject target, ParityCatalog.ActionKind action, float param)
+        {
+            switch (action)
+            {
+                case ParityCatalog.ActionKind.SliderValue:
+                    target.asSlider.value = param;
+                    break;
+                case ParityCatalog.ActionKind.ButtonSelected:
+                    target.asButton.selected = true;
+                    break;
+                case ParityCatalog.ActionKind.ButtonDown:
+                    ((GComponent)target).GetController("button").selectedPage = "down";
+                    break;
+            }
+        }
+
+        // 手动累加 local x/y/width/height 组合几何：不经 LocalToGlobal/LocalToRoot，故与 stage/GRoot/UIContentScaler
+        // 的缩放无关，得到纯设计像素（相对目标左上、y 向下），与 NanamiUI 烘焙的 1:1 px 布局同口径。
+        private static GeometrySnapshot FromFairy(GObject target)
+        {
+            var snapshot = new GeometrySnapshot();
+            WalkFairy(target, target, 0, 0, snapshot.nodes);
+            return snapshot;
+        }
+
+        private static void WalkFairy(GObject node, GObject root, float parentX, float parentY, List<GeometrySnapshot.Node> nodes)
+        {
+            var absX = node == root ? 0 : parentX + node.x;
+            var absY = node == root ? 0 : parentY + node.y;
+            nodes.Add(new GeometrySnapshot.Node
+            {
+                path = FairyPath(node, root),
+                x = absX,
+                y = absY,
+                w = node.width,
+                h = node.height,
+                // GObject.visible 是用户标志、恒为 true；gearDisplay 隐藏是把 displayObject 移出容器（parent==null，
+                // 见 GComponent.ChildStateChanged）。故有效可见 = displayObject 在容器里且自身可见，对齐 NanamiUI 的 activeSelf。
+                active = node.displayObject != null && node.displayObject.parent != null && node.displayObject.visible,
+                text = node is GTextField tf ? tf.text ?? "" : "", // 只取真正文本节点，与 NanamiUI 侧仅 Text 组件对齐
+            });
+            if (node is GComponent com)
+                for (var i = 0; i < com.numChildren; i++)
+                    WalkFairy(com.GetChildAt(i), root, absX, absY, nodes);
+        }
+
+        private static string FairyPath(GObject node, GObject root)
+        {
+            if (node == root)
+                return "";
+            var path = node.name;
+            for (var p = node.parent; p != null && p != root; p = p.parent)
+                path = p.name + "/" + path;
+            return path;
+        }
 
         private readonly struct Page
         {

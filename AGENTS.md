@@ -71,3 +71,35 @@ Button 组件继承 Button<对应 Controller enum>。
 **文字排版**：`NanamiUI.Text` 在 `OnPopulateMesh` 里复刻 FairyGUI 公式（不用 TextGenerator 布局）。改排版要对照 `Assets/FairyGUI/Scripts/Core/Text/{TextField,DynamicFont}.cs`。
 
 **平铺图的相位**：tile 图导入为独立贴图 + `wrapMode=Repeat`，Unity `Image.Type.Tiled` 会走单 quad repeat 优化（UV 从 0 铺到 N=瓦片数），但它把**纵向残缺格锚在顶部**；FairyGUI 从内容左上角起铺、残缺格落在右下。所以**任何分数格高度的平铺图（翻转与否）纵向都会差半格**（不只翻转的，同页不翻转的也偏，别被淡边缘晕骗了——要用逐像素/互相关量化验证）。`FlipImage.OnPopulateMesh` 因此对所有 `Type.Tiled` **自己生成单 quad**：`nx/ny = rect * multipliedPixelsPerUnit / sprite.rect`，flip 并进 UV 起止（`flipX? uv.z:uv.x` 等），再把顶边 `v1` 用 `Mathf.Floor(v1)-v1` 对齐到整格边界，残缺格回到底边。横向原点天然在左边、无需处理。非平铺的 Simple/Sliced 翻转仍走 base + 绕 `GetOuterUV` 镜像顶点。（注：Sliced+flip 即 9 宫格翻转是另一回事，FairyGUI 会调 gridRect，简单翻 UV 尚未完全对齐。）
+
+## 交互几何测试（2026-07-08，交互 parity 层）
+
+静态 golden 已保证"任意状态渲成像素 = FairyGUI"。**交互测试因此只证"到达了正确状态"，比几何不比像素**（组合原理）。产物：`Assets/Tests/Support/GeometrySnapshot.cs`、`InteractionDriver.cs`、`ParityCatalog.InteractionCase[]`、`Assets/Tests/PlayMode/InteractionGeometryTests.cs`、`BasicsRenderDiff` 里的 FairyGUI 侧 dump。
+
+- **快照**：以交互目标子树为根，每节点记 `path/rect(x,y,w,h)/active/text`，**相对目标左上角、页面设计像素、y 向下**（rig-independent，避开画布世界摆位与 y 翻转的跨引擎歧义）。FairyGUI 侧用手动累加 local `x/y/w/h`（不经 LocalToGlobal/LocalToRoot），故与 stage/GRoot/UIContentScaler 缩放无关。
+- **参照 = FairyGUI**，由 `Generate Golden References` 同一趟生成 `{case}.geo.json`（gitignore、按需现生成、缺失即失败）。NanamiUI 侧现算再比。
+- **比对**：要求 **参照 ⊆ 实测**（FairyGUI 每个节点都要在 NanamiUI 存在且几何/显隐/文本一致）；NanamiUI 多出的节点（描边/阴影/遮罩等渲染辅助）被忽略。几何容差 `epsilon`（默认 1.5px，暂定）。
+- **驱动**：NanamiUI 只经非泛型 Runtime 面（`Slider`、`IPointerClickHandler`），因为测试程序集**够不到生成的 `UI.{包}` 类型**（在 Assembly-CSharp）。首批：Slider 拖到值（合成指针经真实 `OnDrag`，pressEventCamera 靠 rig 画布上的 `GraphicRaycaster`）、Checkbox 勾选（`OnPointerClick`）。
+
+### 留给你看的判断/取舍（有争议，未与你确认直接定的）
+
+1. **Controller 按名切页驱动：暂缓。** `Controller<T>` 是泛型 struct 字段（`m_{name}`），加上生成类型不可达，测试程序集无法泛型地按名字切页。要么反射、要么给 SDK 加个非泛型的按名取 controller 面（对标 FairyGUI `GComponent.GetController(name)`）。**我选暂缓**，放到 SDK 完善阶段一起做（那时顺手补 `GetController`）。注：Button 已在内部驱动自己的 controller+gears，故按钮态/其 gear 终态已被间接覆盖。
+2. **Slider：几何 parity 与"指针→value 公式"分开了。** 几何测试用"由 NanamiUI 自己 OnDrag 反函数算出的指针"驱动——它验证了 `OnDrag`+`Apply`+ScreenPoint↔Local 往返、以及 value→bar 几何 = FairyGUI；但**没有**独立地拿 FairyGUI 校验"指针位置→value"公式本身（那需要 FairyGUI 自己的输入管线）。若要补，另加一条纯逻辑断言。
+3. **不做命中测试、不做像素 spot-check（你定的）。** 因此"连续态几何真能被正确渲成像素"这一步不再验证，信静态 parity。
+4. **FairyGUI 侧 dump 是同步一帧完成**，假设交互终态是瞬时的（slider value、checkbox 显隐）。**带缓动的** FairyGUI 交互态（如按钮 down 若挂 transition）需要在 dump 侧推帧，当前未做。
+5. **快照暂无 color/alpha**，只有 rect+active+text。GearColor/GearLook 的 tint/alpha parity 等加对应 case 时再补字段。
+6. **epsilon 默认 1.5px 是暂定值**，跑通后按实测收紧（同静态阈值的做法）。
+
+### SDK 修复：asmdef 拆分导致 gears 运行时反序列化为 null（2026-07-08）
+
+交互测试第一跑就抓到一个真 bug：点 checkbox → `Controller.page` setter 遍历 gears → **NRE**。根因：把 NanamiUI 从 `Assembly-CSharp-firstpass` 拆进 `NanamiUI.Runtime` 后，**拆分之前烘焙的 prefab** 里 `[SerializeReference]` 仍记旧程序集：
+`type: {class: 'GearDisplay`1[[...]]', ns: NanamiUI, asm: Assembly-CSharp-firstpass}`。
+Unity 在旧程序集找不到类型 → gears 数组长度保留但**每个元素反序列化成 null**（控制台 "Missing types referenced from component ..."）。静态 golden 没抓到，因为它在烘焙期把 gear **结果**烤进 prefab，运行时从不重跑 gears。
+
+- **修法（已用）**：把 36 个 prefab 里 `ns: NanamiUI, asm: Assembly-CSharp-firstpass` 文本改写为 `asm: NanamiUI.Runtime`（全项目仅此一种 firstpass 引用，安全），重导入即解析。`[MovedFrom(sourceAssembly:...)]` 对**泛型** SerializeReference 实测无效，别用。
+- **未来**：现在的 `Tools/Migrate` 生成的 gears 直接绑 `NanamiUI.Runtime`，新产物无此问题。**若再见 gears 为 null / 运行时切页 NRE**：要么重跑 Migrate 重新烘焙，要么重复上面的文本改写。
+- 提醒：任何把 Runtime 类型再挪程序集/命名空间的改动，都会让已烘焙 prefab 的 `[SerializeReference]`（gears、GearDisplay.partner）失效——挪完必须重烘焙或改写绑定。
+
+### 无头跑 PlayMode 测试
+
+`Assets/Editor/NanamiUI/TestRunner/`（独立 asmdef `NanamiUI.EditorTestRunner`，引 `UnityEditor/UnityEngine.TestRunner`）。菜单 `Tools/NanamiUI/Run PlayMode Tests`（或 MCP `ExecuteMenuItem`）跑全部 PlayMode 测试，结果写 `Temp/NanamiUIPlayModeResults.txt`（每行 `状态 全名 :: 消息`）。回调经 `[InitializeOnLoad]` 每次域重载重注册，跨进 Play 存活。
