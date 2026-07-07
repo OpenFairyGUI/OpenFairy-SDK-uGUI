@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using DG.Tweening;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
@@ -19,9 +20,9 @@ namespace NanamiUI.Editor
         private const string UiRoot = "UIProject";
         private const string OutputRoot = "Assets/UIProject";
         private const string Pending = "NanamiUI.Migrate.Pending";
-        // 对应 UIConfig.verticalScrollBar/horizontalScrollBar；Basics 截图环境未配置，置 null 不生成滚动条。
-        private static readonly string VerticalScrollBar = null;
-        private static readonly string HorizontalScrollBar = null;
+        // 对应 UIConfig.verticalScrollBar/horizontalScrollBar（BasicsMain.Awake 里配置的默认滚动条）。
+        private static readonly string VerticalScrollBar = "ScrollBar_VT";
+        private static readonly string HorizontalScrollBar = "ScrollBar_HZ";
         private static readonly string[] Entries =
         {
             "Basics/scrollbars/ScrollBar_VT.xml",
@@ -47,6 +48,12 @@ namespace NanamiUI.Editor
             "Basics/Demo_Drag&Drop.xml",
             "Basics/Demo_Component.xml",
             "Basics/Demo_Text.xml",
+            "Transition/BOSS.xml",
+            "Transition/BOSS_SKILL.xml",
+            "Transition/TRAP.xml",
+            "Transition/GoodHit.xml",
+            "Transition/PowerUp.xml",
+            "Transition/PathDemo.xml",
         };
         private static readonly string[] BasicsDemoNames =
         {
@@ -107,6 +114,7 @@ namespace NanamiUI.Editor
         private static readonly Dictionary<string, Resource> Resources = new();
         private static readonly Dictionary<Resource, MovieClipData> MovieClips = new();
         private static readonly Dictionary<Resource, BitmapFont> FontAssets = new();
+        private static readonly Dictionary<Resource, AudioClip> Sounds = new();
         private static readonly Dictionary<string, GameObject> Prefabs = new();
         private static CommonSettings _settings;
 
@@ -116,6 +124,7 @@ namespace NanamiUI.Editor
             Resources.Clear();
             MovieClips.Clear();
             FontAssets.Clear();
+            Sounds.Clear();
             Prefabs.Clear();
             Text.defaultFont = "Microsoft YaHei"; // 与 BasicsMain 的 UIConfig.defaultFont 一致，保证烘焙排版与运行时一致
             foreach (var package in Directory.EnumerateFiles($"{UiRoot}/assets", "package.xml", SearchOption.AllDirectories))
@@ -128,6 +137,16 @@ namespace NanamiUI.Editor
 
             foreach (var image in images)
                 ImportImage(image);
+            // 字体/声音也提前导入：构建 prefab 中途导入资产会触发批量重载，把已赋值的引用打成 null
+            foreach (var component in components)
+                foreach (Match match in Regex.Matches(File.ReadAllText(component.File), @"ui://\w+"))
+                    if (TryResolve(match.Value, component.PackageId, out var dep))
+                    {
+                        if (dep.Type == "font")
+                            ImportFont(dep);
+                        else if (dep.Type == "sound")
+                            ImportSound(dep);
+                    }
             _scriptsChanged = false;
             foreach (var component in components)
                 GenerateScript(component);
@@ -191,13 +210,11 @@ namespace NanamiUI.Editor
                 }
                 if (child.Attribute("defaultItem") is { } defaultItem && TryResolve(defaultItem.Value, component.PackageId, out var item))
                     Collect(item, components, images);
-                foreach (Match match in Regex.Matches(child.Attribute("text")?.Value ?? "", @"ui://\w+"))
-                    if (TryResolve(match.Value, component.PackageId, out var embedded) && embedded.Type is "image" or "movieclip")
-                        images.Add(embedded);
-                foreach (var icon in child.Elements().Select(element => element.Attribute("icon")?.Value).Where(value => value != null))
-                    if (TryResolve(icon, component.PackageId, out var iconDep) && iconDep.Type is "image" or "movieclip")
-                        images.Add(iconDep);
             }
+            // 覆盖 icon 属性、富文本内嵌图、动效 Sound 之外的一切 ui:// 引用
+            foreach (Match match in Regex.Matches(File.ReadAllText(component.File), @"ui://\w+"))
+                if (TryResolve(match.Value, component.PackageId, out var embedded) && embedded.Type is "image" or "movieclip")
+                    images.Add(embedded);
             components.Add(component);
         }
 
@@ -375,7 +392,7 @@ namespace NanamiUI.Editor
             code.AppendLine("using UnityEngine;");
             code.AppendLine("using UnityEngine.UI;");
             code.AppendLine();
-            code.AppendLine($"namespace {component.Package}");
+            code.AppendLine($"namespace UI.{component.Package}");
             code.AppendLine("{");
             code.AppendLine($"    public partial class {name} : {baseType}");
             code.AppendLine("    {");
@@ -413,7 +430,7 @@ namespace NanamiUI.Editor
             "text" or "richtext" or "inputtext" => "NanamiUI.Text",
             "loader" => "NanamiUI.Loader",
             "component" when TryResolve(child.Attribute("src").Value, packageId, out var dep) =>
-                $"{dep.Package}.{Identifier(Path.GetFileNameWithoutExtension(dep.File))}",
+                $"UI.{dep.Package}.{Identifier(Path.GetFileNameWithoutExtension(dep.File))}",
             "component" => null,
             _ when IsMovieClip(child, packageId) => "NanamiUI.MovieClip",
             _ => "RectTransform",
@@ -434,7 +451,7 @@ namespace NanamiUI.Editor
                 if (xml.Attribute("overflow")?.Value == "hidden")
                     root.AddComponent<RectMask2D>();
 
-                var componentType = FindType($"{component.Package}.{Identifier(root.name)}");
+                var componentType = FindType($"UI.{component.Package}.{Identifier(root.name)}");
                 var comp = (Component)root.AddComponent(componentType);
 
                 var controllers = new Dictionary<string, ControllerData>();
@@ -481,18 +498,20 @@ namespace NanamiUI.Editor
                     SetGrips(view, ContentBounds(children));
                 }
 
-                var byId = new Dictionary<string, GameObject>();
+                var byId = new Dictionary<string, (XElement Xml, GameObject Go)>();
                 foreach (var (element, go) in children)
-                    byId.TryAdd(element.Attribute("id").Value, go);
+                    byId.TryAdd(element.Attribute("id").Value, (element, go));
                 foreach (var (element, go) in children)
                     foreach (var relationXml in element.Elements("relation"))
-                        if (relationXml.Attribute("target").Value != "" && byId.TryGetValue(relationXml.Attribute("target").Value, out var targetGo))
+                        if (relationXml.Attribute("target").Value != "" && byId.TryGetValue(relationXml.Attribute("target").Value, out var relationTarget))
                         {
                             var relation = go.AddComponent<Relation>();
-                            relation.target = (RectTransform)targetGo.transform;
+                            relation.target = (RectTransform)relationTarget.Go.transform;
                             relation.sidePairs = relationXml.Attribute("sidePair").Value.Split(',');
                             relation.Record();
                         }
+
+                BuildTransitions(root, xml, byId, component.PackageId);
 
                 foreach (var controller in controllers.Values)
                     BuildController(controller);
@@ -1196,6 +1215,145 @@ namespace NanamiUI.Editor
             return (parts[0], parts[1], parts[2], parts[3]);
         }
 
+        // 动效：XML 时间/时长单位是 24fps 帧；值里 "-" 表示保持当前（NaN）。
+        private static void BuildTransitions(GameObject root, XElement xml, Dictionary<string, (XElement Xml, GameObject Go)> byId, string packageId)
+        {
+            foreach (var transitionXml in xml.Elements("transition"))
+            {
+                var transition = root.AddComponent<Transition>();
+                transition.transitionName = transitionXml.Attribute("name").Value;
+                transition.autoPlay = transitionXml.Attribute("autoPlay")?.Value == "true";
+                transition.autoPlayTimes = int.Parse(transitionXml.Attribute("autoPlayRepeat")?.Value ?? "1");
+                transition.autoPlayDelay = float.Parse(transitionXml.Attribute("autoPlayDelay")?.Value ?? "0", CultureInfo.InvariantCulture);
+
+                var items = new List<TransitionItem>();
+                foreach (var itemXml in transitionXml.Elements("item"))
+                {
+                    var targetId = itemXml.Attribute("target")?.Value ?? "";
+                    (XElement Xml, GameObject Go) target = default;
+                    if (targetId != "" && !byId.TryGetValue(targetId, out target))
+                        continue; // 编辑器遗留的失效目标
+                    var type = ParseTransitionType(itemXml.Attribute("type").Value);
+                    if (type == null)
+                        continue;
+
+                    var item = new TransitionItem
+                    {
+                        time = int.Parse(itemXml.Attribute("time").Value) / 24f,
+                        target = target.Go != null ? (RectTransform)target.Go.transform : null,
+                        type = type.Value,
+                        tween = itemXml.Attribute("tween")?.Value == "true",
+                        duration = int.Parse(itemXml.Attribute("duration")?.Value ?? "0") / 24f,
+                        ease = ParseEase(itemXml.Attribute("ease")?.Value),
+                        repeat = int.Parse(itemXml.Attribute("repeat")?.Value ?? "0"),
+                        yoyo = itemXml.Attribute("yoyo")?.Value == "true",
+                    };
+
+                    if (item.tween)
+                    {
+                        item.start = ParseTransitionValues(itemXml.Attribute("startValue")?.Value, item.type);
+                        item.end = ParseTransitionValues(itemXml.Attribute("endValue")?.Value, item.type);
+                    }
+                    else
+                    {
+                        var value = itemXml.Attribute("value")?.Value;
+                        switch (item.type)
+                        {
+                            case TransitionItemType.Sound:
+                                if (value != null && TryResolve(value, packageId, out var soundResource))
+                                    item.sound = ImportSound(soundResource);
+                                break;
+                            case TransitionItemType.Nested:
+                                item.stringValue = value.Split(',')[0];
+                                break;
+                            case TransitionItemType.Text:
+                                item.stringValue = value;
+                                break;
+                            default:
+                                item.start = ParseTransitionValues(value, item.type);
+                                break;
+                        }
+                    }
+
+                    if (item.type == TransitionItemType.XY)
+                    {
+                        var rt = target.Go != null ? (RectTransform)target.Go.transform : (RectTransform)root.transform;
+                        var designXY = target.Xml != null ? Pair(target.Xml, "xy") ?? Vector2.zero : Vector2.zero;
+                        item.positionOffset = rt.anchoredPosition - new Vector2(designXY.x, -designXY.y);
+                        if (itemXml.Attribute("path") is { } path)
+                            item.pathData = path.Value.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                    }
+
+                    items.Add(item);
+                }
+                transition.items = items.ToArray();
+            }
+        }
+
+        private static TransitionItemType? ParseTransitionType(string value) => value switch
+        {
+            "XY" => TransitionItemType.XY,
+            "Size" => TransitionItemType.Size,
+            "Scale" => TransitionItemType.Scale,
+            "Pivot" => TransitionItemType.Pivot,
+            "Alpha" => TransitionItemType.Alpha,
+            "Rotation" => TransitionItemType.Rotation,
+            "Color" => TransitionItemType.Color,
+            "Animation" => TransitionItemType.Animation,
+            "Visible" => TransitionItemType.Visible,
+            "Sound" => TransitionItemType.Sound,
+            "Transition" => TransitionItemType.Nested,
+            "Shake" => TransitionItemType.Shake,
+            "ColorFilter" => TransitionItemType.ColorFilter,
+            "Text" => TransitionItemType.Text,
+            _ => null,
+        };
+
+        private static float[] ParseTransitionValues(string value, TransitionItemType type)
+        {
+            switch (type)
+            {
+                case TransitionItemType.Visible:
+                    return new[] { value == "true" ? 1f : 0f };
+                case TransitionItemType.Animation:
+                {
+                    var parts = value.Split(',');
+                    return new[] { parts[0] == "-" ? -1f : float.Parse(parts[0], CultureInfo.InvariantCulture), parts.Length > 1 && parts[1] == "p" ? 1f : 0f };
+                }
+                case TransitionItemType.Color:
+                {
+                    var color = ParseColor(value);
+                    return new[] { color.r, color.g, color.b, color.a };
+                }
+                default:
+                    return value.Split(',')
+                        .Select(part => part == "-" ? float.NaN : float.Parse(part, CultureInfo.InvariantCulture))
+                        .ToArray();
+            }
+        }
+
+        // FairyGUI ease 名 "Expo.Out" → DOTween Ease.OutExpo
+        private static Ease ParseEase(string value)
+        {
+            if (value == null)
+                return Ease.OutQuad;
+            if (value == "Linear")
+                return Ease.Linear;
+            var parts = value.Split('.');
+            return (Ease)Enum.Parse(typeof(Ease), parts[1] + parts[0]);
+        }
+
+        private static AudioClip ImportSound(Resource resource)
+        {
+            if (Sounds.TryGetValue(resource, out var clip))
+                return clip;
+            var target = AssetPath(resource.File);
+            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            File.Copy(resource.File, target, true);
+            AssetDatabase.ImportAsset(target);
+            return Sounds[resource] = AssetDatabase.LoadAssetAtPath<AudioClip>(target);
+        }
+
         private static void ConfigureGearAni(Type gearType, object gear, XElement xml)
         {
             (int Frame, bool Playing) Parse(string value, (int Frame, bool Playing) def)
@@ -1424,11 +1582,20 @@ namespace NanamiUI.Editor
                 });
             }
 
-            var asset = ScriptableObject.CreateInstance<BitmapFont>();
+            // 已有资产原地更新：CreateAsset 覆盖会换对象身份，后续导入批次会把引用打成 null
+            var assetPath = Path.ChangeExtension(AssetPath(fontResource.File), ".asset");
+            var asset = AssetDatabase.LoadAssetAtPath<BitmapFont>(assetPath);
+            if (asset == null)
+            {
+                asset = ScriptableObject.CreateInstance<BitmapFont>();
+                AssetDatabase.CreateAsset(asset, assetPath);
+                asset = AssetDatabase.LoadAssetAtPath<BitmapFont>(assetPath);
+            }
             asset.size = size;
+            asset.canTint = fontResource.Texture != null; // 标准 BMFont 可着色，逐字图片字体保留原色
             asset.texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
             asset.glyphs = glyphs.ToArray();
-            AssetDatabase.CreateAsset(asset, Path.ChangeExtension(AssetPath(fontResource.File), ".asset"));
+            EditorUtility.SetDirty(asset);
             return FontAssets[fontResource] = asset;
         }
 

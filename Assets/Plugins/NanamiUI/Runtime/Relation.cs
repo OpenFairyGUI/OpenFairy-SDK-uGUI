@@ -17,12 +17,16 @@ namespace NanamiUI
 
         public void Record()
         {
+            if (target == null) // AddComponent 时 OnEnable 先于字段注入
+                return;
             lastTopLeft = TopLeft(target);
             lastSize = target.rect.size;
         }
 
         public void Sync()
         {
+            if (target == null)
+                return;
             var topLeft = TopLeft(target);
             var size = target.rect.size;
             var move = topLeft - lastTopLeft;

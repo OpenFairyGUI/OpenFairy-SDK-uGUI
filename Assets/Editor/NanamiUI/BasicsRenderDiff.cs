@@ -9,23 +9,30 @@ using UnityEngine.UI;
 
 namespace NanamiUI.Editor
 {
+    // 截图流程：每页 FairyGUI 与 NanamiUI 同帧创建、同时播放（含 t0 动效），
+    // 经过 SettleTime 后同帧截屏 —— 两侧用同一 Time.deltaTime 序列推进，动画相位一致。
     public static class BasicsRenderDiff
     {
         private const string DocsDir = "Docs/RenderDiff";
-        private const string PackageName = "Basics";
-        private const string FairyPackage = "UI/Basics";
-        private const string NanamiPrefabRoot = "Assets/UIProject/Assets/Basics";
-        private const string SourceRoot = "UIProject/assets/Basics";
+        private const float SettleTime = 1f;
         private const string PendingKey = "NanamiUI.BasicsRenderDiff.Pending";
         private const string ExitPlayModeKey = "NanamiUI.BasicsRenderDiff.ExitPlayMode";
+
+        // 不透明底色（场景背景 #363C44）：FairyGUI 文字 shader 是直通 alpha 混合、uGUI 是预乘，
+        // 透明背景会导致两侧 alpha 通道不同（视觉上其实一致），垫实底后 diff 才反映真实视觉。
+        private static readonly Color Background = new Color32(0x36, 0x3C, 0x44, 0xFF);
 
         private static int _pageIndex;
         private static bool _running;
         private static bool _pageReady;
         private static bool _exitWhenDone;
+        private static float _pageStartTime;
         private static UIPanel _fairyPanel;
         private static GComponent _fairyView;
         private static Camera _fairyCamera;
+        private static Camera _nanamiCamera;
+        private static GameObject _nanamiCanvas;
+        private static GameObject _nanamiInstance;
 
         private static readonly Page[] Pages =
         {
@@ -50,6 +57,12 @@ namespace NanamiUI.Editor
             new("Component", "Demo_Component"),
             new("Grid", "Demo_Grid"),
             new("Text", "Demo_Text"),
+            new("Transition_BOSS", "BOSS", "Transition"),
+            new("Transition_BOSS_SKILL", "BOSS_SKILL", "Transition"),
+            new("Transition_TRAP", "TRAP", "Transition"),
+            new("Transition_GoodHit", "GoodHit", "Transition"),
+            new("Transition_PowerUp", "PowerUp", "Transition"),
+            new("Transition_PathDemo", "PathDemo", "Transition"),
         };
 
         [MenuItem("Tools/NanamiUI/Capture Basics Render Diff")]
@@ -89,11 +102,14 @@ namespace NanamiUI.Editor
                 return;
 
             Directory.CreateDirectory(DocsDir);
+            Application.runInBackground = true; // 编辑器失焦时播放循环会冻结，截图必须后台可跑
             UIConfig.defaultFont = "Microsoft YaHei";
             NanamiUI.Text.defaultFont = "Microsoft YaHei";
-            if (UIPackage.GetByName(PackageName) == null)
-                UIPackage.AddPackage(FairyPackage);
+            foreach (var package in Pages.Select(page => page.Package).Distinct())
+                if (UIPackage.GetByName(package) == null)
+                    UIPackage.AddPackage($"UI/{package}");
             PrepareFairyScene();
+            PrepareNanamiScene();
 
             _pageIndex = 0;
             _pageReady = false;
@@ -123,15 +139,19 @@ namespace NanamiUI.Editor
                 return;
             }
 
-            var page = Pages[_pageIndex++];
+            var page = Pages[_pageIndex];
             var size = PageSize(page);
             if (!_pageReady)
             {
                 PrepareFairyPage(page, size);
+                PrepareNanamiPage(page, size);
+                _pageStartTime = Time.time;
                 _pageReady = true;
-                _pageIndex--;
                 return;
             }
+
+            if (Time.time - _pageStartTime < SettleTime)
+                return;
 
             var fairy = CaptureFairy(page, size);
             var nanami = CaptureNanami(page, size);
@@ -143,7 +163,10 @@ namespace NanamiUI.Editor
             UnityEngine.Object.DestroyImmediate(fairy);
             UnityEngine.Object.DestroyImmediate(nanami);
             UnityEngine.Object.DestroyImmediate(diff);
+            if (_nanamiInstance != null)
+                UnityEngine.Object.Destroy(_nanamiInstance);
             _pageReady = false;
+            _pageIndex++;
             Debug.Log($"Captured Basics render diff {_pageIndex}/{Pages.Length}: {page.Name}");
         }
 
@@ -154,6 +177,12 @@ namespace NanamiUI.Editor
                 _fairyView.Dispose();
                 _fairyView = null;
             }
+            if (_nanamiInstance != null)
+                UnityEngine.Object.Destroy(_nanamiInstance);
+            if (_nanamiCanvas != null)
+                UnityEngine.Object.Destroy(_nanamiCanvas);
+            if (_nanamiCamera != null)
+                UnityEngine.Object.Destroy(_nanamiCamera.gameObject);
             _running = false;
             EditorApplication.update -= CaptureNext;
         }
@@ -169,12 +198,35 @@ namespace NanamiUI.Editor
             _fairyCamera.enabled = true;
 
             _fairyPanel = UnityEngine.Object.FindObjectsByType<UIPanel>(FindObjectsInactive.Include, FindObjectsSortMode.None)
-                .First(panel => panel.packageName == PackageName);
+                .First(panel => panel.packageName == "Basics");
             _fairyPanel.gameObject.SetActive(true);
             _fairyPanel.enabled = true;
-            _fairyPanel.packageName = PackageName;
             _fairyPanel.componentName = string.Empty;
             _fairyPanel.CreateUI();
+        }
+
+        private static void PrepareNanamiScene()
+        {
+            var cameraObject = new GameObject("NanamiUI Capture Camera");
+            _nanamiCamera = cameraObject.AddComponent<Camera>();
+            _nanamiCamera.clearFlags = CameraClearFlags.SolidColor;
+            _nanamiCamera.backgroundColor = Background;
+            _nanamiCamera.cullingMask = 1; // 只渲染 Default 层，隔离场景里的 FairyGUI 舞台
+            _nanamiCamera.orthographic = true;
+            _nanamiCamera.nearClipPlane = -30;
+            _nanamiCamera.farClipPlane = 30;
+            _nanamiCamera.enabled = false; // 只用于手动 Render
+
+            _nanamiCanvas = new GameObject("NanamiUI Capture Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+            var canvas = _nanamiCanvas.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = _nanamiCamera;
+            var scaler = _nanamiCanvas.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+            scaler.scaleFactor = 1;
+            var canvasRt = (RectTransform)_nanamiCanvas.transform;
+            canvasRt.pivot = new Vector2(0, 1);
+            canvasRt.position = Vector3.zero;
         }
 
         private static void PrepareFairyPage(Page page, Vector2Int size)
@@ -191,17 +243,41 @@ namespace NanamiUI.Editor
             _fairyCamera.aspect = (float)size.x / size.y;
             _fairyCamera.transform.position = new Vector3(_fairyCamera.orthographicSize * _fairyCamera.aspect, -_fairyCamera.orthographicSize, -10);
             _fairyCamera.clearFlags = CameraClearFlags.SolidColor;
-            _fairyCamera.backgroundColor = Color.clear;
+            _fairyCamera.backgroundColor = Background;
             _fairyCamera.cullingMask = 1 << LayerMask.NameToLayer(StageCamera.LayerName);
 
             if (_fairyView != null)
                 _fairyView.Dispose();
             GRoot.inst.RemoveChildren(0, -1, true);
-            var view = UIPackage.CreateObject(PackageName, page.Component).asCom;
+            var view = UIPackage.CreateObject(page.Package, page.Component).asCom;
             GRoot.inst.AddChild(view);
             view.SetXY(0, 0);
             view.EnsureBoundsCorrect();
+            view.GetTransition("t0")?.Play();
             _fairyView = view;
+        }
+
+        private static void PrepareNanamiPage(Page page, Vector2Int size)
+        {
+            var canvasRt = (RectTransform)_nanamiCanvas.transform;
+            canvasRt.sizeDelta = new Vector2(size.x, size.y);
+
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"Assets/UIProject/Assets/{page.Package}/{page.Component}.prefab");
+            if (prefab == null)
+            {
+                _nanamiInstance = null;
+                return;
+            }
+            _nanamiInstance = UnityEngine.Object.Instantiate(prefab, canvasRt, false);
+            var rt = (RectTransform)_nanamiInstance.transform;
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
+            rt.anchoredPosition = Vector2.zero;
+            rt.localScale = Vector3.one;
+            if (page.Component == "Main")
+                _nanamiInstance.transform.Find("btn_Back").gameObject.SetActive(true);
+            foreach (var text in _nanamiInstance.GetComponentsInChildren<NanamiUI.Text>(true))
+                text.WarmUp();
+            _nanamiInstance.GetComponents<Transition>().FirstOrDefault(transition => transition.transitionName == "t0")?.Play();
         }
 
         private static Texture2D CaptureFairy(Page page, Vector2Int size)
@@ -230,66 +306,25 @@ namespace NanamiUI.Editor
 
         private static Texture2D CaptureNanami(Page page, Vector2Int size)
         {
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{NanamiPrefabRoot}/{page.Component}.prefab");
-            if (prefab == null)
+            if (_nanamiInstance == null)
                 return Placeholder(size, new Color32(235, 235, 235, 255));
 
-            var cameraObject = new GameObject("NanamiUI Capture Camera");
-            var canvasObject = new GameObject("NanamiUI Capture Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
-            GameObject instance = null;
             RenderTexture rt = null;
             try
             {
-                var camera = cameraObject.AddComponent<Camera>();
-                camera.clearFlags = CameraClearFlags.SolidColor;
-                camera.backgroundColor = Color.clear;
-                camera.cullingMask = 1; // 只渲染 Default 层，隔离场景里的 FairyGUI 舞台
-                camera.orthographic = true;
-                camera.orthographicSize = size.y * 0.5f;
-                camera.transform.position = new Vector3(size.x * 0.5f, -size.y * 0.5f, -10);
-                camera.nearClipPlane = -30;
-                camera.farClipPlane = 30;
-
-                var canvas = canvasObject.GetComponent<Canvas>();
-                canvas.renderMode = RenderMode.WorldSpace;
-                canvas.worldCamera = camera;
-
-                var scaler = canvasObject.GetComponent<CanvasScaler>();
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
-                scaler.scaleFactor = 1;
-
-                var canvasRt = (RectTransform)canvasObject.transform;
-                canvasRt.pivot = new Vector2(0, 1);
-                canvasRt.sizeDelta = size;
-                canvasRt.position = Vector3.zero;
-
-                instance = UnityEngine.Object.Instantiate(prefab, canvasRt, false);
-                var rtInstance = (RectTransform)instance.transform;
-                rtInstance.anchorMin = rtInstance.anchorMax = rtInstance.pivot = new Vector2(0, 1);
-                rtInstance.anchoredPosition = Vector2.zero;
-                rtInstance.sizeDelta = size;
-                rtInstance.localScale = Vector3.one;
-                if (page.Component == "Main")
-                    instance.transform.Find("btn_Back").gameObject.SetActive(true);
-
-                // 先预热字体图集再布局，避免图集在渲染同帧内扩容导致网格失效。
-                foreach (var text in instance.GetComponentsInChildren<NanamiUI.Text>(true))
-                    text.WarmUp();
-                Canvas.ForceUpdateCanvases();
+                _nanamiCamera.orthographicSize = size.y * 0.5f;
+                _nanamiCamera.transform.position = new Vector3(size.x * 0.5f, -size.y * 0.5f, -10);
                 Canvas.ForceUpdateCanvases();
                 rt = RenderTexture.GetTemporary(size.x, size.y, 24, RenderTextureFormat.ARGB32);
-                camera.targetTexture = rt;
-                camera.Render();
+                _nanamiCamera.targetTexture = rt;
+                _nanamiCamera.Render();
                 return Read(rt);
             }
             finally
             {
                 if (rt != null)
                     RenderTexture.ReleaseTemporary(rt);
-                if (instance != null)
-                    UnityEngine.Object.DestroyImmediate(instance);
-                UnityEngine.Object.DestroyImmediate(canvasObject);
-                UnityEngine.Object.DestroyImmediate(cameraObject);
+                _nanamiCamera.targetTexture = null;
             }
         }
 
@@ -337,9 +372,7 @@ namespace NanamiUI.Editor
 
         private static Vector2Int PageSize(Page page)
         {
-            var xml = page.Component == "Main"
-                ? $"{SourceRoot}/Main.xml"
-                : $"{SourceRoot}/{page.Component}.xml";
+            var xml = $"UIProject/assets/{page.Package}/{page.Component}.xml";
             var parts = XDocument.Load(xml).Root.Attribute("size").Value.Split(',');
             return new Vector2Int(int.Parse(parts[0]), int.Parse(parts[1]));
         }
@@ -355,11 +388,13 @@ namespace NanamiUI.Editor
         {
             public readonly string Name;
             public readonly string Component;
+            public readonly string Package;
 
-            public Page(string name, string component)
+            public Page(string name, string component, string package = "Basics")
             {
                 Name = name;
                 Component = component;
+                Package = package;
             }
         }
     }

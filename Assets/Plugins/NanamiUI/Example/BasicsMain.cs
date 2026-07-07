@@ -42,7 +42,7 @@ namespace NanamiUI.Example
         private void Awake()
         {
             NanamiUI.Text.defaultFont = "Microsoft YaHei";
-            _main = Array.Find(GetComponents<NanamiUI.Component>(), component => component.GetType().FullName == "Basics.Main");
+            _main = Array.Find(GetComponents<NanamiUI.Component>(), component => component.GetType().FullName == "UI.Basics.Main");
             _mainType = _main.GetType();
             _container = ((UnityEngine.Component)Get("m_container")).transform;
 
@@ -123,7 +123,7 @@ namespace NanamiUI.Example
 
         private static void SetupButtonDemo(GameObject go)
         {
-            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), component => component.GetType().FullName == "Basics.Demo_Button");
+            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), component => component.GetType().FullName == "UI.Basics.Demo_Button");
             BindGroup(demo, "m_RadioGroup", "m_n18", "m_n19", "m_n20");
             BindGroup(demo, "m_tab", "m_n23", "m_n24", "m_n25");
         }

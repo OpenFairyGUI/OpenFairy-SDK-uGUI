@@ -346,10 +346,12 @@ namespace NanamiUI
                 if (!bitmapFont.TryGetGlyph(ch, out var glyph))
                     return 0;
                 var top = baselineY - glyph.lineHeight + glyph.y;
+                var tint = bitmapFont.canTint;
+                Color32 white = Color.white;
                 _quads.Add(new Quad
                 {
                     Rect = new Rect(x + glyph.x, top, glyph.width, glyph.height),
-                    TL = run.TL, BL = run.BL, TR = run.TR, BR = run.BR,
+                    TL = tint ? run.TL : white, BL = tint ? run.BL : white, TR = tint ? run.TR : white, BR = tint ? run.BR : white,
                     UvBL = new Vector2(glyph.uv.xMin, glyph.uv.yMin),
                     UvTL = new Vector2(glyph.uv.xMin, glyph.uv.yMax),
                     UvTR = new Vector2(glyph.uv.xMax, glyph.uv.yMax),

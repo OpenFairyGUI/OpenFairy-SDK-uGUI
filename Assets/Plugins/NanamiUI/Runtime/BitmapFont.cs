@@ -19,6 +19,7 @@ namespace NanamiUI
         }
 
         public int size;
+        public bool canTint; // 标准 BMFont（白字图集）可着色；UIBuilder 逐字图片字体保留原色
         public Texture2D texture;
         public Glyph[] glyphs;
 
