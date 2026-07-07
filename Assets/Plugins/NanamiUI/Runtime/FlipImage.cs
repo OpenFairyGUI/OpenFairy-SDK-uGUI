@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Sprites;
 using UnityEngine.UI;
 
 namespace NanamiUI
@@ -14,23 +15,16 @@ namespace NanamiUI
             if (!flipX && !flipY)
                 return;
 
+            // 绕 sprite 自身的 UV 区间镜像（而非整块 mesh 的跨度），平铺时才能保持瓦片相位与 FairyGUI 一致。
+            var uv = DataUtility.GetOuterUV(sprite);
             var vert = new UIVertex();
-            var min = new Vector2(float.MaxValue, float.MaxValue);
-            var max = new Vector2(float.MinValue, float.MinValue);
-            for (var i = 0; i < toFill.currentVertCount; i++)
-            {
-                toFill.PopulateUIVertex(ref vert, i);
-                min = Vector2.Min(min, vert.uv0);
-                max = Vector2.Max(max, vert.uv0);
-            }
-
             for (var i = 0; i < toFill.currentVertCount; i++)
             {
                 toFill.PopulateUIVertex(ref vert, i);
                 if (flipX)
-                    vert.uv0.x = min.x + max.x - vert.uv0.x;
+                    vert.uv0.x = uv.x + uv.z - vert.uv0.x;
                 if (flipY)
-                    vert.uv0.y = min.y + max.y - vert.uv0.y;
+                    vert.uv0.y = uv.y + uv.w - vert.uv0.y;
                 toFill.SetUIVertex(vert, i);
             }
         }

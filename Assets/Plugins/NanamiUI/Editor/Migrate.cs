@@ -1060,6 +1060,7 @@ namespace NanamiUI.Editor
             public RectTransform Viewport;
             public GameObject VtBar;
             public GameObject HzBar;
+            public Vector2 ViewportSize; // 设计态 viewport 尺寸：拉伸锚点后 sizeDelta/rect 不可靠，布局与 grip 用它
         }
 
         // 复刻 ScrollPane 静态布局：viewport 缩进 margin 与滚动条宽度，滚动条常显，grip 长度按显示比例。
@@ -1069,16 +1070,24 @@ namespace NanamiUI.Editor
             var barMargin = ParseMargin(element.Attribute("scrollBarMargin")?.Value);
             var scroll = element.Attribute("scroll")?.Value ?? "vertical";
             var hideBars = element.Attribute("scrollBar")?.Value == "hidden";
+            // scrollBarFlags bit0 = displayOnLeft：竖直滚动条放左侧、内容从左内缩（FairyGUI ScrollPane._displayOnLeft）。
+            var displayOnLeft = (int.Parse(element.Attribute("scrollBarFlags")?.Value ?? "0") & 1) != 0;
             var vtBar = !hideBars && scroll is "vertical" or "both" && VerticalScrollBar != null ? InstantiateComponent(VerticalScrollBar, root.transform) : null;
             var hzBar = !hideBars && scroll is "horizontal" or "both" && HorizontalScrollBar != null ? InstantiateComponent(HorizontalScrollBar, root.transform) : null;
             var vtWidth = vtBar != null ? ((RectTransform)vtBar.transform).sizeDelta.x : 0;
             var hzHeight = hzBar != null ? ((RectTransform)hzBar.transform).sizeDelta.y : 0;
+            var leftInset = displayOnLeft ? vtWidth : 0;
+            var rightInset = displayOnLeft ? 0 : vtWidth;
 
+            // viewport 与滚动条一律用拉伸锚点：组件被以非设计尺寸实例化时（如 Clip&Scroll 里 425 设计→387 实例的
+            // 横向面板）滚动几何随根尺寸自适应。设计尺寸下与固定锚点逐像素等价。
             var viewport = NewChild("viewport", (RectTransform)root.transform, typeof(RectMask2D));
             var viewportRt = (RectTransform)viewport.transform;
-            viewportRt.anchorMin = viewportRt.anchorMax = viewportRt.pivot = new Vector2(0, 1);
-            viewportRt.anchoredPosition = new Vector2(margin.Left, -margin.Top);
-            viewportRt.sizeDelta = new Vector2(size.x - margin.Left - margin.Right - vtWidth, size.y - margin.Top - margin.Bottom - hzHeight);
+            viewportRt.pivot = new Vector2(0, 1);
+            viewportRt.anchorMin = Vector2.zero;
+            viewportRt.anchorMax = Vector2.one;
+            viewportRt.offsetMin = new Vector2(margin.Left + leftInset, margin.Bottom + hzHeight);
+            viewportRt.offsetMax = new Vector2(-(margin.Right + rightInset), -margin.Top);
             viewport.transform.SetSiblingIndex(0);
             if (element.Attribute("clipSoftness") is { } softness)
             {
@@ -1089,22 +1098,30 @@ namespace NanamiUI.Editor
             if (vtBar != null)
             {
                 var barRt = (RectTransform)vtBar.transform;
-                barRt.anchoredPosition = new Vector2(size.x - vtWidth, -barMargin.Top);
-                barRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y - barMargin.Top - barMargin.Bottom - hzHeight);
+                barRt.anchorMin = new Vector2(displayOnLeft ? 0 : 1, 0);
+                barRt.anchorMax = new Vector2(displayOnLeft ? 0 : 1, 1);
+                barRt.offsetMin = new Vector2(displayOnLeft ? 0 : -vtWidth, barMargin.Bottom + hzHeight);
+                barRt.offsetMax = new Vector2(displayOnLeft ? vtWidth : 0, -barMargin.Top);
             }
             if (hzBar != null)
             {
                 var barRt = (RectTransform)hzBar.transform;
-                barRt.anchoredPosition = new Vector2(barMargin.Left, -(size.y - hzHeight));
-                barRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x - barMargin.Left - barMargin.Right - vtWidth);
+                barRt.anchorMin = new Vector2(0, 0);
+                barRt.anchorMax = new Vector2(1, 0);
+                barRt.offsetMin = new Vector2(barMargin.Left + leftInset, 0);
+                barRt.offsetMax = new Vector2(-(barMargin.Right + rightInset), hzHeight);
             }
 
-            return new ScrollView { Viewport = viewportRt, VtBar = vtBar, HzBar = hzBar };
+            return new ScrollView
+            {
+                Viewport = viewportRt, VtBar = vtBar, HzBar = hzBar,
+                ViewportSize = new Vector2(size.x - margin.Left - margin.Right - vtWidth, size.y - margin.Top - margin.Bottom - hzHeight),
+            };
         }
 
         private static void SetGrips(ScrollView view, Vector2 content)
         {
-            var viewSize = view.Viewport.sizeDelta;
+            var viewSize = view.ViewportSize;
             if (view.VtBar != null)
             {
                 var bar = (RectTransform)FindChild(view.VtBar.transform, "bar");
@@ -1145,7 +1162,7 @@ namespace NanamiUI.Editor
             var view = element.Attribute("overflow")?.Value == "scroll"
                 ? BuildScrollView(go, element, size)
                 : new ScrollView { Viewport = (RectTransform)go.transform };
-            var viewSize = view.Viewport == go.transform ? size : view.Viewport.sizeDelta;
+            var viewSize = view.Viewport == go.transform ? size : view.ViewportSize;
 
             var positions = new List<Vector2>();
             float x = 0, y = 0;

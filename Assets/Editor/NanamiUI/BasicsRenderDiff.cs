@@ -9,24 +9,37 @@ using UnityEngine.UI;
 
 namespace NanamiUI.Editor
 {
-    // 截图流程：每页 FairyGUI 与 NanamiUI 同帧创建、同时播放（含 t0 动效），
-    // 经过 SettleTime 后同帧截屏 —— 两侧用同一 Time.deltaTime 序列推进，动画相位一致。
+    // 截图流程：每页 FairyGUI 与 NanamiUI 同帧创建、同帧起播 t0，之后用 Time.captureDeltaTime
+    // 把两侧的 deltaTime/unscaledDeltaTime 统一锁成 FixedDeltaTime，逐帧同步推进。
+    // 在一组采样时刻各截一张缩略图拼成胶片条（上 FairyGUI / 中 NanamiUI / 下 diff），
+    // 用来确认动效的轨迹与相位一致；末帧再全分辨率输出三联图做静态精度对比。
     public static class BasicsRenderDiff
     {
         private const string DocsDir = "Docs/RenderDiff";
-        private const float SettleTime = 1f;
         private const string PendingKey = "NanamiUI.BasicsRenderDiff.Pending";
         private const string ExitPlayModeKey = "NanamiUI.BasicsRenderDiff.ExitPlayMode";
+
+        // 统一步进：captureDeltaTime 让每一帧 game time 恰好前进这么多，两侧动效同相位。
+        private const float FixedDeltaTime = 1f / 60f;
+        private const int ThumbWidth = 240;
+
+        // 胶片条采样时刻（秒）：前密后疏，覆盖缓动初段的快速变化与末段的静止。
+        private static readonly float[] SampleTimes =
+            { 0f, 0.067f, 0.133f, 0.25f, 0.4f, 0.6f, 0.85f, 1.15f, 1.5f, 2f, 2.6f, 3.3f };
 
         // 不透明底色（场景背景 #363C44）：FairyGUI 文字 shader 是直通 alpha 混合、uGUI 是预乘，
         // 透明背景会导致两侧 alpha 通道不同（视觉上其实一致），垫实底后 diff 才反映真实视觉。
         private static readonly Color Background = new Color32(0x36, 0x3C, 0x44, 0xFF);
 
         private static int _pageIndex;
+        private static int _sampleIndex;
         private static bool _running;
         private static bool _pageReady;
         private static bool _exitWhenDone;
         private static float _pageStartTime;
+        private static Texture2D[] _fairyThumbs;
+        private static Texture2D[] _nanamiThumbs;
+        private static float _maxError;
         private static UIPanel _fairyPanel;
         private static GComponent _fairyView;
         private static Camera _fairyCamera;
@@ -103,8 +116,14 @@ namespace NanamiUI.Editor
 
             Directory.CreateDirectory(DocsDir);
             Application.runInBackground = true; // 编辑器失焦时播放循环会冻结，截图必须后台可跑
+            Time.timeScale = 1;
+            Time.captureDeltaTime = FixedDeltaTime; // 两侧动效同步的关键：锁定每帧步进量
             UIConfig.defaultFont = "Microsoft YaHei";
             NanamiUI.Text.defaultFont = "Microsoft YaHei";
+            // 复刻 BasicsMain 的配置：FairyGUI 只有在这里配了滚动条资源才会创建滚动条。
+            // 不配则 FairyGUI 侧无滚动条、viewport 用满宽，与已烤进滚动条的 NanamiUI 产物产生假 diff。
+            UIConfig.verticalScrollBar = "ui://Basics/ScrollBar_VT";
+            UIConfig.horizontalScrollBar = "ui://Basics/ScrollBar_HZ";
             foreach (var package in Pages.Select(page => page.Package).Distinct())
                 if (UIPackage.GetByName(package) == null)
                     UIPackage.AddPackage($"UI/{package}");
@@ -146,15 +165,48 @@ namespace NanamiUI.Editor
                 PrepareFairyPage(page, size);
                 PrepareNanamiPage(page, size);
                 _pageStartTime = Time.time;
+                _sampleIndex = 0;
+                _maxError = 0;
+                _fairyThumbs = new Texture2D[SampleTimes.Length];
+                _nanamiThumbs = new Texture2D[SampleTimes.Length];
                 _pageReady = true;
                 return;
             }
 
-            if (Time.time - _pageStartTime < SettleTime)
+            if (_sampleIndex < SampleTimes.Length)
+            {
+                if (Time.time - _pageStartTime < SampleTimes[_sampleIndex])
+                    return;
+                CaptureSample(page, size);
+                _sampleIndex++;
+                return;
+            }
+
+            var strip = BuildStrip();
+            Save(strip, $"{DocsDir}/{SafeName(page.Name)}_strip.png");
+            UnityEngine.Object.DestroyImmediate(strip);
+            foreach (var texture in _fairyThumbs.Concat(_nanamiThumbs))
+                if (texture != null)
+                    UnityEngine.Object.DestroyImmediate(texture);
+            if (_nanamiInstance != null)
+                UnityEngine.Object.Destroy(_nanamiInstance);
+            _pageReady = false;
+            _pageIndex++;
+            Debug.Log($"Captured Basics render diff {_pageIndex}/{Pages.Length}: {page.Name} (max diff {_maxError * 255:F1}/255)");
+        }
+
+        private static void CaptureSample(Page page, Vector2Int size)
+        {
+            var thumb = ThumbSize(size);
+            _fairyThumbs[_sampleIndex] = CaptureFairy(page, size, thumb);
+            _nanamiThumbs[_sampleIndex] = CaptureNanami(page, size, thumb);
+
+            if (_sampleIndex < SampleTimes.Length - 1)
                 return;
 
-            var fairy = CaptureFairy(page, size);
-            var nanami = CaptureNanami(page, size);
+            // 末帧（已静止）额外全分辨率输出三联图，保留既有静态精度对比。
+            var fairy = CaptureFairy(page, size, size);
+            var nanami = CaptureNanami(page, size, size);
             var diff = Diff(fairy, nanami);
             var name = SafeName(page.Name);
             Save(fairy, $"{DocsDir}/{name}_fairygui.png");
@@ -163,15 +215,11 @@ namespace NanamiUI.Editor
             UnityEngine.Object.DestroyImmediate(fairy);
             UnityEngine.Object.DestroyImmediate(nanami);
             UnityEngine.Object.DestroyImmediate(diff);
-            if (_nanamiInstance != null)
-                UnityEngine.Object.Destroy(_nanamiInstance);
-            _pageReady = false;
-            _pageIndex++;
-            Debug.Log($"Captured Basics render diff {_pageIndex}/{Pages.Length}: {page.Name}");
         }
 
         private static void StopCapture()
         {
+            Time.captureDeltaTime = 0;
             if (_fairyView != null)
             {
                 _fairyView.Dispose();
@@ -253,7 +301,14 @@ namespace NanamiUI.Editor
             GRoot.inst.AddChild(view);
             view.SetXY(0, 0);
             view.EnsureBoundsCorrect();
-            view.GetTransition("t0")?.Play();
+            if (view.GetTransition("t0") is { } transition)
+            {
+                // Time.captureDeltaTime 只锁 Time.deltaTime，不锁 unscaledDeltaTime；FairyGUI 的 GTweener
+                // 默认 ignoreEngineTimeScale=true 用 unscaledDeltaTime，会按真实墙钟推进而与 NanamiUI 脱同步。
+                // 关掉它，让 tweener 改用被锁定的 deltaTime，两侧才能逐帧同相位。
+                transition.ignoreEngineTimeScale = false;
+                transition.Play();
+            }
             _fairyView = view;
         }
 
@@ -280,12 +335,12 @@ namespace NanamiUI.Editor
             _nanamiInstance.GetComponents<Transition>().FirstOrDefault(transition => transition.transitionName == "t0")?.Play();
         }
 
-        private static Texture2D CaptureFairy(Page page, Vector2Int size)
+        private static Texture2D CaptureFairy(Page page, Vector2Int size, Vector2Int res)
         {
             RenderTexture rt = null;
             try
             {
-                rt = RenderTexture.GetTemporary(size.x, size.y, 24, RenderTextureFormat.ARGB32);
+                rt = RenderTexture.GetTemporary(res.x, res.y, 24, RenderTextureFormat.ARGB32);
                 _fairyCamera.targetTexture = rt;
                 _fairyCamera.Render();
                 return Read(rt);
@@ -293,7 +348,7 @@ namespace NanamiUI.Editor
             catch (Exception e)
             {
                 Debug.LogWarning($"FairyGUI capture failed for {page.Component}: {e.Message}");
-                return Placeholder(size, new Color32(255, 230, 230, 255));
+                return Placeholder(res, new Color32(255, 230, 230, 255));
             }
             finally
             {
@@ -304,10 +359,10 @@ namespace NanamiUI.Editor
             }
         }
 
-        private static Texture2D CaptureNanami(Page page, Vector2Int size)
+        private static Texture2D CaptureNanami(Page page, Vector2Int size, Vector2Int res)
         {
             if (_nanamiInstance == null)
-                return Placeholder(size, new Color32(235, 235, 235, 255));
+                return Placeholder(res, new Color32(235, 235, 235, 255));
 
             RenderTexture rt = null;
             try
@@ -315,7 +370,7 @@ namespace NanamiUI.Editor
                 _nanamiCamera.orthographicSize = size.y * 0.5f;
                 _nanamiCamera.transform.position = new Vector3(size.x * 0.5f, -size.y * 0.5f, -10);
                 Canvas.ForceUpdateCanvases();
-                rt = RenderTexture.GetTemporary(size.x, size.y, 24, RenderTextureFormat.ARGB32);
+                rt = RenderTexture.GetTemporary(res.x, res.y, 24, RenderTextureFormat.ARGB32);
                 _nanamiCamera.targetTexture = rt;
                 _nanamiCamera.Render();
                 return Read(rt);
@@ -326,6 +381,25 @@ namespace NanamiUI.Editor
                     RenderTexture.ReleaseTemporary(rt);
                 _nanamiCamera.targetTexture = null;
             }
+        }
+
+        // 三行（FairyGUI / NanamiUI / diff）× 采样列拼成一张胶片条。
+        private static Texture2D BuildStrip()
+        {
+            var cols = SampleTimes.Length;
+            var w = _fairyThumbs[0].width;
+            var h = _fairyThumbs[0].height;
+            var strip = new Texture2D(w * cols, h * 3, TextureFormat.RGBA32, false);
+            for (var c = 0; c < cols; c++)
+            {
+                var diff = Diff(_fairyThumbs[c], _nanamiThumbs[c]);
+                strip.SetPixels(c * w, h * 2, w, h, _fairyThumbs[c].GetPixels());
+                strip.SetPixels(c * w, h, w, h, _nanamiThumbs[c].GetPixels());
+                strip.SetPixels(c * w, 0, w, h, diff.GetPixels());
+                UnityEngine.Object.DestroyImmediate(diff);
+            }
+            strip.Apply();
+            return strip;
         }
 
         private static Texture2D Diff(Texture2D a, Texture2D b)
@@ -339,6 +413,8 @@ namespace NanamiUI.Editor
                 var ca = x < a.width && y < a.height ? a.GetPixel(x, y) : Color.clear;
                 var cb = x < b.width && y < b.height ? b.GetPixel(x, y) : Color.clear;
                 var d = Mathf.Max(Mathf.Abs(ca.r - cb.r), Mathf.Abs(ca.g - cb.g), Mathf.Abs(ca.b - cb.b), Mathf.Abs(ca.a - cb.a));
+                if (d > _maxError)
+                    _maxError = d;
                 output.SetPixel(x, y, d <= 1f / 255f ? Color.white : new Color(1, 1 - d, 1 - d, 1));
             }
             output.Apply();
@@ -368,6 +444,12 @@ namespace NanamiUI.Editor
             }
             texture.Apply();
             return texture;
+        }
+
+        private static Vector2Int ThumbSize(Vector2Int size)
+        {
+            var h = Mathf.Max(1, Mathf.RoundToInt(ThumbWidth * (float)size.y / size.x));
+            return new Vector2Int(ThumbWidth, h);
         }
 
         private static Vector2Int PageSize(Page page)
