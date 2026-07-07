@@ -70,6 +70,8 @@ Button 组件继承 Button<对应 Controller enum>。
 - 编译/运行时错误：`grep "error CS" "$LOCALAPPDATA/Unity/Editor/Editor.log"`（或 `-Tail`）。刷新编译用 `refresh_unity(compile=request)`。
 - 一次性操作：`RunCommand` 里包 try/catch，用 result.LogError 输出（禁止 System.Reflection 命名空间）。
 
+**改脚本后 Unity 不重编译**：外部改动（Write 工具）甚至 unity-mcp 的脚本写入，Unity 有时死活不重编译——`AssetDatabase.Refresh` / `RequestScriptCompilation(CleanBuildCache)` / `ImportAsset(ForceUpdate)` 全无效，domain reload 也只是 `compile time=1 ms`（等于没编译，跑的还是旧 DLL，改动看不到效果）。可靠的强制手段：删掉输出 DLL 再触发编译——`rm Library/ScriptAssemblies/Assembly-CSharp-firstpass.dll`（NanamiUI 的 Runtime 在 Plugins 下、无 asmdef，编到 `-firstpass`；Editor 脚本在 `Assembly-CSharp-Editor(-firstpass)`），然后 `RequestScriptCompilation()` 会重建，再 `EditorUtility.RequestScriptReload()` 让新程序集入域。验证是否真编译：比对 DLL mtime 与源文件 mtime。
+
 **文字排版**：`NanamiUI.Text` 在 `OnPopulateMesh` 里复刻 FairyGUI 公式（不用 TextGenerator 布局）。改排版要对照 `Assets/FairyGUI/Scripts/Core/Text/{TextField,DynamicFont}.cs`。
 
-**翻转 + 平铺图的相位**：tile 图导入为独立贴图 + `wrapMode=Repeat`，会走 Unity `Image.Type.Tiled` 的单 quad repeat 优化（UV 从 0 跑到 N=瓦片数）。`FlipImage` 翻转时**必须绕 sprite 自身的 UV 区间**（`DataUtility.GetOuterUV`）镜像，而非整块 mesh 的 UV min/max——后者会绕整条跨度中心反射，把残缺瓦片翻到原点侧、与 FairyGUI 差半格相位。
+**平铺图的相位**：tile 图导入为独立贴图 + `wrapMode=Repeat`，Unity `Image.Type.Tiled` 会走单 quad repeat 优化（UV 从 0 铺到 N=瓦片数），但它把**纵向残缺格锚在顶部**；FairyGUI 从内容左上角起铺、残缺格落在右下。所以**任何分数格高度的平铺图（翻转与否）纵向都会差半格**（不只翻转的，同页不翻转的也偏，别被淡边缘晕骗了——要用逐像素/互相关量化验证）。`FlipImage.OnPopulateMesh` 因此对所有 `Type.Tiled` **自己生成单 quad**：`nx/ny = rect * multipliedPixelsPerUnit / sprite.rect`，flip 并进 UV 起止（`flipX? uv.z:uv.x` 等），再把顶边 `v1` 用 `Mathf.Floor(v1)-v1` 对齐到整格边界，残缺格回到底边。横向原点天然在左边、无需处理。非平铺的 Simple/Sliced 翻转仍走 base + 绕 `GetOuterUV` 镜像顶点。（注：Sliced+flip 即 9 宫格翻转是另一回事，FairyGUI 会调 gridRect，简单翻 UV 尚未完全对齐。）
