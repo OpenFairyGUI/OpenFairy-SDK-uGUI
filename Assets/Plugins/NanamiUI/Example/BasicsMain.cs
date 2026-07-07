@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace NanamiUI.Example
@@ -82,6 +83,59 @@ namespace NanamiUI.Example
                 SetupButtonDemo(go);
             else if (name == "Graph")
                 PlayGraph(go);
+            else if (name == "Depth")
+                PlayDepth(go);
+            else if (name == "Drag&Drop")
+                PlayDragDrop(go);
+        }
+
+        // 复刻 FairyGUI BasicsMain.PlayDepth：固定物置 sortingOrder 100 + 可拖；两个按钮各建 order 0(红,靠后)/200(绿,靠前) 矩形。
+        private void PlayDepth(GameObject go)
+        {
+            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Depth");
+            var container = (NanamiUI.Component)Get(demo, "m_n22");
+            var fixedShape = (NanamiUI.Shape)Get(container, "m_n0");
+            var containerRt = (RectTransform)((UnityEngine.Component)container).transform;
+            var fixedRt = (RectTransform)fixedShape.transform;
+            for (var i = containerRt.childCount - 1; i >= 0; i--)
+                if (containerRt.GetChild(i) != fixedRt)
+                    Destroy(containerRt.GetChild(i).gameObject);
+            NanamiUI.Depth.SetSortingOrder(fixedRt, 100);
+            fixedShape.gameObject.AddComponent<NanamiUI.Draggable>();
+            fixedShape.raycastTarget = true;
+            var startPos = new Vector2(fixedRt.anchoredPosition.x, -fixedRt.anchoredPosition.y); // fairy xy
+            BindButton(Get(demo, "m_btn0"), () => { startPos += new Vector2(10, 10); NanamiUI.Depth.CreateRect(containerRt, startPos, 150, 150, 1, Color.black, Color.red, 0); });
+            BindButton(Get(demo, "m_btn1"), () => { startPos += new Vector2(10, 10); NanamiUI.Depth.CreateRect(containerRt, startPos, 150, 150, 1, Color.black, Color.green, 200); });
+        }
+
+        // 复刻 FairyGUI BasicsMain.PlayDragDrop：a 自由拖；b 拖时改走 DragDropManager 的 agent；c 是落点(收到 icon)；d 限定在 n7 范围内拖。
+        private void PlayDragDrop(GameObject go)
+        {
+            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Drag_Drop");
+            var a = (UnityEngine.Component)Get(demo, "m_a");
+            var b = (UnityEngine.Component)Get(demo, "m_b");
+            var c = (UnityEngine.Component)Get(demo, "m_c");
+            var d = (UnityEngine.Component)Get(demo, "m_d");
+            var n7 = (UnityEngine.Component)Get(demo, "m_n7");
+            var rootCanvas = _container.GetComponentInParent<Canvas>();
+            var raycaster = rootCanvas.GetComponent<GraphicRaycaster>();
+
+            a.gameObject.AddComponent<NanamiUI.Draggable>();
+
+            var bIcon = (Sprite)b.GetType().GetProperty("Icon").GetValue(b);
+            var bDrag = b.gameObject.AddComponent<NanamiUI.Draggable>();
+            bDrag.onDragStart = e =>
+            {
+                NanamiUI.DragDropManager.inst.StartDrag(rootCanvas, raycaster, bIcon, bIcon, e);
+                return true; // PreventDefault：b 本体不动，改拖 agent
+            };
+
+            c.GetType().GetProperty("Icon").SetValue(c, null);
+            c.gameObject.AddComponent<NanamiUI.DropTarget>().onDrop = data => c.GetType().GetProperty("Icon").SetValue(c, (Sprite)data);
+
+            var dDrag = d.gameObject.AddComponent<NanamiUI.Draggable>();
+            var n7Rt = (RectTransform)n7.transform;
+            dDrag.dragBounds = new Rect(n7Rt.anchoredPosition.x, -n7Rt.anchoredPosition.y, n7Rt.rect.width, n7Rt.rect.height);
         }
 
         // 复刻 FairyGUI BasicsMain.PlayGraph：把静态烘焙的图形在运行时改成扇形/带贴图梯形/三条折线，

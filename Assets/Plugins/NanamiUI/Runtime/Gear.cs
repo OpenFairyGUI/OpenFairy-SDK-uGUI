@@ -10,6 +10,9 @@ namespace NanamiUI
         public GameObject target;
         public T[] pages;
 
+        // 同 target 的 GearDisplay（由 Controller 在切页时按 target 匹配注入）；tween gear 用它加/解 display lock。
+        [NonSerialized] public IDisplayGear displayLock;
+
         // 复刻 FairyGUI GearTweenConfig 默认值（GearBase.cs:195-201）。
         public bool tween;
         public float duration = 0.3f;

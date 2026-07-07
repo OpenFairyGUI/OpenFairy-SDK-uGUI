@@ -13,6 +13,7 @@ namespace NanamiUI
         public Vector2 defaultScale;
 
         [NonSerialized] private Tweener _tweener;
+        [NonSerialized] private IDisplayGear _lockedDisplay;
 
         private (Vector2 Size, Vector2 Scale) Values(T page)
         {
@@ -26,9 +27,20 @@ namespace NanamiUI
             rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
         }
 
-        public override void Apply(T page)
+        private void KillTween()
         {
             _tweener?.Kill();
+            _tweener = null;
+            if (_lockedDisplay != null)
+            {
+                _lockedDisplay.ReleaseLock();
+                _lockedDisplay = null;
+            }
+        }
+
+        public override void Apply(T page)
+        {
+            KillTween();
             var rt = (RectTransform)target.transform;
             var (size, scale) = Values(page);
             SetSize(rt, size);
@@ -39,7 +51,7 @@ namespace NanamiUI
         {
             var rt = (RectTransform)target.transform;
             var (size, scale) = Values(page);
-            _tweener?.Kill();
+            KillTween();
             var startSize = rt.rect.size;
             var startScale = new Vector2(rt.localScale.x, rt.localScale.y);
             if (!animate || !tween || (startSize == size && startScale == scale))
@@ -48,12 +60,25 @@ namespace NanamiUI
                 rt.localScale = new Vector3(scale.x, scale.y, 1);
                 return;
             }
+            if (displayLock != null)
+            {
+                displayLock.AddLock();
+                _lockedDisplay = displayLock;
+            }
             _tweener = DOTween.To(() => 0f, t =>
             {
                 SetSize(rt, Vector2.Lerp(startSize, size, t));
                 var s = Vector2.Lerp(startScale, scale, t);
                 rt.localScale = new Vector3(s.x, s.y, 1);
-            }, 1f, duration).SetEase(ease).SetDelay(delay).OnComplete(() => _tweener = null);
+            }, 1f, duration).SetEase(ease).SetDelay(delay).OnComplete(() =>
+            {
+                _tweener = null;
+                if (_lockedDisplay != null)
+                {
+                    _lockedDisplay.ReleaseLock();
+                    _lockedDisplay = null;
+                }
+            });
         }
     }
 }

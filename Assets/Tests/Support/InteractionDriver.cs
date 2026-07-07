@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -24,6 +25,25 @@ namespace NanamiUI.TestSupport
                     ((IPointerDownHandler)target.GetComponent<IPointerDownHandler>())
                         .OnPointerDown(new PointerEventData(EventSystem.current));
                     break;
+            }
+        }
+
+        // 按名切控制器的页（复刻 FairyGUI GetController(name).selectedIndex）。Controller<T> 是泛型 struct、
+        // 生成的 UI.{包} 类型测试程序集不可达，故经反射设 m_{name}.page（同 NanamiUI.Example.BasicsMain.SetPage）。
+        // 运行时 page setter 触发 gears 缓动。pageName 用生成枚举名（"_0"/"_1"）。
+        public static void DriveControllerPage(GameObject root, string controllerName, string pageName)
+        {
+            var fieldName = "m_" + controllerName;
+            foreach (var component in root.GetComponents<NanamiUI.Component>())
+            {
+                var field = component.GetType().GetField(fieldName);
+                if (field == null)
+                    continue;
+                var controller = field.GetValue(component); // 装箱的 Controller<T>
+                var pageProp = controller.GetType().GetProperty("page");
+                pageProp.SetValue(controller, Enum.Parse(pageProp.PropertyType, pageName)); // setter 里 gears 作用于真实 GameObject
+                field.SetValue(component, controller); // 结构体写回，持久化 _page
+                return;
             }
         }
 

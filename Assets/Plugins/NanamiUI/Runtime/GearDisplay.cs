@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 
 namespace NanamiUI
@@ -7,6 +7,11 @@ namespace NanamiUI
     {
         bool On { get; }
         int Condition { get; }
+        GameObject Target { get; }
+        // display lock：同 target 的 GearXY/GearSize 在 tween 期间加锁，令"本应隐藏"的 target 保持显示到 tween 结束，
+        // 复刻 FairyGUI AddDisplayLock/ReleaseDisplayLock（否则旧页会立即消失而非飞出）。
+        void AddLock();
+        void ReleaseLock();
     }
 
     // gearDisplay 与 gearDisplay2 共用本类：两者互为 partner 时按 condition(0=AND,1=OR) 组合可见性。
@@ -18,15 +23,38 @@ namespace NanamiUI
         public IDisplayGear partner;
         public bool on = true;
 
+        [NonSerialized] private int _locks;
+
         public bool On => on;
         public int Condition => condition;
+        public GameObject Target => target;
+
+        public void AddLock()
+        {
+            _locks++;
+            UpdateVisible();
+        }
+
+        public void ReleaseLock()
+        {
+            if (_locks > 0)
+                _locks--;
+            UpdateVisible();
+        }
 
         public override void Apply(T page)
         {
             on = pages.Length == 0 || Array.IndexOf(pages, page) >= 0;
+            UpdateVisible();
+        }
+
+        private void UpdateVisible()
+        {
             var visible = partner == null ? on
                 : condition == 1 || partner.Condition == 1 ? on || partner.On
                 : on && partner.On;
+            if (!visible && _locks > 0)
+                visible = true; // 被 tween 锁住：暂不隐藏，等 tween 结束 ReleaseLock 后再隐藏
             target.SetActive(visible);
         }
     }

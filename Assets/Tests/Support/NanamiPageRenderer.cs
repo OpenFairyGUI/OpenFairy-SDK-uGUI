@@ -1,5 +1,6 @@
 using System.IO;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace NanamiUI.TestSupport
@@ -14,10 +15,13 @@ namespace NanamiUI.TestSupport
         private GameObject _canvas;
         private RectTransform _canvasRt;
         private GameObject _instance;
+        private GameObject _eventSystem;
         private Vector2Int _size;
 
         public GameObject Instance => _instance;
         public Camera Camera => _camera;
+        public RectTransform CanvasRt => _canvasRt;
+        public GraphicRaycaster Raycaster => _canvas.GetComponent<GraphicRaycaster>();
 
         public void Setup()
         {
@@ -46,6 +50,12 @@ namespace NanamiUI.TestSupport
             _canvasRt = (RectTransform)_canvas.transform;
             _canvasRt.pivot = new Vector2(0, 1);
             _canvasRt.position = Vector3.zero;
+
+            // PlayMode 测试跑在空场景，需自带 EventSystem 令 EventSystem.current 非空（GraphicRaycaster.Raycast/drop 命中要用）。
+            // 不加 InputModule：StandaloneInputModule 读旧版 UnityEngine.Input，本工程用新 Input System 会抛异常；
+            // 测试都直接调 handler，无需输入模块驱动。
+            if (EventSystem.current == null)
+                _eventSystem = new GameObject("NanamiUI EventSystem", typeof(EventSystem));
         }
 
         public void LoadPage(ParityPage page)
@@ -82,6 +92,14 @@ namespace NanamiUI.TestSupport
             rt.localScale = Vector3.one;
             foreach (var text in _instance.GetComponentsInChildren<NanamiUI.Text>(true))
                 text.WarmUp();
+        }
+
+        // 无 prefab 的独立测试用：设定画布尺寸并摆好相机（供 Depth/Drag 这类自建物体的坐标换算）。
+        public void Configure(int width, int height)
+        {
+            _size = new Vector2Int(width, height);
+            _canvasRt.sizeDelta = _size;
+            PlaceCamera();
         }
 
         // 相机摆位：正交、覆盖整页，画布左上角落在 world 原点（与快照/截图坐标约定一致）。
@@ -125,6 +143,8 @@ namespace NanamiUI.TestSupport
                 Object.DestroyImmediate(_canvas);
             if (_camera != null)
                 Object.DestroyImmediate(_camera.gameObject);
+            if (_eventSystem != null)
+                Object.DestroyImmediate(_eventSystem);
         }
     }
 
