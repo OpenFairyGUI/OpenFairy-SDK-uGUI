@@ -12,8 +12,8 @@
 | --- | --- | --- |
 | Main | 2.85% | 完成。差异全部为动态字体反锯齿噪声。 |
 | Button | 2.58% | 完成。含 grayed 控制器约定、OnOffButton gearXY 默认值。 |
-| Image | 15.98% | 基本完成。残差：FairyGUI 图集 duplicate padding 使平铺单元 ~1px 重叠（已知差异），九宫格渐变 banding。 |
-| Graph | 0.15% | 完成。 |
+| Image | 15.98% | 基本完成。残差：平铺单元 ~1px 重叠（图集 duplicate padding，已知），九宫格渐变 banding。翻转九宫格（n18，6_png flip=vt）已修：`FlipImage.SliceFillFlipped` 复刻 FairyGUI 的 grid-rect 翻转 + 预翻转 uvRect，非对称边框厚度不再错位。 |
+| Graph | 完成 | 已复刻运行时 `PlayGraph`：pie 扇形（`Shape` 椭圆 start/endDegree）、trapezoid 带贴图百分比多边形、line/line2/line3 折线（新 `Line` 组件 + `LineMesh` 移植，走 `TransitionPath`），line 的 fillEnd 5s 线性扫入。逻辑抽到 `NanamiUI.Example.GraphDemo`，运行时 `BasicsMain` 与截图脚本共用；对比脚本两侧同步驱动 `PlayGraph`+fillEnd。残差：trapezoid 贴图 FairyGUI 用投影校正 UV、uGUI 仿射，轻微透视差（已知，需自定义 shader 写 uv.w 才能消除）。 |
 | MovieClip | 0.93% | 完成。播放相位与 FairyGUI 对齐。 |
 | Depth | 2.36% | 完成（静态）。 |
 | Loader | 1.09% | 完成。 |
@@ -49,6 +49,35 @@
 - **截图底色**：截图相机使用不透明底色 #363C44（FairyGUI 文字 shader 直通 alpha 与 uGUI 预乘 alpha 在透明底上的 alpha 通道不同，实底下两侧像素一致）。
 - **Shake 与 movieclip 帧相位**：Shake 为随机偏移，两引擎随机序列不同；movieclip 激活时机可能差 ±1 帧。仅影响 GoodHit/PowerUp 的百分比，不影响观感。
 
+## 通用导出器与本次改动（2026-07-07）
+
+- **通用导出器（Migrate.cs）**：移除所有 Basics/Transition 专属假设（`Entries[]`、`BasicsDemoNames[]`、硬编码滚动条名、`ConfigureBasicsExample`、`Basics/Main.xml` 特判、`Microsoft YaHei` 硬编码）。现在按 `package.xml` 的 `exported="true"` 发现组件，`Collect` 依赖闭包；`OutputRoot` 从 `UIProject` 目录名推导。运行时 UIConfig 类配置（默认字体、滚动条、按钮音）来自 `settings/Common.json` + 可选的 `NanamiUISettings` ScriptableObject（`Assets/Plugins/NanamiUI/NanamiUISettings.asset`）。`NanamiUISettings.packages` 限定导出包（留空=全部），本工程设为 `Basics,Transition`。示例胶水通过 `[MigratePostProcess]` 扩展点（`BasicsExample.cs`）自动挂载，不再污染通用导出器。已实测导出 97 个组件无报错。
+- **C# 关键字转义**：`Identifier()` 现在对 C# 关键字（如 button 控制器的 `checked` 页）转义为 `_checked`，否则生成的 enum/类名非法。任意合法 FairyGUI 工程都可能撞上。
+- **声音（Basics demo 无音效）**：NanamiUI 本身静音（`Common.json.buttonClickSound` 为空）。之前的点击音来自 SampleScene 里**活着的 FairyGUI 参照 UIPanel**（官方 `BasicsMain.Awake` 设 `UIConfig.buttonSound="click"`）。已在 SampleScene 把该 UIPanel 置为 inactive 并禁用其 `BasicsMain`——正常播放只剩静音的 NanamiUI；截图对比脚本用 `FindObjectsInactive.Include` 显式重新激活它，比对不受影响。
+- **文字宽度（Component 偏大）**：实测为**已知的 alpha 边缘晕**误判，非字号问题。scaleFactor=1 下 NanamiUI 与 FairyGUI 逐字 advance 逐像素相同（"Component" 两侧均 127px）。工程内无 `autoSize="shrink"/"ellipsis"`，无需实现收缩。（潜在的 `keepCrisp` 亚像素路径仅在 scaleFactor>1 生效，当前管线恒为 1，未实现。）
+- **切换页面动效（gear tween）**：`Gear` 基类新增 `tween/duration/ease/delay`（默认 QuadOut/0.3s/0，复刻 FairyGUI `GearTweenConfig`），`Controller.page` setter 传 `Application.isPlaying` 作 animate 标志（烘焙=编辑态直接置位，运行时切页缓动，等价 FairyGUI `_constructing==0`）。`GearXY/GearSize/GearLook` 用 DOTween 驱动，切页时 kill 旧 tween、`current==end` 跳过。Main 的 container/btns（`Main.xml` gearXY tween=true）现在切页时滑入/滑出；已实测运行时 c1→1 时 container 由 (-1143) 缓动而非瞬移。Migrate 对所有 gear 读取 `tween/ease/duration/delay`。
+- **Graph 左下 line 颜色**：并非 SDK 渲染错误。经逐像素比对，红色圆头帽两侧完全一致 (202,55,55)，仅绿色段**长度**不同——因截图脚本对 NanamiUI 侧 `Canvas.ForceUpdateCanvases` 立即重建、却没强制重建 FairyGUI 侧网格，导致 FairyGUI 参照 `fillEnd` 滞后一个采样。已在 `DriveGraph` 补 `_fairyGraphLine.UpdateMesh()`，diff 中该 line 已干净。`Line.cs/GraphDemo.cs` 无需改动。
+
+## 尚未复刻的运行时交互（需额外运行时基建，未在本轮实现）
+
+截图脚本只驱动 t0 动效（+新增的 Graph），以下 `BasicsMain.Play*` 交互 NanamiUI 尚未复刻，多数需要 NanamiUI 目前没有的舞台/覆盖层/输入体系：
+- **ProgressBar**：连续跑条（`value` 循环）。`ProgressBar` 有 value/Apply，仅缺驱动；未做（快速循环值难与 FairyGUI Timer 逐样本对齐，像素价值低）。
+- **Grid**：按 `RuntimePlatform` 枚举随机填表（随机色/值，本就无法逐像素比对）。需 GList 运行时。
+- **Window / Popup / Drag&Drop / Depth / Text 链接点击**：需 `Window`/`PopupMenu`/`DragDropManager`/`sortingOrder`/draggable/onClickLink 等运行时组件 + 一个带 EventSystem 的 GRoot 覆盖层。属较大的后续工作。
+
 ## 截图输出约定
 
 每个页面会生成 `{Page}_fairygui.png`、`{Page}_nanami.png`、`{Page}_diff.png`；`&`、`/` 会替换为 `_`。
+
+## 自动化回归测试（静态 golden，PlayMode）
+
+`Assets/Tests` 下有一套基于 Unity Test Framework 的静态 golden parity 回归测试，作为 `Capture Basics Render Diff` 之上的**可判定门禁**（差分工具只出图给人看，无 pass/fail）。
+
+- **参照（golden）**：FairyGUI 末帧，由 `BasicsRenderDiff` 菜单 `Tools/NanamiUI/Generate Golden References` **一步直接渲染写入** `Assets/Tests/Golden/ReferenceImages/`（已 gitignore、不入库，按需现生成；同一次跑也照常输出 `Docs/RenderDiff/` 差分图）。**它答的是"NanamiUI 有没有偏离 FairyGUI"，不是自比回归。**
+- **测试**：`NanamiUI.Tests.PlayMode` 的 `StaticGoldenTests` 逐页渲 NanamiUI 末帧，与 golden 做 >2/255 RGB diff，超每页阈值（`ParityCatalog.StaticPages`）即失败。
+- **程序集**：新增 3 个 asmdef —— `NanamiUI.Runtime`（包住 `Runtime/`）、`NanamiUI.TestSupport`（渲染器/目录/diff）、`NanamiUI.Tests.PlayMode`。FairyGUI **不进**测试程序集（golden 由 `BasicsRenderDiff`（编辑器预定义程序集，能引 FairyGUI）渲染生成，测试只读 PNG）。
+- **范围（17 页）**：末帧收敛、无 per-demo 胶水的静态页。**排除** Graph/Main（需胶水）、MovieClip/ProgressBar（循环 / 墙钟计时器）、所有 Transition_*（动效轨迹）——这些属后续"实时双跑"层（FairyGUI + NanamiUI 同帧推进再 diff；因 `unscaledTime` 破坏轨迹相位，冻结成静态 golden 会脆）。
+- **跑法**：`Window > General > Test Runner > PlayMode > Run All`；无头 `Unity.exe -runTests -batchmode -testPlatform PlayMode -testResults r.xml`（**不要** `-nographics`，URP 需 GPU 才能渲染像素）。
+- 2026-07-08 首次全扫 **17/17 通过**，阈值已按实测收紧（见 `ParityCatalog` 尾注）。
+
+**拆 asmdef 的坑**：把 `Runtime/` 从 Assembly-CSharp 拆成独立 asmdef 后，`GearXY` 的 `rt.DOAnchorPos()` 编译失败——该扩展定义在 DOTween 松散模块 `DOTweenModuleUI.cs`（编在 Assembly-CSharp），Runtime 独立后够不到。已改用核心 `DOTween.To()`（在 `DOTween.dll` 内，自动引用可用）。

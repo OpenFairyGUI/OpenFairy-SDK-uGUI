@@ -25,6 +25,15 @@ namespace NanamiUI
         public float startAngle;
         public float[] distances;
         public Vector2 skew;
+        // 椭圆扇形（pie）：Demo_Graph 运行时把整椭圆改成扇形。默认整圆。
+        public float startDegree;
+        public float endDegree = 360;
+        // 带贴图的百分比多边形（Demo_Graph 的 trapezoid 运行时用到）。
+        public bool usePercentPositions;
+        public Vector2[] texcoords;
+        public Sprite texture;
+
+        public override Texture mainTexture => texture != null ? texture.texture : base.mainTexture;
 
         private Rect _rect;
         private VertexHelper _vh;
@@ -170,6 +179,20 @@ namespace NanamiUI
         {
             var radiusX = _rect.width / 2;
             var radiusY = _rect.height / 2;
+
+            var origStart = Mathf.Clamp(startDegree, 0, 360) * Mathf.Deg2Rad;
+            var origEnd = Mathf.Clamp(endDegree, 0, 360) * Mathf.Deg2Rad;
+            var clipped = startDegree > 0 || endDegree < 360;
+            var sectionStart = origStart;
+            var sectionEnd = origEnd;
+            var lineAngle = 0f;
+            if (lineSize > 0 && clipped)
+            {
+                lineAngle = lineSize / Mathf.Max(radiusX, radiusY);
+                sectionStart += lineAngle;
+                sectionEnd -= lineAngle;
+            }
+
             var sideCount = Mathf.Clamp(Mathf.CeilToInt(Mathf.PI * (radiusX + radiusY) / 4), 40, 800);
             var angleDelta = 2 * Mathf.PI / sideCount;
             var angle = 0f;
@@ -177,6 +200,10 @@ namespace NanamiUI
             AddVert(radiusX, radiusY, color);
             for (var i = 0; i < sideCount; i++)
             {
+                if (angle < sectionStart)
+                    angle = sectionStart;
+                else if (angle > sectionEnd)
+                    angle = sectionEnd;
                 var x = Mathf.Cos(angle) * (radiusX - lineSize) + radiusX;
                 var y = Mathf.Sin(angle) * (radiusY - lineSize) + radiusY;
                 AddVert(x, y, color);
@@ -199,7 +226,7 @@ namespace NanamiUI
                         _vh.AddTriangle(i + 5, i + 2, i + 3);
                         _vh.AddTriangle(i + 3, i + 6, i + 5);
                     }
-                    else
+                    else if (!clipped)
                     {
                         _vh.AddTriangle(0, i + 1, 1);
                         _vh.AddTriangle(2, i + 2, i + 3);
@@ -209,14 +236,66 @@ namespace NanamiUI
             }
             else
                 for (var i = 0; i < sideCount; i++)
-                    _vh.AddTriangle(0, i + 1, i == sideCount - 1 ? 1 : i + 2);
+                {
+                    if (i != sideCount - 1)
+                        _vh.AddTriangle(0, i + 1, i + 2);
+                    else if (!clipped)
+                        _vh.AddTriangle(0, i + 1, 1);
+                }
+
+            if (lineSize > 0 && clipped)
+                AddSectorEdges(radiusX, radiusY, origStart, origEnd, lineAngle, sideCount);
+        }
+
+        // 扇形两条直边（沿半径的边框）+ 端点圆角，复刻 EllipseMesh 的 SECTOR_CENTER_TRIANGLES。
+        private static readonly int[] SectorCenterTriangles =
+            { 0, 4, 1, 0, 3, 4, 0, 2, 3, 0, 8, 5, 0, 7, 8, 0, 6, 7, 6, 5, 2, 2, 1, 6 };
+
+        private void AddSectorEdges(float radiusX, float radiusY, float origStart, float origEnd, float lineAngle, int sideCount)
+        {
+            var baseIndex = sideCount * 3 + 1;
+            var centerRadius = lineSize * 0.5f;
+            var insetStart = origStart + lineAngle;
+            var insetEnd = origEnd - lineAngle;
+
+            void Cap(float a) => AddVert(Mathf.Cos(a) * centerRadius + radiusX, Mathf.Sin(a) * centerRadius + radiusY, lineColor);
+            void Rim(float a) => AddVert(Mathf.Cos(a) * radiusX + radiusX, Mathf.Sin(a) * radiusY + radiusY, lineColor);
+
+            AddVert(radiusX, radiusY, lineColor);          // 0 center
+            Cap(origStart + lineAngle * 0.5f + Mathf.PI * 0.5f); // 1
+            Cap(origStart + lineAngle * 0.5f - Mathf.PI * 0.5f); // 2
+            Rim(origStart);                                 // 3 outer at start edge
+            Rim(insetStart);                                // 4 first drawn outer
+            Cap(origEnd - lineAngle * 0.5f + Mathf.PI * 0.5f);   // 5
+            Cap(origEnd - lineAngle * 0.5f - Mathf.PI * 0.5f);   // 6
+            Rim(insetEnd);                                  // 7 last drawn outer
+            Rim(origEnd);                                   // 8 outer at end edge
+
+            for (var i = 0; i < SectorCenterTriangles.Length; i += 3)
+                _vh.AddTriangle(baseIndex + SectorCenterTriangles[i], baseIndex + SectorCenterTriangles[i + 1], baseIndex + SectorCenterTriangles[i + 2]);
         }
 
         private void FillPolygon()
         {
             var numVertices = points.Length;
-            foreach (var point in points)
-                AddVert(point.x, point.y, color);
+            var w = _rect.width;
+            var h = _rect.height;
+            var useTex = texcoords != null && texcoords.Length >= numVertices;
+            var outer = texture != null
+                ? UnityEngine.Sprites.DataUtility.GetOuterUV(texture)
+                : new Vector4(0, 0, 1, 1);
+            for (var i = 0; i < numVertices; i++)
+            {
+                var px = usePercentPositions ? points[i].x * w : points[i].x;
+                var py = usePercentPositions ? points[i].y * h : points[i].y;
+                if (useTex)
+                {
+                    var uv = new Vector2(Mathf.Lerp(outer.x, outer.z, texcoords[i].x), Mathf.Lerp(outer.y, outer.w, texcoords[i].y));
+                    _vh.AddVert(new Vector3(_rect.xMin + px, _rect.yMax - py), color, uv);
+                }
+                else
+                    AddVert(px, py, color);
+            }
 
             var rest = new System.Collections.Generic.List<int>();
             for (var i = 0; i < numVertices; i++)

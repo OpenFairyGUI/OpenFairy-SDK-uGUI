@@ -9,7 +9,7 @@
 - **命令行工具**：系统已安装 `ripgrep`（`rg`）和 `coreutils`，有需要请直接调用。如果命令找不到，用 winget 安装：
   - `winget install BurntSushi.ripgrep.MSVC`
   - `winget install uutils.coreutils`
-- **项目类型**：这是一个 **Unity** 项目。你应该已经连接到 MCP for Unity；如果没有，请提示用户安装。
+- **项目类型**：这是一个 **Unity** 项目。你应该已经连接到 unity mcp；如果没有，请提示用户安装。使用 unity mcp 执行代码时请注意 unity mcp 禁止 System.Reflection 命名空间。
 
 ## 项目目标
 
@@ -34,6 +34,8 @@ SDK (Assets/Plugins/NanamiUI/Runtime) 里包含每个基础组件的定义，跟
 Controller 是 struct Controller<T> where T : struct, Enum，不是 MonoBehaviour。
 Gear 及其子类也不是 MonoBehaviour，并且是泛型，泛型类型是对应 Controller 的 enum。
 Button 也是泛型，泛型类型是对应 Controller 的 enum。
+Assets/Editor/NanamiUI/BasicsRenderDiff.cs 截图脚本，保存截图到 Docs/RenderDiff
+Docs/BasicsImplementationStatus.md 是目前的进度，开始工作前要读取它以获知目前进度状态，有新的进展后也应更新这个文件。
 
 ## codegen
 类似于 FairyGUI 自带的 codegen 功能一样，NanamiUI 也可以根据 FairyGUI 工程结构，预先生成脚本。
@@ -65,12 +67,6 @@ Button 组件继承 Button<对应 Controller enum>。
 截图脚本直接 `UIPackage.CreateObject` 建 FairyGUI 参照视图，**不跑官方 demo 的初始化**，所以凡是 demo 里 `UIConfig.*` 配的东西都要在脚本里补上，否则产生假 diff。已补：`defaultFont` 以及滚动条资源 `UIConfig.verticalScrollBar/horizontalScrollBar = "ui://Basics/ScrollBar_VT|HZ"`（不补 FairyGUI 侧就没滚动条、viewport 用满宽）。
 
 **动效同步的坑（重要）**：`Time.captureDeltaTime` 只锁 `Time.deltaTime`，**不锁 `Time.unscaledDeltaTime`**（已实测坐实）。FairyGUI 的 GTweener/Transition 默认 `ignoreEngineTimeScale=true` 用 unscaledDeltaTime、按真实墙钟推进；NanamiUI Transition 用 deltaTime。在确定性截图（captureDeltaTime）下两者会脱同步，表现为 FairyGUI 动效"一闪而过、中段帧空白"。对比脚本已在播放前把 FairyGUI transition 的 `ignoreEngineTimeScale` 设为 false 规避（会传播到 nested）。这跟 Player Settings 的 Run In Background 无关。另注：生产中若游戏改 `timeScale`，两侧语义仍分歧（NanamiUI 跟 timeScale、FairyGUI 不跟），要完全对齐或需让 NanamiUI Transition 改用 unscaledDeltaTime。
-
-**unity-mcp 控制台失灵**：本项目 `read_console` / `GetConsoleLogs` 即使有报错也返回空，不可依赖。排错改用：
-- 编译/运行时错误：`grep "error CS" "$LOCALAPPDATA/Unity/Editor/Editor.log"`（或 `-Tail`）。刷新编译用 `refresh_unity(compile=request)`。
-- 一次性操作：`RunCommand` 里包 try/catch，用 result.LogError 输出（禁止 System.Reflection 命名空间）。
-
-**改脚本后 Unity 不重编译**：外部改动（Write 工具）甚至 unity-mcp 的脚本写入，Unity 有时死活不重编译——`AssetDatabase.Refresh` / `RequestScriptCompilation(CleanBuildCache)` / `ImportAsset(ForceUpdate)` 全无效，domain reload 也只是 `compile time=1 ms`（等于没编译，跑的还是旧 DLL，改动看不到效果）。可靠的强制手段：删掉输出 DLL 再触发编译——`rm Library/ScriptAssemblies/Assembly-CSharp-firstpass.dll`（NanamiUI 的 Runtime 在 Plugins 下、无 asmdef，编到 `-firstpass`；Editor 脚本在 `Assembly-CSharp-Editor(-firstpass)`），然后 `RequestScriptCompilation()` 会重建，再 `EditorUtility.RequestScriptReload()` 让新程序集入域。验证是否真编译：比对 DLL mtime 与源文件 mtime。
 
 **文字排版**：`NanamiUI.Text` 在 `OnPopulateMesh` 里复刻 FairyGUI 公式（不用 TextGenerator 布局）。改排版要对照 `Assets/FairyGUI/Scripts/Core/Text/{TextField,DynamicFont}.cs`。
 

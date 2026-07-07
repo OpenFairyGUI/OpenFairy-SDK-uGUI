@@ -1,0 +1,16 @@
+{
+    "name": "NanamiUI.TestSupport",
+    "rootNamespace": "NanamiUI.TestSupport",
+    "references": [
+        "NanamiUI.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

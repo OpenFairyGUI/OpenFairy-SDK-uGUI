@@ -10,6 +10,7 @@ namespace NanamiUI.Example
     {
         public string[] demoNames;
         public GameObject[] demoPrefabs;
+        public Sprite changeSprite; // Demo_Graph trapezoid 运行时贴图（change.png）
 
         private static readonly (string Name, string Field)[] Buttons =
         {
@@ -79,6 +80,29 @@ namespace NanamiUI.Example
             Place((RectTransform)go.transform);
             if (name == "Button")
                 SetupButtonDemo(go);
+            else if (name == "Graph")
+                PlayGraph(go);
+        }
+
+        // 复刻 FairyGUI BasicsMain.PlayGraph：把静态烘焙的图形在运行时改成扇形/带贴图梯形/三条折线，
+        // 其中 line 的 fillEnd 5 秒线性扫入（设置逻辑抽到 GraphDemo，与截图对比工具共用）。
+        private void PlayGraph(GameObject go) => StartCoroutine(FillTween(GraphDemo.Setup(go, changeSprite)));
+
+        private static System.Collections.IEnumerator FillTween(Line line)
+        {
+            var t = 0f;
+            while (t < 5f && line)
+            {
+                t += Time.deltaTime;
+                line.fillEnd = Mathf.Clamp01(t / 5f);
+                line.SetVerticesDirty();
+                yield return null;
+            }
+            if (line)
+            {
+                line.fillEnd = 1;
+                line.SetVerticesDirty();
+            }
         }
 
         private GameObject Prefab(string name)

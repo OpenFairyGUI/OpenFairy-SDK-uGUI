@@ -1,0 +1,36 @@
+using System.IO;
+using System.Linq;
+using NanamiUI.Example;
+using UnityEditor;
+using UnityEngine;
+
+namespace NanamiUI.Editor
+{
+    // Basics 示例自己的编辑器胶水（不属于通用导出器 Migrate）：把 BasicsMain 挂到 Main 预制体，
+    // 并按 Demo_*.prefab 通用扫描填好各 Demo 引用。通过 [MigratePostProcess] 在每次导出后自动执行。
+    public static class BasicsExample
+    {
+        private const string Root = "Assets/UIProject/Assets/Basics";
+        private const string MainPath = Root + "/Main.prefab";
+
+        [MigratePostProcess]
+        [MenuItem("Tools/NanamiUI/Configure Basics Example")]
+        public static void Configure()
+        {
+            if (!File.Exists(MainPath))
+                return;
+            var main = PrefabUtility.LoadPrefabContents(MainPath);
+            if (!main.TryGetComponent(out BasicsMain demo))
+                demo = main.AddComponent<BasicsMain>();
+            var prefabs = Directory.GetFiles(Root, "Demo_*.prefab")
+                .Select(path => AssetDatabase.LoadAssetAtPath<GameObject>(path.Replace('\\', '/')))
+                .Where(prefab => prefab != null)
+                .ToArray();
+            demo.demoNames = prefabs.Select(prefab => prefab.name["Demo_".Length..]).ToArray();
+            demo.demoPrefabs = prefabs;
+            demo.changeSprite = AssetDatabase.LoadAssetAtPath<Sprite>($"{Root}/images/change.png");
+            PrefabUtility.SaveAsPrefabAsset(main, MainPath);
+            PrefabUtility.UnloadPrefabContents(main);
+        }
+    }
+}

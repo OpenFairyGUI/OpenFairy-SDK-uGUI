@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 using FairyGUI;
+using NanamiUI.TestSupport;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,6 +19,7 @@ namespace NanamiUI.Editor
         private const string DocsDir = "Docs/RenderDiff";
         private const string PendingKey = "NanamiUI.BasicsRenderDiff.Pending";
         private const string ExitPlayModeKey = "NanamiUI.BasicsRenderDiff.ExitPlayMode";
+        private const string GoldenKey = "NanamiUI.BasicsRenderDiff.Golden";
 
         // 统一步进：captureDeltaTime 让每一帧 game time 恰好前进这么多，两侧动效同相位。
         private const float FixedDeltaTime = 1f / 60f;
@@ -36,6 +38,7 @@ namespace NanamiUI.Editor
         private static bool _running;
         private static bool _pageReady;
         private static bool _exitWhenDone;
+        private static bool _writeGolden;
         private static float _pageStartTime;
         private static Texture2D[] _fairyThumbs;
         private static Texture2D[] _nanamiThumbs;
@@ -46,6 +49,9 @@ namespace NanamiUI.Editor
         private static Camera _nanamiCamera;
         private static GameObject _nanamiCanvas;
         private static GameObject _nanamiInstance;
+        private static NanamiUI.Line _nanamiGraphLine;
+        private static NGraphics _fairyGraphLine;
+        private static Sprite _changeSprite;
 
         private static readonly Page[] Pages =
         {
@@ -92,6 +98,23 @@ namespace NanamiUI.Editor
             StartCapture();
         }
 
+        // 直接生成 golden：跑同一套播放式截图，额外把静态页的 FairyGUI 末帧写进 ReferenceImages（取代旧的两步 Capture+Promote）。
+        [MenuItem("Tools/NanamiUI/Generate Golden References")]
+        public static void GenerateGolden()
+        {
+            _writeGolden = true;
+            if (!EditorApplication.isPlaying)
+            {
+                _exitWhenDone = true;
+                SessionState.SetBool(PendingKey, true);
+                SessionState.SetBool(ExitPlayModeKey, true);
+                SessionState.SetBool(GoldenKey, true);
+                EditorApplication.EnterPlaymode();
+                return;
+            }
+            StartCapture();
+        }
+
         [InitializeOnLoadMethod]
         private static void Initialize()
         {
@@ -105,7 +128,9 @@ namespace NanamiUI.Editor
                 return;
 
             _exitWhenDone = SessionState.GetBool(ExitPlayModeKey, false);
+            _writeGolden = SessionState.GetBool(GoldenKey, false);
             SessionState.SetBool(PendingKey, false);
+            SessionState.SetBool(GoldenKey, false);
             EditorApplication.delayCall += StartCapture;
         }
 
@@ -115,6 +140,8 @@ namespace NanamiUI.Editor
                 return;
 
             Directory.CreateDirectory(DocsDir);
+            if (_writeGolden)
+                Directory.CreateDirectory(ParityCatalog.ReferenceDir);
             Application.runInBackground = true; // 编辑器失焦时播放循环会冻结，截图必须后台可跑
             Time.timeScale = 1;
             Time.captureDeltaTime = FixedDeltaTime; // 两侧动效同步的关键：锁定每帧步进量
@@ -129,6 +156,7 @@ namespace NanamiUI.Editor
                     UIPackage.AddPackage($"UI/{package}");
             PrepareFairyScene();
             PrepareNanamiScene();
+            _changeSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/UIProject/Assets/Basics/images/change.png");
 
             _pageIndex = 0;
             _pageReady = false;
@@ -177,6 +205,7 @@ namespace NanamiUI.Editor
             {
                 if (Time.time - _pageStartTime < SampleTimes[_sampleIndex])
                     return;
+                DriveGraph(Time.time - _pageStartTime);
                 CaptureSample(page, size);
                 _sampleIndex++;
                 return;
@@ -210,6 +239,8 @@ namespace NanamiUI.Editor
             var diff = Diff(fairy, nanami);
             var name = SafeName(page.Name);
             Save(fairy, $"{DocsDir}/{name}_fairygui.png");
+            if (_writeGolden && ParityCatalog.StaticPages.Any(p => p.Name == page.Name))
+                Save(fairy, $"{ParityCatalog.ReferenceDir}/{name}.png");
             Save(nanami, $"{DocsDir}/{name}_nanami.png");
             Save(diff, $"{DocsDir}/{name}_diff.png");
             UnityEngine.Object.DestroyImmediate(fairy);
@@ -233,6 +264,9 @@ namespace NanamiUI.Editor
                 UnityEngine.Object.Destroy(_nanamiCamera.gameObject);
             _running = false;
             EditorApplication.update -= CaptureNext;
+            if (_writeGolden)
+                AssetDatabase.Refresh();
+            _writeGolden = false;
         }
 
         private static void PrepareFairyScene()
@@ -310,6 +344,9 @@ namespace NanamiUI.Editor
                 transition.Play();
             }
             _fairyView = view;
+            _fairyGraphLine = null;
+            if (page.Name == "Graph")
+                FairyPlayGraph(view);
         }
 
         private static void PrepareNanamiPage(Page page, Vector2Int size)
@@ -333,6 +370,95 @@ namespace NanamiUI.Editor
             foreach (var text in _nanamiInstance.GetComponentsInChildren<NanamiUI.Text>(true))
                 text.WarmUp();
             _nanamiInstance.GetComponents<Transition>().FirstOrDefault(transition => transition.transitionName == "t0")?.Play();
+            _nanamiGraphLine = page.Component == "Demo_Graph"
+                ? NanamiUI.Example.GraphDemo.Setup(_nanamiInstance, _changeSprite)
+                : null;
+        }
+
+        // Demo_Graph 的 line 由 fillEnd 5s 线性扫入，两侧按同一 elapsed 驱动以保持同相位。
+        private static void DriveGraph(float elapsed)
+        {
+            var f = Mathf.Clamp01(elapsed / 5f);
+            if (_nanamiGraphLine != null)
+            {
+                _nanamiGraphLine.fillEnd = f;
+                _nanamiGraphLine.SetVerticesDirty();
+            }
+            if (_fairyGraphLine != null)
+            {
+                _fairyGraphLine.GetMeshFactory<LineMesh>().fillEnd = f;
+                _fairyGraphLine.SetMeshDirty();
+                // FairyGUI 的网格在 Stage 更新时才惰性重建，而 NanamiUI 侧被 Canvas.ForceUpdateCanvases 立即重建，
+                // 不强制重建会导致 FairyGUI 参照滞后一个采样，line 的 fillEnd 相位对不齐。
+                _fairyGraphLine.UpdateMesh();
+            }
+        }
+
+        // 移植 FairyGUI BasicsMain.PlayGraph：把 FairyGUI 参照侧的图形改成扇形/带贴图梯形/三条折线。
+        private static void FairyPlayGraph(GComponent obj)
+        {
+            var pie = obj.GetChild("pie").asGraph.shape;
+            var ellipse = pie.graphics.GetMeshFactory<EllipseMesh>();
+            ellipse.startDegree = 30;
+            ellipse.endDegreee = 300;
+            pie.graphics.SetMeshDirty();
+
+            var trap = obj.GetChild("trapezoid").asGraph.shape;
+            var trapezoid = trap.graphics.GetMeshFactory<PolygonMesh>();
+            trapezoid.usePercentPositions = true;
+            trapezoid.points.Clear();
+            trapezoid.points.Add(new Vector2(0f, 1f));
+            trapezoid.points.Add(new Vector2(0.3f, 0));
+            trapezoid.points.Add(new Vector2(0.7f, 0));
+            trapezoid.points.Add(new Vector2(1f, 1f));
+            trapezoid.texcoords.Clear();
+            trapezoid.texcoords.AddRange(VertexBuffer.NormalizedUV);
+            trap.graphics.SetMeshDirty();
+            trap.graphics.texture = (NTexture)UIPackage.GetItemAsset("Basics", "change");
+
+            var lineShape = obj.GetChild("line").asGraph.shape;
+            var line = lineShape.graphics.GetMeshFactory<LineMesh>();
+            line.lineWidthCurve = AnimationCurve.Linear(0, 25, 1, 10);
+            line.roundEdge = true;
+            line.gradient = NanamiUI.Example.GraphDemo.LineGradient();
+            line.path.Create(new[]
+            {
+                new GPathPoint(new Vector3(0, 120, 0)), new GPathPoint(new Vector3(20, 120, 0)),
+                new GPathPoint(new Vector3(100, 100, 0)), new GPathPoint(new Vector3(180, 30, 0)),
+                new GPathPoint(new Vector3(100, 0, 0)), new GPathPoint(new Vector3(20, 30, 0)),
+                new GPathPoint(new Vector3(100, 100, 0)), new GPathPoint(new Vector3(180, 120, 0)),
+                new GPathPoint(new Vector3(200, 120, 0)),
+            });
+            line.fillEnd = 0;
+            lineShape.graphics.SetMeshDirty();
+            _fairyGraphLine = lineShape.graphics;
+
+            var line2Shape = obj.GetChild("line2").asGraph.shape;
+            var line2 = line2Shape.graphics.GetMeshFactory<LineMesh>();
+            line2.lineWidth = 3;
+            line2.roundEdge = true;
+            line2.path.Create(new[]
+            {
+                new GPathPoint(new Vector3(0, 120, 0), GPathPoint.CurveType.Straight),
+                new GPathPoint(new Vector3(60, 30, 0), GPathPoint.CurveType.Straight),
+                new GPathPoint(new Vector3(80, 90, 0), GPathPoint.CurveType.Straight),
+                new GPathPoint(new Vector3(140, 30, 0), GPathPoint.CurveType.Straight),
+                new GPathPoint(new Vector3(160, 90, 0), GPathPoint.CurveType.Straight),
+                new GPathPoint(new Vector3(220, 30, 0), GPathPoint.CurveType.Straight),
+            });
+            line2Shape.graphics.SetMeshDirty();
+
+            var image = obj.GetChild("line3");
+            var line3 = image.displayObject.graphics.GetMeshFactory<LineMesh>();
+            line3.lineWidth = 30;
+            line3.roundEdge = false;
+            line3.path.Create(new[]
+            {
+                new GPathPoint(new Vector3(0, 30, 0), new Vector3(50, -30), new Vector3(150, -50)),
+                new GPathPoint(new Vector3(200, 30, 0), new Vector3(300, 130)),
+                new GPathPoint(new Vector3(400, 30, 0)),
+            });
+            image.displayObject.graphics.SetMeshDirty();
         }
 
         private static Texture2D CaptureFairy(Page page, Vector2Int size, Vector2Int res)

@@ -17,8 +17,9 @@ namespace NanamiUI
             set
             {
                 _page = value;
+                var animate = Application.isPlaying; // 烘焙(编辑态)=false 直接置位；运行时=true 缓动
                 foreach (var gear in gears ?? Array.Empty<Gear<T>>())
-                    gear.Apply(value);
+                    gear.Apply(value, animate);
             }
         }
     }

@@ -15,69 +15,17 @@ using Object = UnityEngine.Object;
 
 namespace NanamiUI.Editor
 {
+    // 标记在 Migrate 完成后自动执行的静态无参方法（工程特有收尾，不污染通用导出器）。
+    [AttributeUsage(AttributeTargets.Method)]
+    public class MigratePostProcessAttribute : Attribute
+    {
+    }
+
     public static class Migrate
     {
         private const string UiRoot = "UIProject";
-        private const string OutputRoot = "Assets/UIProject";
+        private static readonly string OutputRoot = $"Assets/{Path.GetFileName(UiRoot)}";
         private const string Pending = "NanamiUI.Migrate.Pending";
-        // 对应 UIConfig.verticalScrollBar/horizontalScrollBar（BasicsMain.Awake 里配置的默认滚动条）。
-        private static readonly string VerticalScrollBar = "ScrollBar_VT";
-        private static readonly string HorizontalScrollBar = "ScrollBar_HZ";
-        private static readonly string[] Entries =
-        {
-            "Basics/scrollbars/ScrollBar_VT.xml",
-            "Basics/scrollbars/ScrollBar_HZ.xml",
-            "Basics/Main.xml",
-            "Basics/Demo_Button.xml",
-            "Basics/Demo_Image.xml",
-            "Basics/Demo_Graph.xml",
-            "Basics/Demo_MovieClip.xml",
-            "Basics/Demo_Depth.xml",
-            "Basics/Demo_Loader.xml",
-            "Basics/Demo_List.xml",
-            "Basics/Demo_Grid.xml",
-            "Basics/Demo_Clip&Scroll.xml",
-            "Basics/Demo_ProgressBar.xml",
-            "Basics/Demo_Slider.xml",
-            "Basics/Demo_ComboBox.xml",
-            "Basics/Demo_Controller.xml",
-            "Basics/Demo_Relation.xml",
-            "Basics/Demo_Label.xml",
-            "Basics/Demo_Popup.xml",
-            "Basics/Demo_Window.xml",
-            "Basics/Demo_Drag&Drop.xml",
-            "Basics/Demo_Component.xml",
-            "Basics/Demo_Text.xml",
-            "Transition/BOSS.xml",
-            "Transition/BOSS_SKILL.xml",
-            "Transition/TRAP.xml",
-            "Transition/GoodHit.xml",
-            "Transition/PowerUp.xml",
-            "Transition/PathDemo.xml",
-        };
-        private static readonly string[] BasicsDemoNames =
-        {
-            "Button",
-            "Image",
-            "Graph",
-            "MovieClip",
-            "Depth",
-            "Loader",
-            "List",
-            "Grid",
-            "Clip&Scroll",
-            "ProgressBar",
-            "Slider",
-            "ComboBox",
-            "Controller",
-            "Relation",
-            "Label",
-            "Popup",
-            "Window",
-            "Drag&Drop",
-            "Component",
-            "Text",
-        };
 
         private class Resource
         {
@@ -88,6 +36,7 @@ namespace NanamiUI.Editor
             public string Scale;
             public string Scale9Grid;
             public string Texture;
+            public bool Exported;
         }
 
         private class ControllerData
@@ -126,14 +75,23 @@ namespace NanamiUI.Editor
             FontAssets.Clear();
             Sounds.Clear();
             Prefabs.Clear();
-            Text.defaultFont = "Microsoft YaHei"; // 与 BasicsMain 的 UIConfig.defaultFont 一致，保证烘焙排版与运行时一致
             foreach (var package in Directory.EnumerateFiles($"{UiRoot}/assets", "package.xml", SearchOption.AllDirectories))
                 IndexPackage(package.Replace('\\', '/'));
 
+            Text.defaultFont = DefaultFont(); // 游戏 UIConfig.defaultFont：与运行时一致才能保证烘焙排版一致
+
             var components = new List<Resource>();
             var images = new HashSet<Resource>();
-            foreach (var entry in Entries)
-                Collect(Resources.Values.First(r => r.File == $"{UiRoot}/assets/{entry}"), components, images);
+            // 默认滚动条是运行时 UIConfig 注入，任何 displayList 都不引用它，必须显式补建。
+            foreach (var bar in new[] { Settings().scrollBars?.vertical, Settings().scrollBars?.horizontal })
+                if (!string.IsNullOrEmpty(bar) && TryResolve(bar, null, out var barRes))
+                    Collect(barRes, components, images);
+            // 导出 exported 组件（可用 NanamiUISettings.packages 限定包名，留空则全部）；
+            // Collect 会按依赖顺序把它们引用到的（可能未导出、可能跨包的）组件一并带出。
+            var scope = Config()?.packages;
+            bool InScope(Resource r) => scope == null || scope.Length == 0 || Array.IndexOf(scope, r.Package) >= 0;
+            foreach (var entry in Resources.Values.Where(r => r.Type == "component" && r.Exported && InScope(r)).ToArray())
+                Collect(entry, components, images);
 
             foreach (var image in images)
                 ImportImage(image);
@@ -162,6 +120,9 @@ namespace NanamiUI.Editor
             foreach (var component in components)
                 BuildPrefab(component);
             AssetDatabase.SaveAssets();
+            // 通用导出器不认识任何具体工程；工程特有的收尾（如示例脚本挂载）通过此扩展点自行注册。
+            foreach (var method in TypeCache.GetMethodsWithAttribute<MigratePostProcessAttribute>())
+                method.Invoke(null, null);
             Debug.Log($"NanamiUI migrated {components.Count} components to {OutputRoot}.");
         }
 
@@ -190,6 +151,7 @@ namespace NanamiUI.Editor
                     Scale = resource.Attribute("scale")?.Value,
                     Scale9Grid = resource.Attribute("scale9grid")?.Value,
                     Texture = resource.Attribute("texture")?.Value,
+                    Exported = resource.Attribute("exported")?.Value == "true",
                 };
         }
 
@@ -543,9 +505,6 @@ namespace NanamiUI.Editor
                         field.SetValue(comp, field.FieldType == typeof(RectTransform) ? go.transform : (object)go.GetComponent(field.FieldType));
                 }
 
-                if (component.File == $"{UiRoot}/assets/Basics/Main.xml")
-                    ConfigureBasicsExample(root);
-
                 var prefabPath = Path.ChangeExtension(AssetPath(component.File), ".prefab");
                 Directory.CreateDirectory(Path.GetDirectoryName(prefabPath));
                 Prefabs[prefabPath] = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
@@ -699,6 +658,11 @@ namespace NanamiUI.Editor
                 var gear = Activator.CreateInstance(gearType);
                 gearType.GetField("target").SetValue(gear, go);
                 gearType.GetField("pages").SetValue(gear, PageValues(controller, gearXml.Attribute("pages")?.Value));
+                // 缓动配置对所有 gear 通用（gearXY/gearSize/gearLook 在 Basics 用到 tween），默认 QuadOut/0.3/0。
+                gearType.GetField("tween").SetValue(gear, gearXml.Attribute("tween")?.Value == "true");
+                gearType.GetField("duration").SetValue(gear, float.Parse(gearXml.Attribute("duration")?.Value ?? "0.3", CultureInfo.InvariantCulture));
+                gearType.GetField("ease").SetValue(gear, ParseEase(gearXml.Attribute("ease")?.Value));
+                gearType.GetField("delay").SetValue(gear, float.Parse(gearXml.Attribute("delay")?.Value ?? "0", CultureInfo.InvariantCulture));
                 if (kind == "gearXY")
                 {
                     var rt = (RectTransform)go.transform;
@@ -772,15 +736,6 @@ namespace NanamiUI.Editor
             for (var i = 0; i < parts.Length; i++)
                 values.SetValue(controller.PageValues[Array.IndexOf(controller.PageIds, parts[i])], i);
             return values;
-        }
-
-        private static void ConfigureBasicsExample(GameObject root)
-        {
-            var demo = root.AddComponent<global::NanamiUI.Example.BasicsMain>();
-            demo.demoNames = BasicsDemoNames;
-            demo.demoPrefabs = BasicsDemoNames
-                .Select(name => AssetDatabase.LoadAssetAtPath<GameObject>($"{OutputRoot}/Assets/Basics/Demo_{name}.prefab"))
-                .ToArray();
         }
 
         private static void ConfigureImage(Image image, Resource resource, XElement element)
@@ -1072,8 +1027,8 @@ namespace NanamiUI.Editor
             var hideBars = element.Attribute("scrollBar")?.Value == "hidden";
             // scrollBarFlags bit0 = displayOnLeft：竖直滚动条放左侧、内容从左内缩（FairyGUI ScrollPane._displayOnLeft）。
             var displayOnLeft = (int.Parse(element.Attribute("scrollBarFlags")?.Value ?? "0") & 1) != 0;
-            var vtBar = !hideBars && scroll is "vertical" or "both" && VerticalScrollBar != null ? InstantiateComponent(VerticalScrollBar, root.transform) : null;
-            var hzBar = !hideBars && scroll is "horizontal" or "both" && HorizontalScrollBar != null ? InstantiateComponent(HorizontalScrollBar, root.transform) : null;
+            var vtBar = !hideBars && scroll is "vertical" or "both" ? InstantiateScrollBar(Settings().scrollBars?.vertical, root.transform) : null;
+            var hzBar = !hideBars && scroll is "horizontal" or "both" ? InstantiateScrollBar(Settings().scrollBars?.horizontal, root.transform) : null;
             var vtWidth = vtBar != null ? ((RectTransform)vtBar.transform).sizeDelta.x : 0;
             var hzHeight = hzBar != null ? ((RectTransform)hzBar.transform).sizeDelta.y : 0;
             var leftInset = displayOnLeft ? vtWidth : 0;
@@ -1210,9 +1165,11 @@ namespace NanamiUI.Editor
             SetGrips(view, content);
         }
 
-        private static GameObject InstantiateComponent(string componentName, Transform parent)
+        // 默认滚动条来自 Common.json 的 ui:// 引用；未配置则返回 null，viewport 退化为满宽。
+        private static GameObject InstantiateScrollBar(string uiRef, Transform parent)
         {
-            var resource = Resources.Values.First(r => Path.GetFileNameWithoutExtension(r.File) == componentName);
+            if (string.IsNullOrEmpty(uiRef) || !TryResolve(uiRef, null, out var resource))
+                return null;
             return (GameObject)PrefabUtility.InstantiatePrefab(LoadPrefab(resource), parent);
         }
 
@@ -1672,10 +1629,22 @@ namespace NanamiUI.Editor
             return color;
         }
 
+        // C# 关键字：任意合法 FairyGUI 名字都可能撞上（如 button 控制器的 "checked" 页），需转义。
+        private static readonly HashSet<string> Keywords = new()
+        {
+            "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class", "const",
+            "continue", "decimal", "default", "delegate", "do", "double", "else", "enum", "event", "explicit", "extern",
+            "false", "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit", "in", "int", "interface",
+            "internal", "is", "lock", "long", "namespace", "new", "null", "object", "operator", "out", "override", "params",
+            "private", "protected", "public", "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof", "stackalloc",
+            "static", "string", "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
+            "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+        };
+
         private static string Identifier(string name)
         {
             var id = new string(name.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray());
-            return char.IsDigit(id[0]) ? "_" + id : id;
+            return char.IsDigit(id[0]) || Keywords.Contains(id) ? "_" + id : id;
         }
 
         private static string Field(string name) => $"m_{Identifier(name)}";
@@ -1692,11 +1661,45 @@ namespace NanamiUI.Editor
         private static CommonSettings Settings() =>
             _settings ??= JsonUtility.FromJson<CommonSettings>(File.ReadAllText($"{UiRoot}/settings/Common.json"));
 
+        // 游戏 UIConfig.defaultFont（运行时字体，不在 FairyGUI 工程文件里）：优先 NanamiUISettings 覆盖，
+        // 否则回退 Common.json 的设计期字体首个族名。
+        private static string DefaultFont()
+        {
+            if (Config() is { defaultFont: { Length: > 0 } font })
+                return font;
+            var designFont = Settings().font;
+            return string.IsNullOrEmpty(designFont) ? "Arial" : designFont.Split(',')[0].Trim();
+        }
+
+        private static bool _configLoaded;
+        private static NanamiUISettings _config;
+        private static NanamiUISettings Config()
+        {
+            if (_configLoaded)
+                return _config;
+            _configLoaded = true;
+            var guid = AssetDatabase.FindAssets("t:NanamiUISettings").FirstOrDefault();
+            if (guid != null)
+                _config = AssetDatabase.LoadAssetAtPath<NanamiUISettings>(AssetDatabase.GUIDToAssetPath(guid));
+            return _config;
+        }
+
         [Serializable]
         private class CommonSettings
         {
             public int fontSize;
             public string textColor;
+            public string font;
+            public string buttonClickSound;
+            public ScrollBars scrollBars;
+        }
+
+        [Serializable]
+        private class ScrollBars
+        {
+            public string vertical;
+            public string horizontal;
+            public string defaultDisplay;
         }
     }
 }

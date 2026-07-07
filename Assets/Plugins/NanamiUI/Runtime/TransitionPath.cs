@@ -47,6 +47,58 @@ namespace NanamiUI
             Create(points);
         }
 
+        // 直接给点构造（代码里建路径，如 Demo_Graph 的折线）。C1/C2 为绝对控制点。
+        public readonly struct PathPoint
+        {
+            public readonly int Type; // 0 CRSpline, 1 Bezier, 2 CubicBezier, 3 Straight
+            public readonly Vector2 Pos, C1, C2;
+            public PathPoint(Vector2 pos, int type = 0, Vector2 c1 = default, Vector2 c2 = default)
+            {
+                Type = type; Pos = pos; C1 = c1; C2 = c2;
+            }
+        }
+
+        public TransitionPath(IReadOnlyList<PathPoint> pts)
+        {
+            var list = new List<(int Type, Vector2 Pos, Vector2 C1, Vector2 C2)>(pts.Count);
+            foreach (var p in pts)
+                list.Add((p.Type, p.Pos, p.C1, p.C2));
+            Create(list);
+        }
+
+        public float Length => _fullLength;
+        public int SegmentCount => _segments.Count;
+        public float GetSegmentLength(int i) => _segments[i].Length;
+
+        // 复刻 GPath.GetPointsInSegment：按 pointDensity 在段内采样，端点各补一个。
+        public void GetPointsInSegment(int segIndex, float t0, float t1, List<Vector2> points, List<float> ts, float pointDensity)
+        {
+            ts?.Add(t0);
+            var seg = _segments[segIndex];
+            if (seg.Type == 3)
+            {
+                points.Add(Vector2.Lerp(_points[seg.Start], _points[seg.Start + 1], t0));
+                points.Add(Vector2.Lerp(_points[seg.Start], _points[seg.Start + 1], t1));
+            }
+            else
+            {
+                Vector2 Eval(float t) => seg.Type == 0 ? CRSpline(seg.Start, seg.Count, t) : Bezier(seg.Start, seg.Count, t);
+                points.Add(Eval(t0));
+                var smooth = (int)Mathf.Min(seg.Length * pointDensity, 50);
+                for (var j = 0; j <= smooth; j++)
+                {
+                    var t = (float)j / smooth;
+                    if (t > t0 && t < t1)
+                    {
+                        points.Add(Eval(t));
+                        ts?.Add(t);
+                    }
+                }
+                points.Add(Eval(t1));
+            }
+            ts?.Add(t1);
+        }
+
         private void Create(List<(int Type, Vector2 Pos, Vector2 C1, Vector2 C2)> points)
         {
             var spline = new List<Vector2>();
