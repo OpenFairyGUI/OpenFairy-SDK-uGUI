@@ -173,6 +173,10 @@ namespace NanamiUI.Editor
                 if (child.Attribute("defaultItem") is { } defaultItem && TryResolve(defaultItem.Value, component.PackageId, out var item))
                     Collect(item, components, images);
             }
+            // ComboBox 的 dropdown 组件只在根 <ComboBox dropdown> 属性引用（displayList 里没有），单独跟随。
+            if (XDocument.Load(component.File).Root?.Element("ComboBox")?.Attribute("dropdown")?.Value is { } dropdown
+                && TryResolve(dropdown, component.PackageId, out var dropdownRes) && dropdownRes.Type == "component")
+                Collect(dropdownRes, components, images);
             // 覆盖 icon 属性、富文本内嵌图、动效 Sound 之外的一切 ui:// 引用
             foreach (Match match in Regex.Matches(File.ReadAllText(component.File), @"ui://\w+"))
                 if (TryResolve(match.Value, component.PackageId, out var embedded) && embedded.Type is "image" or "movieclip")
@@ -333,6 +337,7 @@ namespace NanamiUI.Editor
             }
 
             // FairyGUI 允许 Button 组件没有 button 控制器（如 BagGridSub2），补一个占位 enum。
+            // ComboBox 无控制器时退化为 Component（见 baseType），不生成占位——避免与"button"子节点字段撞名（Dropdown）。
             if (xml.Attribute("extention")?.Value == "Button" && xml.Element("controller") == null && used.Add(Field("button")))
                 fields.InsertRange(0, new[]
                 {
@@ -344,6 +349,8 @@ namespace NanamiUI.Editor
             var baseType = xml.Attribute("extention")?.Value switch
             {
                 "Button" => $"NanamiUI.Button<{name}.{(xml.Element("controller") is { } buttonController ? Identifier(buttonController.Attribute("name").Value) : "button")}>",
+                // 有 button 控制器才做成 ComboBox<T>（复用其视觉态 + 下拉）；无控制器（如 Dropdown）退化为 Component。
+                "ComboBox" when xml.Element("controller") is { } comboController => $"NanamiUI.ComboBox<{name}.{Identifier(comboController.Attribute("name").Value)}>",
                 "ProgressBar" => "NanamiUI.ProgressBar",
                 "Slider" => "NanamiUI.Slider",
                 _ => "NanamiUI.Component",
@@ -485,7 +492,10 @@ namespace NanamiUI.Editor
                         comp.GetType().GetField("controller").SetValue(comp, buttonData.Value);
                     comp.GetType().GetField("titleText").SetValue(comp, children.FirstOrDefault(c => c.Xml.Attribute("name").Value == "title").Go?.GetComponent<Text>());
                     comp.GetType().GetField("iconLoader").SetValue(comp, children.FirstOrDefault(c => c.Xml.Attribute("name").Value == "icon").Go?.GetComponent<Loader>());
-                    ConfigureButton(root, xml.Element("Button"), component.PackageId);
+                    if (xml.Element("Button") is { } buttonEl)
+                        ConfigureButton(root, buttonEl, component.PackageId);
+                    if (xml.Element("ComboBox") is { } comboEl) // 组件定义级：烘焙 dropdown 资源
+                        ConfigureComboBox(root, comboEl, component.PackageId);
                 }
                 else if (comp is ProgressBar progressBar)
                     SetupProgressBar(progressBar, xml, children, root);
@@ -611,8 +621,8 @@ namespace NanamiUI.Editor
                         ConfigureProgressBar(go, progress);
                     if (element.Element("Slider") is { } slider)
                         ConfigureSlider(go, slider);
-                    if (element.Element("ComboBox") is { } comboBox)
-                        ConfigureComboBox(go, comboBox);
+                    if (element.Element("ComboBox") is { } comboBox) // 实例级：烘焙 items + 默认标题
+                        ConfigureComboBox(go, comboBox, owner.PackageId);
                     break;
                 }
                 default:
@@ -921,10 +931,20 @@ namespace NanamiUI.Editor
             SyncRelations(go);
         }
 
-        private static void ConfigureComboBox(GameObject go, XElement xml)
+        private static void ConfigureComboBox(GameObject go, XElement xml, string packageId)
         {
-            if (xml.Element("item") is { } item && FindChild(go.transform, "title")?.GetComponent<Text>() is { } title)
-                title.text = item.Attribute("title")?.Value ?? "";
+            var combo = go.GetComponents<UnityEngine.Component>().FirstOrDefault(c => IsButton(c.GetType()));
+            if (combo == null)
+                return; // 无 button 控制器、退化为 Component 的 ComboBox（如 Dropdown）：无 items/dropdown 面，跳过
+            var type = combo.GetType();
+            if (xml.Attribute("dropdown") is { } dropdown && TryResolve(dropdown.Value, packageId, out var dropRes))
+                type.GetField("dropdownPrefab").SetValue(combo, LoadPrefab(dropRes));
+            var items = xml.Elements("item").Select(e => e.Attribute("title")?.Value ?? "").ToArray();
+            if (items.Length > 0)
+            {
+                type.GetField("items").SetValue(combo, items);
+                type.GetProperty("Title").SetValue(combo, items[0]); // 默认选中项 0
+            }
         }
 
         private static void SyncRelations(GameObject go)
@@ -1113,6 +1133,14 @@ namespace NanamiUI.Editor
             var lineGap = float.Parse(element.Attribute("lineGap")?.Value ?? "0", CultureInfo.InvariantCulture);
             var colGap = float.Parse(element.Attribute("colGap")?.Value ?? "0", CultureInfo.InvariantCulture);
             var layout = element.Attribute("layout")?.Value ?? "column";
+
+            // 烘焙动态实例化描述：运行时（PopupMenu/ComboBox 下拉/Window1/Grid）据此从 defaultItem 建项。
+            var source = go.AddComponent<ListSource>();
+            source.itemPrefab = prefab;
+            source.itemSize = itemSize;
+            source.lineGap = lineGap;
+            source.colGap = colGap;
+            source.layout = layout;
 
             var view = element.Attribute("overflow")?.Value == "scroll"
                 ? BuildScrollView(go, element, size)

@@ -111,36 +111,7 @@ namespace NanamiUI.Example
                 AttachScrollPanes(go);
             else if (name == "Grid")
                 PlayGrid(go);
-            else if (name == "ComboBox")
-                PlayComboBox(go);
-        }
-
-        // 复刻 FairyGUI ComboBox：点组合框弹下拉列表，选项设标题。items 未烘焙 → 用 demo 已知项（Item 1..N），复用 PopupMenu。
-        private void PlayComboBox(GameObject go)
-        {
-            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_ComboBox");
-            SetupCombo(Get(demo, "m_n1"), 8);
-            SetupCombo(Get(demo, "m_n6"), 7);
-        }
-
-        private void SetupCombo(object combo, int count)
-        {
-            var cb = (UnityEngine.Component)combo;
-            var title = (NanamiUI.Text)cb.GetType().GetField("m_title").GetValue(combo);
-            NanamiUI.PopupMenu menu = null;
-            cb.gameObject.AddComponent<Clickable>().onClick = () =>
-            {
-                if (menu == null)
-                {
-                    menu = new NanamiUI.PopupMenu(popupMenuPrefab, popupItemPrefab);
-                    for (var i = 1; i <= count; i++)
-                    {
-                        var label = "Item " + i;
-                        menu.AddItem(label, () => title.text = label);
-                    }
-                }
-                menu.Show((RectTransform)cb.transform, NanamiUI.PopupDirection.Down);
-            };
+            // ComboBox 现由烘焙的 NanamiUI.ComboBox<T> 运行时自处理（点击弹下拉、选项设标题），无需胶水。
         }
 
         // 复刻 FairyGUI PlayGrid：把两个列表用平台名+随机数据填满，再挂滚动。

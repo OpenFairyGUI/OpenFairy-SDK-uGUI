@@ -164,3 +164,17 @@ Demo 胶水（`Example/BasicsMain` + `BasicsExample` 序列化 prefab）：PlayW
 4. **Grid 填表**只设可见文本（t0/t1/t2/t3）；star/cb/mc 细节从简。数据随机、无法逐像素比，故只有 smoke（列表被填）。
 5. **Window1 的 6 项列表留空**（需 GList 填充，同 Grid 可补）；窗体/组合框/关闭按钮照常显示。
 6. **未重烘焙**：ListSource 通用动态列表、ComboBox items 烘焙都因规避重烘焙而未做——它们是"改 Migrate + 重跑"的一类，留给你决定是否重烘焙。
+
+## 重烘焙完成（2026-07-08）——ComboBox items / ListSource / Window1 列表
+
+之前标记"需重跑 Migrate"的都做了，**已实跑 `Tools/Migrate` 全量重烘焙**，重烘焙后 PlayMode 仍 **39/39**（静态 parity 完整保住，gears 直接绑对 `NanamiUI.Runtime`，text-rewrite 修复已成历史）。
+
+- **`NanamiUI.ComboBox<T> : Button<T>`**（复用 up/down/over 视觉态 + hover/press，覆写 `OnPointerClick` 弹下拉）。Migrate：`baseType` 加 ComboBox 分支（有 button 控制器才做成 `ComboBox<T>`）；`ConfigureComboBox` 组件级烘焙 `dropdownPrefab`（ComboBoxPopup 资源）、实例级烘焙 `items`（`<item title>`）+ 默认标题；`Collect` 增补跟随根 `<ComboBox dropdown>`（否则 ComboBoxPopup 不被收集/构建）。下拉用 ComboBoxPopup 的 "list" + 其 `ListSource` 填 items、撑开容纳。demo 胶水里的硬编码 ComboBox/`Clickable` 已删。
+- **`ListSource` bake**：`Migrate.BuildList` 给每个 list 节点挂 `ListSource(itemPrefab/itemSize/gap/layout)`；`GList.Fill` 据此运行时建项。Window1 的列表现由 ListSource 填 6 项（不再留空）。
+- **踩坑（已解）**：`Dropdown` 组件有名为 "button" 的子节点且无 `<controller>` → 占位 enum 撞名 → `ComboBox<Dropdown.button>` 循环基类 CS0146。解法：ComboBox **无 button 控制器时退化为 Component**（Dropdown 即 Component）。故 Demo_ComboBox 的 n4/n5（Dropdown 变体、无控制器）仍不接下拉——是仅剩的 ComboBox 边角。
+- **Migrate 两阶段坑**：脚本有变（新增 ComboBoxPopup）时 Execute 置 `Pending` 后等域重载再建 prefab；**期间别插 MCP RunCommand**（会打断 `[DidReloadScripts]` 的 delayCall，实测 pending 卡 True）。脚本无变时一趟直建。
+
+### 仍存的取舍（非阻塞，最佳判断）
+1. Popup/ComboBox 外点关闭用透明 blocker（新 Input System 不能读旧 `UnityEngine.Input`）→ 表现为模态。
+2. ScrollPane 仅拖动无惯性/虚拟化；ComboBox 下拉撑开容纳全部项、不裁剪滚动（n6 的 visibleItemCount 上限未做）。
+3. Grid 填表只设可见文本（star/cb/mc 从简）；ComboBox 的 Dropdown 变体（n4/n5，无控制器）不接下拉。

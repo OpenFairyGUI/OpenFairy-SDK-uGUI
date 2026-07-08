@@ -71,7 +71,7 @@
 - **List / Clip&Scroll / ComboBox 下拉**：ScrollPane 拖动滚动；ComboBox 弹下拉选项。
 - **MovieClip**：运行时自播（`Update` 推帧）。
 
-**已知取舍**（AGENTS.md 有详述）：popup 外点关闭用透明 blocker（新 Input System 下不能读旧 Input）故 popup 表现为模态；ComboBox 下拉项在胶水里硬编码（items 未烘焙，避开重跑 Migrate）；ScrollPane 仅拖动无惯性/虚拟化；Grid 只设可见文本；Window1 的 6 项列表留空。
+**已重烘焙**（`Tools/Migrate` 全量重跑，仍 39/39）：ComboBox items + dropdown 已烘焙成 `NanamiUI.ComboBox<T>`（不再硬编码）；`ListSource` 已烘焙（`GList.Fill` 动态建项）；Window1 列表填 6 项。**仍存的取舍**（AGENTS.md 详述）：popup 外点关闭用透明 blocker（新 Input System 不能读旧 Input）故表现为模态；ScrollPane 仅拖动无惯性；ComboBox 下拉不裁剪滚动、Dropdown 变体(n4/n5)不接；Grid 只设可见文本。
 
 ## 截图输出约定
 

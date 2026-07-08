@@ -13,6 +13,20 @@ namespace NanamiUI.Example
             base.OnInit();
             Center();
         }
+
+        protected override void OnShown()
+        {
+            // 填 WindowA 里的列表（按 ListSource 找，不依赖名字）为 6 项（复刻 Window1.OnShown）。
+            foreach (var src in go.GetComponentsInChildren<NanamiUI.ListSource>())
+            {
+                NanamiUI.GList.Fill((RectTransform)src.transform, 6, (item, i) =>
+                {
+                    if (item.GetComponent<NanamiUI.ButtonBase>() is { } button)
+                        button.Title = i.ToString();
+                });
+                break;
+            }
+        }
     }
 
     // 对标 Window2.cs：绕中心缩放进出 + 播内容 transition "t1"。
