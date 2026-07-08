@@ -117,3 +117,4 @@ InitTestScene*.unity*
 # NanamiUI golden 参照图：从 Docs/RenderDiff 按需现生成（Tools/NanamiUI/Promote），不入库
 /Assets/Tests/Golden/
 /Assets/Tests/Golden.meta
+/.vscode/
