@@ -85,20 +85,6 @@ namespace NanamiUI.Editor
             new("Transition_PathDemo", "PathDemo", "Transition"),
         };
 
-        [MenuItem("Tools/NanamiUI/Capture Basics Render Diff")]
-        public static void CaptureAll()
-        {
-            if (!EditorApplication.isPlaying)
-            {
-                _exitWhenDone = true;
-                SessionState.SetBool(PendingKey, true);
-                SessionState.SetBool(ExitPlayModeKey, true);
-                EditorApplication.EnterPlaymode();
-                return;
-            }
-            StartCapture();
-        }
-
         // 直接生成 golden：跑同一套播放式截图，额外把静态页的 FairyGUI 末帧写进 ReferenceImages（取代旧的两步 Capture+Promote）。
         [MenuItem("Tools/NanamiUI/Generate Golden References")]
         public static void GenerateGolden()

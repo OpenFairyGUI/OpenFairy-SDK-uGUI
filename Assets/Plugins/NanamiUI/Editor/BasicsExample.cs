@@ -14,7 +14,6 @@ namespace NanamiUI.Editor
         private const string MainPath = Root + "/Main.prefab";
 
         [MigratePostProcess]
-        [MenuItem("Tools/NanamiUI/Configure Basics Example")]
         public static void Configure()
         {
             if (!File.Exists(MainPath))

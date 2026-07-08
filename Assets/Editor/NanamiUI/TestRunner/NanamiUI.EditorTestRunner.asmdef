@@ -1,6 +1,6 @@
 {
     "name": "NanamiUI.EditorTestRunner",
-    "rootNamespace": "NanamiUI.EditorTools",
+    "rootNamespace": "NanamiUI.Editor",
     "references": [
         "UnityEditor.TestRunner",
         "UnityEngine.TestRunner"

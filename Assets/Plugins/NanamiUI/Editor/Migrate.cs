@@ -67,7 +67,7 @@ namespace NanamiUI.Editor
         private static readonly Dictionary<string, GameObject> Prefabs = new();
         private static CommonSettings _settings;
 
-        [MenuItem("Tools/Migrate %e")]
+        [MenuItem("Tools/NanamiUI/Migrate %e")]
         public static void Execute()
         {
             Resources.Clear();

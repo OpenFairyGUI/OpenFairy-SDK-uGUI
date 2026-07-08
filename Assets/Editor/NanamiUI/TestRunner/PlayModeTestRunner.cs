@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
-namespace NanamiUI.EditorTools
+namespace NanamiUI.Editor
 {
     // 无头跑 PlayMode 测试并把结果写进 Temp/（不进 Assets、不触发导入）。
     // 回调经 [InitializeOnLoad] 每次域重载重新注册，故能跨"进 Play → 域重载 → 跑测试 → RunFinished"存活。
