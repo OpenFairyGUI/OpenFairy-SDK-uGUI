@@ -11,6 +11,48 @@ namespace NanamiUI.Tests
 {
     public class MainNavigationTests
     {
+        private const int TransitionFrames = 45;
+
+        public readonly struct MainEntry
+        {
+            public readonly string Name;
+            public readonly string ButtonField;
+            public readonly string ComponentName;
+
+            public MainEntry(string name, string buttonField, string componentName)
+            {
+                Name = name;
+                ButtonField = buttonField;
+                ComponentName = componentName;
+            }
+
+            public override string ToString() => Name;
+        }
+
+        public static readonly MainEntry[] Entries =
+        {
+            new("Button", "m_btn_Button", "UI.Basics.Demo_Button"),
+            new("Image", "m_btn_Image", "UI.Basics.Demo_Image"),
+            new("Graph", "m_btn_Graph", "UI.Basics.Demo_Graph"),
+            new("MovieClip", "m_btn_MovieClip", "UI.Basics.Demo_MovieClip"),
+            new("Depth", "m_btn_Depth", "UI.Basics.Demo_Depth"),
+            new("Loader", "m_btn_Loader", "UI.Basics.Demo_Loader"),
+            new("List", "m_btn_List", "UI.Basics.Demo_List"),
+            new("ProgressBar", "m_btn_ProgressBar", "UI.Basics.Demo_ProgressBar"),
+            new("Slider", "m_btn_Slider", "UI.Basics.Demo_Slider"),
+            new("ComboBox", "m_btn_ComboBox", "UI.Basics.Demo_ComboBox"),
+            new("Clip&Scroll", "m_btn_Clip_Scroll", "UI.Basics.Demo_Clip_Scroll"),
+            new("Controller", "m_btn_Controller", "UI.Basics.Demo_Controller"),
+            new("Relation", "m_btn_Relation", "UI.Basics.Demo_Relation"),
+            new("Label", "m_btn_Label", "UI.Basics.Demo_Label"),
+            new("Popup", "m_btn_Popup", "UI.Basics.Demo_Popup"),
+            new("Window", "m_btn_Window", "UI.Basics.Demo_Window"),
+            new("Drag&Drop", "m_btn_Drag_Drop", "UI.Basics.Demo_Drag_Drop"),
+            new("Component", "m_btn_Component", "UI.Basics.Demo_Component"),
+            new("Grid", "m_btn_Grid", "UI.Basics.Demo_Grid"),
+            new("Text", "m_btn_Text", "UI.Basics.Demo_Text"),
+        };
+
         private NanamiPageRenderer _rig;
         private GameObject _main;
 
@@ -42,24 +84,91 @@ namespace NanamiUI.Tests
         }
 
         [UnityTest]
-        public IEnumerator Real_pointer_clicks_open_demo_and_back_to_home()
+        public IEnumerator Main_starts_on_home_with_all_entries()
         {
             var main = Comp("UI.Basics.Main");
-            yield return Click(Field(main, "m_btn_Button"));
-            Assert.IsNotNull(Comp("UI.Basics.Demo_Button"), "真实点击 Button 导航项应打开 Demo_Button");
+            Assert.IsNotNull(main, "Main component should exist");
+            Assert.IsTrue(Rt("btns").gameObject.activeInHierarchy, "Main button group should be visible");
+            Assert.IsFalse(Rt("container").gameObject.activeSelf, "Demo container should start hidden");
+            Assert.IsFalse(((UnityEngine.Component)Field(main, "m_btn_Back")).gameObject.activeInHierarchy, "Back should start hidden");
+
+            foreach (var entry in Entries)
+                Assert.IsTrue(((UnityEngine.Component)Field(main, entry.ButtonField)).gameObject.activeInHierarchy, $"{entry.Name} entry should be visible");
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator Real_pointer_clicks_open_demo_and_back_to_home([ValueSource(nameof(Entries))] MainEntry entry)
+        {
+            var main = Comp("UI.Basics.Main");
+            var homeX = Rt("btns").anchoredPosition.x;
+            yield return Click(Field(main, entry.ButtonField));
+            Assert.IsNotNull(Comp(entry.ComponentName), $"{entry.Name} should instantiate {entry.ComponentName}");
+            Assert.IsTrue(((UnityEngine.Component)Field(main, "m_btn_Back")).gameObject.activeInHierarchy, $"{entry.Name}: Back should be visible after entering a demo");
+            yield return AssertEnterAnimation(entry.Name);
 
             yield return Click(Field(main, "m_btn_Back"));
-            yield return new WaitForSeconds(0.4f);
+            Assert.IsFalse(((UnityEngine.Component)Field(main, "m_btn_Back")).gameObject.activeInHierarchy, $"{entry.Name}: Back should hide immediately after returning");
+            yield return AssertBackAnimation(entry.Name, homeX);
 
-            Assert.IsFalse(((UnityEngine.Component)Comp("UI.Basics.Demo_Button")).gameObject.activeInHierarchy, "真实点击 Back 后 demo 容器应隐藏");
-            Assert.IsFalse(((UnityEngine.Component)Field(main, "m_btn_Back")).gameObject.activeInHierarchy, "Back 后返回按钮应隐藏");
-            Assert.IsTrue(((UnityEngine.Component)Field(main, "m_btn_Button")).gameObject.activeInHierarchy, "Back 后主页按钮应重新可点");
+            Assert.IsFalse(((UnityEngine.Component)Comp(entry.ComponentName)).gameObject.activeInHierarchy, $"{entry.Name}: demo container should be hidden after Back");
+            Assert.IsTrue(((UnityEngine.Component)Field(main, entry.ButtonField)).gameObject.activeInHierarchy, $"{entry.Name}: entry button should be visible again after Back");
         }
 
         private object Comp(string fullName) =>
             Array.Find(_main.GetComponentsInChildren<NanamiUI.Component>(true), c => c.GetType().FullName == fullName);
 
         private static object Field(object owner, string name) => owner.GetType().GetField(name).GetValue(owner);
+
+        private RectTransform Rt(string name) => (RectTransform)_main.transform.Find(name);
+
+        private IEnumerator AssertEnterAnimation(string name)
+        {
+            var btns = Rt("btns");
+            var container = Rt("container");
+            var sawBtnsMidSlide = false;
+            var sawContainerMidSlide = false;
+            for (var i = 0; i < TransitionFrames; i++)
+            {
+                yield return null;
+                var bx = btns.anchoredPosition.x;
+                var cx = container.anchoredPosition.x;
+                if (btns.gameObject.activeSelf && bx > 120 && bx < 1120)
+                    sawBtnsMidSlide = true;
+                if (container.gameObject.activeSelf && cx > -1120 && cx < -20)
+                    sawContainerMidSlide = true;
+            }
+
+            Assert.IsTrue(sawBtnsMidSlide, $"{name}: Main buttons should stay visible while sliding out");
+            Assert.IsTrue(sawContainerMidSlide, $"{name}: Demo container should stay visible while sliding in");
+            Assert.IsFalse(btns.gameObject.activeSelf, $"{name}: Main buttons should hide after entering");
+            Assert.IsTrue(container.gameObject.activeSelf, $"{name}: Demo container should remain visible after entering");
+            Assert.AreEqual(0f, container.anchoredPosition.x, 1.5f, $"{name}: Demo container should settle at x=0");
+        }
+
+        private IEnumerator AssertBackAnimation(string name, float homeX)
+        {
+            var btns = Rt("btns");
+            var container = Rt("container");
+            var sawBtnsMidSlide = false;
+            var sawContainerMidSlide = false;
+            for (var i = 0; i < TransitionFrames; i++)
+            {
+                yield return null;
+                var bx = btns.anchoredPosition.x;
+                var cx = container.anchoredPosition.x;
+                if (btns.gameObject.activeSelf && bx > 120 && bx < 1120)
+                    sawBtnsMidSlide = true;
+                if (container.gameObject.activeSelf && cx > -1120 && cx < -20)
+                    sawContainerMidSlide = true;
+            }
+
+            Assert.IsTrue(sawBtnsMidSlide, $"{name}: Main buttons should stay visible while sliding back in");
+            Assert.IsTrue(sawContainerMidSlide, $"{name}: Demo container should stay visible while sliding out");
+            Assert.IsTrue(btns.gameObject.activeSelf, $"{name}: Main buttons should remain visible after Back");
+            Assert.IsFalse(container.gameObject.activeSelf, $"{name}: Demo container should hide after Back");
+            Assert.AreEqual(homeX, btns.anchoredPosition.x, 1.5f, $"{name}: Main buttons should settle at home x");
+        }
 
         private IEnumerator Click(object button)
         {
@@ -72,9 +181,9 @@ namespace NanamiUI.Tests
             };
             var hits = new List<RaycastResult>();
             _rig.Raycaster.Raycast(eventData, hits);
-            Assert.IsNotEmpty(hits, "按钮中心应能被 GraphicRaycaster 命中");
+            Assert.IsNotEmpty(hits, "Button center should be hit by GraphicRaycaster");
             var target = ExecuteEvents.GetEventHandler<IPointerClickHandler>(hits[0].gameObject);
-            Assert.IsNotNull(target, "命中对象或父节点应有 IPointerClickHandler");
+            Assert.IsNotNull(target, "Hit object or parent should have IPointerClickHandler");
             ExecuteEvents.Execute(target, eventData, ExecuteEvents.pointerDownHandler);
             ExecuteEvents.Execute(target, eventData, ExecuteEvents.pointerUpHandler);
             ExecuteEvents.Execute(target, eventData, ExecuteEvents.pointerClickHandler);

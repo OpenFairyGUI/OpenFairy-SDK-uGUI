@@ -10,7 +10,7 @@
   - `Tools/NanamiUI/Migrate`
   - `Tools/NanamiUI/Generate Golden References`
   - `Tools/NanamiUI/Run PlayMode Tests`
-- 最近一次验证：2026-07-08 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `40/40`。
+- 最近一次验证：2026-07-08 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `60/60`。
 
 ## 标准验证流程
 
@@ -98,7 +98,8 @@
 - 静态 golden：`StaticGoldenTests` 比较 NanamiUI 末帧与 FairyGUI golden。
 - 交互几何：`InteractionGeometryTests` 比较 slider、checkbox、按钮按下等交互终态几何。
 - 轨迹行为：`PageTransitionTests` 覆盖翻页 display lock 动效轨迹。
+- Main 导航：`MainNavigationTests` 覆盖 Main 初始页、20 个入口页真实 pointer 进入、子页面返回 Main，以及进出动效中态和终态。
 - Demo smoke：覆盖 ComboBox、Depth/DragDrop、Grid、List、Popup、ProgressBar、Text、Window 等运行 demo 胶水。
 - 专项测试：`DragDepthTests`、`TextLinkTests`、`WindowPopupTests`、`MainNavigationTests`。
 
-当前 PlayMode 测试结果为 `40/40` 通过。
+当前 PlayMode 测试结果为 `60/60` 通过。
