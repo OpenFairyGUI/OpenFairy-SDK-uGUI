@@ -2,11 +2,12 @@ using UnityEngine;
 
 namespace NanamiUI
 {
-    // 复刻 FairyGUI Window：包一个 content prefab，经 GRoot 托管显示/隐藏。默认无动效直接显隐；
+    // 复刻 FairyGUI Window：包一个 content prefab，经 Root 托管显示/隐藏。默认无动效直接显隐；
     // 子类可覆盖 OnInit/OnShown/OnHide/DoShowAnimation/DoHideAnimation（缩放进出等）。
     public class Window
     {
         public GameObject prefab;      // content 内容 prefab（如 WindowA/WindowB），由调用方赋值
+        public bool modal;             // true：窗口下方铺半透明模态层，拦截下层点击（复刻 Window.modal）
         public bool inited { get; private set; }
 
         protected GameObject go;
@@ -14,7 +15,7 @@ namespace NanamiUI
 
         public RectTransform Root => go != null ? (RectTransform)go.transform : null;
 
-        public void Show() => GRoot.inst.ShowWindow(this);
+        public void Show() => NanamiUI.Root.inst.ShowWindow(this);
         public void Hide()
         {
             if (go != null && go.activeSelf)
@@ -22,7 +23,7 @@ namespace NanamiUI
         }
         public void HideImmediately()
         {
-            GRoot.inst.HideWindowImmediately(this);
+            NanamiUI.Root.inst.HideWindowImmediately(this);
             OnHide();
         }
 
@@ -40,11 +41,11 @@ namespace NanamiUI
 
         internal void DoShow() => DoShowAnimation();
 
-        // 在 GRoot 内居中（复刻 GObject.Center）。
+        // 在 Root 内居中（复刻 GObject.Center）。
         protected void Center()
         {
             var s = contentPane.rect.size;
-            var r = GRoot.inst.Size;
+            var r = NanamiUI.Root.inst.Size;
             contentPane.anchoredPosition = new Vector2(Mathf.Round((r.x - s.x) / 2), -Mathf.Round((r.y - s.y) / 2));
         }
 

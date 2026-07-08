@@ -6,7 +6,7 @@ namespace NanamiUI
 {
     // 复刻 FairyGUI MovieClip：逐帧播放，支持 swing（往返）、repeatDelay（回到首帧的额外停顿）、
     // timeScale、SetPlaySettings（播放区间/次数/结束帧）。单帧步进（同 FairyGUI OnTimer，非一次排空）。
-    public class MovieClip : Image
+    public class MovieClip : UnityEngine.UI.Image
     {
         public Sprite[] frames;
         public float interval = 0.1f;
@@ -30,9 +30,13 @@ namespace NanamiUI
 
         public void SetFrame(int value)
         {
-            frame = value;
             if (frames != null && frames.Length > 0)
-                sprite = frames[Mathf.Clamp(frame, 0, frames.Length - 1)];
+            {
+                frame = Mathf.Clamp(value, 0, frames.Length - 1); // 钳进有效范围，避免自播 Update 越界索引 addDelays[frame]
+                sprite = frames[frame];
+            }
+            else
+                frame = value;
         }
 
         // 从 start 帧播到 end 帧（-1=末帧），重复 times 次（0=无限循环），结束停在 endAt 帧（-1=end）。

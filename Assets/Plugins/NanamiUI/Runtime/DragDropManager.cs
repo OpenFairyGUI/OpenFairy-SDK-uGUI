@@ -6,12 +6,12 @@ using UnityEngine.UI;
 namespace NanamiUI
 {
     // 复刻 FairyGUI DragDropManager：拖一个跟随指针的 agent 图标，松手时向命中的 DropTarget 派发 sourceData。
-    // agent 放顶层 canvas 最后一个兄弟（= 画在最上，对标 GRoot int.MaxValue sortingOrder），raycastTarget=false 不自挡命中。
+    // agent 放顶层 canvas 最后一个兄弟（= 画在最上，对标 Root int.MaxValue sortingOrder），raycastTarget=false 不自挡命中。
     public sealed class DragDropManager
     {
         public static DragDropManager inst { get; } = new();
 
-        private Image _agent;
+        private UnityEngine.UI.Image _agent;
         private RectTransform _agentRt;
         private GraphicRaycaster _raycaster;
         private object _sourceData;
@@ -66,12 +66,12 @@ namespace NanamiUI
                     _agentRt.SetParent(root.transform, false);
                 return;
             }
-            var go = new GameObject("DragDropAgent", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            var go = new GameObject("DragDropAgent", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
             _agentRt = (RectTransform)go.transform;
             _agentRt.SetParent(root.transform, false);
             _agentRt.pivot = new Vector2(0.5f, 0.5f);
             _agentRt.sizeDelta = new Vector2(100, 100);
-            _agent = go.GetComponent<Image>();
+            _agent = go.GetComponent<UnityEngine.UI.Image>();
             _agent.raycastTarget = false;
             _agent.preserveAspect = true;
         }

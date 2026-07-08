@@ -5,7 +5,7 @@ namespace NanamiUI
 {
     // 顶点生成复刻 FairyGUI 的 RectMesh/RoundedRectMesh/EllipseMesh/PolygonMesh/RegularPolygonMesh。
     // FairyGUI 网格坐标系 y 向下，这里在 AddVert 时翻转到 uGUI 局部坐标。
-    public class Shape : MaskableGraphic
+    public class Graph : MaskableGraphic
     {
         public enum Kind
         {

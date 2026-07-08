@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace NanamiUI
 {
-    // 复刻 FairyGUI PopupMenu：内容 pane（背景 + 名为 "list" 的竖排列表），AddItem 建项，Show 经 GRoot 定位。瞬时无 tween。
+    // 复刻 FairyGUI PopupMenu：内容 pane（背景 + 名为 "list" 的竖排列表），AddItem 建项，Show 经 Root 定位。瞬时无 tween。
     // itemPrefab 显式传入（避免为动态 list 重跑 Migrate 烘焙 ListSource；ComboBox/Window1 列表要通用化时再补 ListSource）。
     public sealed class PopupMenu
     {
@@ -35,7 +35,8 @@ namespace NanamiUI
             _content.SetActive(false);
         }
 
-        public void AddItem(string caption, Action callback)
+        // 返回项按钮：调用方可直接设 grayed/selected(勾选)/Icon 等，无需再包一层 SetItemXxx。
+        public ButtonBase AddItem(string caption, Action callback)
         {
             var index = _count++;
             var itemGo = UnityEngine.Object.Instantiate(_itemPrefab, _list);
@@ -50,16 +51,24 @@ namespace NanamiUI
                     Hide();
                 callback?.Invoke();
             });
+            return button;
+        }
+
+        public void ClearItems()
+        {
+            for (var i = _list.childCount - 1; i >= 0; i--)
+                UnityEngine.Object.DestroyImmediate(_list.GetChild(i).gameObject);
+            _count = 0;
         }
 
         public void Show(RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
         {
             Layout();
             _content.SetActive(true);
-            GRoot.inst.ShowPopup(_contentRt, target, dir);
+            Root.inst.ShowPopup(_contentRt, target, dir);
         }
 
-        public void Hide() => GRoot.inst.HidePopup(_contentRt);
+        public void Hide() => Root.inst.HidePopup(_contentRt);
 
         // ResizeToFit：list 高度 = 项数×项高；contentPane 高度 = authored + (list 增量)（复刻 Height relation 传播）。
         private void Layout()

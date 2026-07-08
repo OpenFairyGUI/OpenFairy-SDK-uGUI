@@ -28,7 +28,7 @@ namespace NanamiUI.TestSupport
             Time.timeScale = 1;
             Time.captureDeltaTime = 1f / 60f; // 两侧动效同步的关键：锁定每帧步进量
             Application.runInBackground = true;
-            NanamiUI.Text.defaultFont = "Microsoft YaHei";
+            NanamiUI.TextField.defaultFont = "Microsoft YaHei";
 
             _camera = new GameObject("NanamiUI Golden Camera").AddComponent<Camera>();
             _camera.clearFlags = CameraClearFlags.SolidColor;
@@ -90,7 +90,7 @@ namespace NanamiUI.TestSupport
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
             rt.anchoredPosition = Vector2.zero;
             rt.localScale = Vector3.one;
-            foreach (var text in _instance.GetComponentsInChildren<NanamiUI.Text>(true))
+            foreach (var text in _instance.GetComponentsInChildren<NanamiUI.TextField>(true))
                 text.WarmUp();
         }
 

@@ -10,7 +10,11 @@
   - `Tools/NanamiUI/Migrate`
   - `Tools/NanamiUI/Generate Golden References`
   - `Tools/NanamiUI/Run PlayMode Tests`
-- 最近一次验证：2026-07-08 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `60/60`。
+- 最近一次验证：2026-07-08 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `70/70`。
+- 本轮发布整改：修 `ComboBox.selectedIndex` 程序化赋值不刷新/不发事件的 bug（改属性 + 加 `values/text/value`）+ 下拉按 `visibleItemCount` 裁剪滚动；`ScrollPane` 补滚轮/滚动条 grip 拖动/惯性回弹/`onScroll`/`ScrollToView`；`ProgressBar.TweenValue` 加 ease、`Slider` 加 grip touch 事件；修 `MovieClip.SetFrame` 越界不钳导致自播 Update 越界的 bug；`Window.modal` + `Root` 模态层；`PopupMenu.AddItem` 返回项按钮 + `ClearItems`；`InputText` 加 `password`/`maxLength`/`editable`/`onSubmit`。转换器健壮性整改（对非 demo 的真实工程）：包名/空名 sanitize 进命名空间、非 button list item、陈旧 gear 页 id、`Image`/`RectTransform` 字段全限定、内嵌 `ui://` 容错。
+- 真跑才暴露的三个 bug（已修 + 新增真射线交互测试 `InteractionRuntimeTests`）：① MovieClip 页空白（`<jta>` movieclip 标签被丢弃，现已识别）；② Popup/Window 按钮点不动（button 根加透明 raycast 面，整块可点）；③ Text 输入框不工作（真因是 `NanamiUI.Text` 作 InputField 面时 `OnEnable` 清 raycastTarget + 自绘不填 generator；改用原生 InputField 结构：透明 Image 作 targetGraphic + 普通 UI.Text 作 textComponent，placeholder 仍 NanamiUI.Text。`activeInputHandler` 保持 `1`）。详见 `AGENTS.md`。
+- `InteractionRuntimeTests` 覆盖真射线交互：MovieClip 自播、Window 开关、Popup 开/点项收起、ComboBox 开下拉、Slider 可点跳值、InputText 可编辑读写。
+- 当前 `Run PlayMode Tests` `79/79`。范围与取舍详见 `AGENTS.md`「发布范围与取舍」。
 
 ## 标准验证流程
 
@@ -48,7 +52,7 @@
 | Controller | 完成 | 静态 golden 覆盖；按名非泛型 controller 面暂未提供。 |
 | Relation | 完成 | 静态 golden 覆盖。 |
 | Label | 完成 | 静态 golden 覆盖。 |
-| Popup | 完成 | PopupMenu + GRoot 覆盖层已支持；外点关闭使用透明 blocker。 |
+| Popup | 完成 | PopupMenu + Root 覆盖层已支持；外点关闭使用透明 blocker。 |
 | Window | 完成 | Window1/Window2、关闭按钮、居中和缩放进出已覆盖。 |
 | Drag&Drop | 完成 | agent 拖放、drop payload、dragBounds 已覆盖。 |
 | Component | 完成 | 静态 golden 覆盖。 |
@@ -79,7 +83,7 @@
 
 - Popup/ComboBox 外点关闭使用透明 blocker，表现为模态；这是为了避开新 Input System 下旧 `UnityEngine.Input` 的异常。
 - `ScrollPane` 只实现拖动滚动，无惯性、回弹、虚拟化。
-- ComboBox 下拉当前撑开显示全部项，未按 `visibleItemCount` 裁剪滚动。
+- ComboBox 下拉已按 `visibleItemCount` 裁剪并滚动（项数超出时 `ScrollPane.Attach`）。
 - Grid demo 主要填可见文本，部分装饰/交互细节从简。
 - 文本仍有少量 UBB 混合字号断行、行内图片基线差异。
 - GoodHit/PowerUp 中的 Shake 和部分 movieclip 相位差会放大像素 diff，但视觉表现已对齐。

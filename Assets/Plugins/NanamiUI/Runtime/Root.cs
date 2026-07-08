@@ -13,28 +13,31 @@ namespace NanamiUI
     }
 
     // 顶层覆盖层 host（复刻 FairyGUI GRoot）：承载 window 与 popup，渲染在页面之上。设计坐标系（左上原点、y 向下），
-    // 与页面共用；popup 定位复刻 GRoot.GetPoupPosition（down/flip-up/right-align）。
+    // 与页面共用；popup 定位复刻 Root.GetPoupPosition（down/flip-up/right-align）。
     // 外点关闭用一个透明 blocker（IPointerClickHandler）而非输入轮询——本工程用新 Input System，读旧版 UnityEngine.Input 会抛异常。
-    public sealed class GRoot : MonoBehaviour
+    public sealed class Root : MonoBehaviour
     {
-        private static GRoot _inst;
-        public static GRoot inst => _inst;
+        private static Root _inst;
+        public static Root inst => _inst;
 
         public RectTransform rect;
         private readonly List<RectTransform> _popups = new();
         private readonly Dictionary<RectTransform, System.Action> _onClose = new();
         private readonly List<Window> _windows = new();
         private GameObject _blocker;
+        private GameObject _modalLayer;
+
+        public Color modalColor = new(0, 0, 0, 0.4f);
 
         public Vector2 Size => rect.rect.size;
 
         // 测试 seam：把覆盖层建到 designRoot 所在画布上、与 designRoot 同坐标区（1136×640 设计尺寸），
         // 自带高 sortingOrder 的 Canvas + GraphicRaycaster 渲染在页面之上并复用场景 EventSystem。
-        public static GRoot Create(RectTransform designRoot)
+        public static Root Create(RectTransform designRoot)
         {
             if (_inst != null)
                 return _inst;
-            var go = new GameObject("GRoot", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
+            var go = new GameObject("Root", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
             var rt = (RectTransform)go.transform;
             rt.SetParent(designRoot.parent, false);
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
@@ -44,12 +47,12 @@ namespace NanamiUI
             var canvas = go.GetComponent<Canvas>();
             canvas.overrideSorting = true;
             canvas.sortingOrder = 10000;
-            _inst = go.AddComponent<GRoot>();
+            _inst = go.AddComponent<Root>();
             _inst.rect = rt;
             return _inst;
         }
 
-        // 对象在 GRoot 内居中（复刻 GObject.Center on GRoot）。
+        // 对象在 Root 内居中（复刻 GObject.Center on GRoot）。
         public void Center(RectTransform obj)
         {
             obj.SetParent(rect, false);
@@ -121,18 +124,18 @@ namespace NanamiUI
         {
             if (_blocker != null)
                 return;
-            _blocker = new GameObject("PopupBlocker", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(PopupBlocker));
+            _blocker = new GameObject("PopupBlocker", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image), typeof(PopupBlocker));
             var brt = (RectTransform)_blocker.transform;
             brt.SetParent(rect, false);
             brt.anchorMin = Vector2.zero;
             brt.anchorMax = Vector2.one;
             brt.offsetMin = brt.offsetMax = Vector2.zero;
-            var img = _blocker.GetComponent<Image>();
+            var img = _blocker.GetComponent<UnityEngine.UI.Image>();
             img.color = new Color(0, 0, 0, 0); // 透明但可接收射线
             _blocker.SetActive(false);
         }
 
-        // 复刻 GRoot.GetPoupPosition（FairyGUI 设计坐标、左上 y-down）。
+        // 复刻 Root.GetPoupPosition（FairyGUI 设计坐标、左上 y-down）。
         private Vector2 GetPopupPosition(RectTransform popup, RectTransform target, PopupDirection dir)
         {
             var popupSize = popup.rect.size;
@@ -167,15 +170,15 @@ namespace NanamiUI
 
         private readonly Vector3[] _corners = new Vector3[4];
 
-        // 节点左上角在 GRoot 设计坐标（y-down）里的位置。
+        // 节点左上角在 Root 设计坐标（y-down）里的位置。
         public Vector2 RootTopLeft(RectTransform node)
         {
             node.GetWorldCorners(_corners); // [1] = top-left（world）
-            var local = rect.InverseTransformPoint(_corners[1]); // GRoot 局部（pivot 0,1 → 原点在左上、y 向上）
+            var local = rect.InverseTransformPoint(_corners[1]); // Root 局部（pivot 0,1 → 原点在左上、y 向上）
             return new Vector2(local.x, -local.y);
         }
 
-        // ---- Window 托管（复刻 GRoot.ShowWindow/HideWindowImmediately/BringToFront）----
+        // ---- Window 托管（复刻 Root.ShowWindow/HideWindowImmediately/BringToFront）----
         public void ShowWindow(Window win)
         {
             if (!_windows.Contains(win))
@@ -185,6 +188,7 @@ namespace NanamiUI
             win.Root.SetAsLastSibling();
             win.Root.gameObject.SetActive(true);
             win.DoShow();
+            RefreshModal();
         }
 
         public void HideWindowImmediately(Window win)
@@ -192,18 +196,56 @@ namespace NanamiUI
             _windows.Remove(win);
             if (win.Root != null)
                 win.Root.gameObject.SetActive(false);
+            RefreshModal();
         }
 
         public void BringToFront(Window win)
         {
             if (win.Root != null)
                 win.Root.SetAsLastSibling();
+            RefreshModal();
+        }
+
+        public bool HasModalWindow => TopModalWindow() != null;
+
+        private Window TopModalWindow()
+        {
+            Window top = null;
+            foreach (var w in _windows)
+                if (w.modal && w.Root != null && w.Root.gameObject.activeSelf)
+                    top = w; // 列表按显示序，最后一个激活的模态窗即最上层
+            return top;
+        }
+
+        // 模态层铺在最上层模态窗之下、其余内容之上，拦截下层点击。
+        private void RefreshModal()
+        {
+            var top = TopModalWindow();
+            if (top == null)
+            {
+                if (_modalLayer != null)
+                    _modalLayer.SetActive(false);
+                return;
+            }
+            if (_modalLayer == null)
+            {
+                _modalLayer = new GameObject("ModalLayer", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
+                var mrt = (RectTransform)_modalLayer.transform;
+                mrt.SetParent(rect, false);
+                mrt.anchorMin = Vector2.zero;
+                mrt.anchorMax = Vector2.one;
+                mrt.offsetMin = mrt.offsetMax = Vector2.zero;
+            }
+            _modalLayer.GetComponent<UnityEngine.UI.Image>().color = modalColor; // 可接收射线，拦截下层
+            _modalLayer.SetActive(true);
+            _modalLayer.transform.SetAsLastSibling();
+            top.Root.SetAsLastSibling(); // 模态窗盖在模态层之上
         }
     }
 
     // 透明全屏 blocker：点它（= 点在 popup 之外）即收起全部 popup（复刻 FairyGUI 外点关闭，避开新 Input System）。
     public sealed class PopupBlocker : UIBehaviour, IPointerClickHandler
     {
-        public void OnPointerClick(PointerEventData eventData) => GRoot.inst.HidePopup();
+        public void OnPointerClick(PointerEventData eventData) => Root.inst.HidePopup();
     }
 }

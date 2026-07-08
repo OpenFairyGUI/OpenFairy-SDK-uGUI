@@ -10,7 +10,7 @@ using UnityEngine.TestTools;
 namespace NanamiUI.Tests
 {
     // 集成 smoke：实例化 Main、让 BasicsMain.Awake 跑，经反射驱动 Window/Popup/Depth/Drag&Drop demo，
-    // 验证胶水（反射字段名、GRoot/Window/PopupMenu 接线）端到端不抛且能开窗/弹菜单。
+    // 验证胶水（反射字段名、Root/Window/PopupMenu 接线）端到端不抛且能开窗/弹菜单。
     public class DemoSmokeTest
     {
         private NanamiPageRenderer _rig;
@@ -27,7 +27,7 @@ namespace NanamiUI.Tests
 #else
             GameObject prefab = null;
 #endif
-            _main = UnityEngine.Object.Instantiate(prefab, _rig.CanvasRt, false); // 触发 BasicsMain.Awake（GRoot.Create + Back）
+            _main = UnityEngine.Object.Instantiate(prefab, _rig.CanvasRt, false); // 触发 BasicsMain.Awake（Root.Create + Back）
             var rt = (RectTransform)_main.transform;
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
             rt.anchoredPosition = Vector2.zero;
@@ -61,7 +61,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(demo, "Demo_Window 应已实例化");
             Click(Field(demo, "m_n0")); // 开 Window A
             yield return null;
-            Assert.AreEqual(1, NanamiUI.GRoot.inst.ActiveWindowCount, "点 n0 应开一个 window");
+            Assert.AreEqual(1, NanamiUI.Root.inst.ActiveWindowCount, "点 n0 应开一个 window");
         }
 
         [UnityTest]
@@ -73,7 +73,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(demo);
             Click(Field(demo, "m_n0")); // 弹菜单
             yield return null;
-            Assert.IsTrue(NanamiUI.GRoot.inst.HasAnyPopup, "点 n0 应弹出菜单");
+            Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, "点 n0 应弹出菜单");
         }
 
         [UnityTest]
@@ -97,8 +97,8 @@ namespace NanamiUI.Tests
             yield return null;
             var demo = Comp("UI.Basics.Demo_Text");
             Assert.IsNotNull(demo);
-            var n22 = (NanamiUI.InputText)Field(demo, "m_n22"); // n22 是可编辑输入框
-            var n24 = (NanamiUI.Text)Field(demo, "m_n24");
+            var n22 = (NanamiUI.TextInput)Field(demo, "m_n22"); // n22 是可编辑输入框
+            var n24 = (NanamiUI.TextField)Field(demo, "m_n24");
             n22.text = "Alice"; // 模拟用户输入姓名
             Click(Field(demo, "m_n25")); // 拷 n22 → n24
             yield return null;
@@ -138,7 +138,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(handler, "ComboBox 应挂上点击中继");
             handler.OnPointerClick(new PointerEventData(EventSystem.current));
             yield return null;
-            Assert.IsTrue(NanamiUI.GRoot.inst.HasAnyPopup, "点 ComboBox 应弹出下拉");
+            Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, "点 ComboBox 应弹出下拉");
         }
 
         [UnityTest]

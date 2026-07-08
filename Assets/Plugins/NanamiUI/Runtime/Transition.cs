@@ -266,7 +266,7 @@ namespace NanamiUI
                     break;
                 }
                 case TransitionItemType.Text:
-                    rt.GetComponent<Text>().text = item.stringValue;
+                    rt.GetComponent<TextField>().text = item.stringValue;
                     break;
                 default:
                     ApplyValue(item, Resolve(item, item.start));
@@ -301,7 +301,7 @@ namespace NanamiUI
                     rt.localEulerAngles = new Vector3(0, 0, -value[0]);
                     break;
                 case TransitionItemType.Skew:
-                    if (rt.GetComponent<Shape>() is { } skewShape) // 目前仅 Shape 支持逐顶点 skew
+                    if (rt.GetComponent<Graph>() is { } skewShape) // 目前仅 Shape 支持逐顶点 skew
                     {
                         skewShape.skew = new Vector2(value[0], value[1]);
                         skewShape.SetVerticesDirty();
@@ -342,7 +342,7 @@ namespace NanamiUI
                 TransitionItemType.Scale => index == 0 ? rt.localScale.x : rt.localScale.y,
                 TransitionItemType.Alpha => rt.GetComponent<CanvasGroup>() is { } group ? group.alpha : 1,
                 TransitionItemType.Rotation => -rt.localEulerAngles.z,
-                TransitionItemType.Skew => rt.GetComponent<Shape>() is { } shape ? (index == 0 ? shape.skew.x : shape.skew.y) : 0,
+                TransitionItemType.Skew => rt.GetComponent<Graph>() is { } shape ? (index == 0 ? shape.skew.x : shape.skew.y) : 0,
                 _ => 0,
             };
         }

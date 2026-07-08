@@ -14,6 +14,7 @@ namespace NanamiUI.Tests
     {
         private enum RadioPage { up, down, over, selectedOver }
         private class TestButton : Button<RadioPage> { }
+        private class TestCombo : ComboBox<RadioPage> { }
 
         private NanamiPageRenderer _rig;
 
@@ -36,7 +37,7 @@ namespace NanamiUI.Tests
         private RectTransform Child(RectTransform parent, string name, Vector2 fairyXY, Vector2 size, bool graphic)
         {
             var go = graphic
-                ? new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image))
+                ? new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image))
                 : new GameObject(name, typeof(RectTransform));
             var rt = (RectTransform)go.transform;
             rt.SetParent(parent, false);
@@ -136,6 +137,9 @@ namespace NanamiUI.Tests
             mc.SetFrame(2);
             Assert.AreSame(mc.frames[2], mc.sprite, "SetFrame 应把 sprite 设为对应帧");
 
+            mc.SetFrame(100); // 越界应钳到末帧，frame 字段也钳住（否则自播 Update 会越界索引 addDelays[frame]）
+            Assert.AreEqual(2, mc.frame, "SetFrame 越界应把 frame 钳到末帧");
+
             // 自播：从第 0 帧起，跑若干真实帧应离开第 0 帧（interval 略大于单帧 dt，先 0→1 再循环，轮询捕捉过渡）。
             mc.SetFrame(0);
             mc.interval = 0.02f;
@@ -192,16 +196,16 @@ namespace NanamiUI.Tests
             };
             gear.Apply(RadioPage.down);
             yield return null;
-            Assert.AreEqual(Color.green, go.GetComponent<Image>().color, "GearColor 应把 down 页设为绿");
+            Assert.AreEqual(Color.green, go.GetComponent<UnityEngine.UI.Image>().color, "GearColor 应把 down 页设为绿");
             gear.Apply(RadioPage.over); // 不在 pages → default
-            Assert.AreEqual(Color.white, go.GetComponent<Image>().color, "不在页列表应回退 default");
+            Assert.AreEqual(Color.white, go.GetComponent<UnityEngine.UI.Image>().color, "不在页列表应回退 default");
         }
 
         [UnityTest]
         public IEnumerator GearLook_applies_alpha_via_canvasgroup_without_overwriting_child_color()
         {
             var go = Child(_rig.CanvasRt, "gl", Vector2.zero, new Vector2(50, 50), true);
-            var image = go.GetComponent<Image>();
+            var image = go.GetComponent<UnityEngine.UI.Image>();
             image.color = new Color(1, 1, 1, 1);
             var gear = new GearLook<RadioPage>
             {
@@ -256,6 +260,84 @@ namespace NanamiUI.Tests
             Assert.AreEqual(0f, target.anchoredPosition.x, 1f, "倒放应回到 start x=0");
 
             Object.Destroy(container.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator ComboBox_selectedIndex_updates_title_and_fires_once()
+        {
+            var comboRt = Child(_rig.CanvasRt, "combo", Vector2.zero, new Vector2(100, 30), false);
+            var combo = comboRt.gameObject.AddComponent<TestCombo>();
+            combo.items = new[] { "A", "B", "C" };
+            combo.values = new[] { "va", "vb", "vc" };
+            var titleGo = new GameObject("title", typeof(RectTransform), typeof(CanvasRenderer));
+            ((RectTransform)titleGo.transform).SetParent(comboRt, false);
+            combo.titleText = titleGo.AddComponent<TextField>();
+            var fired = 0;
+            combo.onChanged.AddListener(() => fired++);
+            yield return null;
+
+            combo.selectedIndex = 1;
+            Assert.AreEqual("B", combo.titleText.text, "selectedIndex 赋值应刷新标题");
+            Assert.AreEqual("B", combo.text, "text 应为当前项显示文本");
+            Assert.AreEqual("vb", combo.value, "value 应为平行 values 项");
+            Assert.AreEqual(1, fired, "值变化应发一次 onChanged");
+
+            combo.selectedIndex = 1; // 同值不再发
+            Assert.AreEqual(1, fired, "赋相同值不应再发 onChanged");
+
+            Object.Destroy(comboRt.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator InputText_exposes_password_maxlength_editable()
+        {
+            var go = new GameObject("input", typeof(RectTransform), typeof(CanvasRenderer));
+            ((RectTransform)go.transform).SetParent(_rig.CanvasRt, false);
+            var textGo = new GameObject("t", typeof(RectTransform), typeof(CanvasRenderer));
+            ((RectTransform)textGo.transform).SetParent(go.transform, false);
+            var field = go.AddComponent<InputField>();
+            field.textComponent = textGo.AddComponent<TextField>();
+            var input = go.AddComponent<TextInput>();
+            input.field = field;
+            yield return null;
+
+            input.password = true;
+            Assert.AreEqual(InputField.ContentType.Password, field.contentType, "password 应设为密码输入");
+            input.maxLength = 6;
+            Assert.AreEqual(6, field.characterLimit, "maxLength 应设 characterLimit");
+            input.editable = false;
+            Assert.IsFalse(field.interactable, "editable=false 应禁用交互");
+            input.text = "hello";
+            Assert.AreEqual("hello", input.text, "text 读写应经 field");
+
+            Object.Destroy(go);
+        }
+
+        [UnityTest]
+        public IEnumerator ScrollPane_wheel_scrolls_and_clamps()
+        {
+            var root = Child(_rig.CanvasRt, "scroll", Vector2.zero, new Vector2(100, 100), false);
+            var viewport = new GameObject("viewport", typeof(RectTransform), typeof(RectMask2D)).GetComponent<RectTransform>();
+            viewport.SetParent(root, false);
+            viewport.anchorMin = viewport.anchorMax = viewport.pivot = new Vector2(0, 1);
+            viewport.sizeDelta = new Vector2(100, 100);
+            viewport.anchoredPosition = Vector2.zero;
+            Child(viewport, "big", Vector2.zero, new Vector2(100, 400), true); // 内容高 400，可滚 300
+
+            var pane = ScrollPane.Attach(root);
+            Assert.IsNotNull(pane, "带 viewport(RectMask2D) 结构应可 Attach");
+            var content = viewport.Find("content") as RectTransform;
+            yield return null;
+
+            var e = new PointerEventData(EventSystem.current) { scrollDelta = new Vector2(0, -1) };
+            pane.OnScroll(e); // 向下滚一档
+            Assert.Greater(content.anchoredPosition.y, 0f, "向下滚动应下移内容露出底部");
+
+            e.scrollDelta = new Vector2(0, -100);
+            pane.OnScroll(e); // 大幅滚动应被钳到最大
+            Assert.AreEqual(300f, content.anchoredPosition.y, 0.5f, "滚动应钳到 contentHeight-viewHeight=300");
+
+            Object.Destroy(root.gameObject);
         }
     }
 }

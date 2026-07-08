@@ -72,7 +72,9 @@ namespace NanamiUI.Editor
                     resource.Kind = (Schema.ResourceKind)ParseEnum(typeof(Schema.ResourceKind), xml.Name.LocalName);
                     break;
                 case Schema.Display display:
-                    display.Kind = (Schema.DisplayKind)ParseEnum(typeof(Schema.DisplayKind), xml.Name.LocalName);
+                    // <jta> 是 movieclip 实例的扩展名标签，归一到 movieclip 类型
+                    var tag = xml.Name.LocalName == "jta" ? "movieclip" : xml.Name.LocalName;
+                    display.Kind = (Schema.DisplayKind)ParseEnum(typeof(Schema.DisplayKind), tag);
                     display.Source = display.Src ?? display.Url;
                     break;
                 case Schema.Gear gear:
@@ -355,6 +357,7 @@ namespace NanamiUI.Editor.Schema
         [XmlArray("displayList")]
         [XmlArrayItem("image")]
         [XmlArrayItem("movieclip")]
+        [XmlArrayItem("jta")] // FairyGUI 编辑器工程里 movieclip 实例的标签取资源扩展名(.jta)，与 <movieclip> 同义
         [XmlArrayItem("graph")]
         [XmlArrayItem("loader")]
         [XmlArrayItem("group")]
@@ -439,6 +442,8 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("letterSpacing")] public int LetterSpacing;
         [XmlAttribute("ubb")] public bool Ubb;
         [XmlAttribute("input")] public bool Input;
+        [XmlAttribute("password")] public bool Password;
+        [XmlAttribute("maxLength")] public int MaxLength;
         [XmlAttribute("underline")] public bool Underline;
         [XmlAttribute("prompt")] public string Prompt;
         [XmlAttribute("bold")] public bool Bold;
@@ -505,6 +510,7 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("titleType")] public string TitleType;
         [XmlAttribute("reverse")] public bool Reverse;
         [XmlAttribute("dropdown")] public string Dropdown;
+        [XmlAttribute("visibleItemCount")] public int VisibleItemCount = 10;
         [XmlElement("item")] public Extension[] ItemNodes = Array.Empty<Extension>();
 
         public string[] Items = Array.Empty<string>();

@@ -3,9 +3,9 @@ using UnityEngine;
 
 namespace NanamiUI
 {
-    // 运行时列表填充（复刻 FairyGUI GList.AddItemFromPool 的简版）：按 list 上的 ListSource 从 itemPrefab 建 count 个项，
+    // 运行时列表填充（复刻 FairyGUI List.AddItemFromPool 的简版）：按 list 上的 ListSource 从 itemPrefab 建 count 个项，
     // 列式排布，逐项回调设数据。项建在 viewport/content（若已挂 ScrollPane）或 viewport 或 list 本身。
-    public static class GList
+    public static class List
     {
         public static RectTransform Container(RectTransform list) =>
             list.Find("viewport/content") as RectTransform

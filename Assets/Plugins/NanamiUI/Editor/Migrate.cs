@@ -81,7 +81,7 @@ namespace NanamiUI.Editor
             foreach (var package in Directory.EnumerateFiles($"{UiRoot}/assets", "package.xml", SearchOption.AllDirectories))
                 IndexPackage(package.Replace('\\', '/'));
 
-            Text.defaultFont = DefaultFont(); // 游戏 UIConfig.defaultFont：与运行时一致才能保证烘焙排版一致
+            TextField.defaultFont = DefaultFont(); // 游戏 UIConfig.defaultFont：与运行时一致才能保证烘焙排版一致
 
             var components = new List<Resource>();
             var images = new HashSet<Resource>();
@@ -368,7 +368,7 @@ namespace NanamiUI.Editor
             code.AppendLine("using UnityEngine;");
             code.AppendLine("using UnityEngine.UI;");
             code.AppendLine();
-            code.AppendLine($"namespace UI.{component.Package}");
+            code.AppendLine($"namespace UI.{Identifier(component.Package)}");
             code.AppendLine("{");
             code.AppendLine($"    public partial class {name} : {baseType}");
             code.AppendLine("    {");
@@ -401,15 +401,15 @@ namespace NanamiUI.Editor
 
         private static string FieldType(Schema.Display child, string packageId) => child.Kind switch
         {
-            Schema.DisplayKind.Image => "Image",
-            Schema.DisplayKind.Graph => "NanamiUI.Shape",
-            Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText => child.Input ? "NanamiUI.InputText" : "NanamiUI.Text",
+            Schema.DisplayKind.Image => "UnityEngine.UI.Image",
+            Schema.DisplayKind.Graph => "NanamiUI.Graph",
+            Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText => child.Input ? "NanamiUI.TextInput" : "NanamiUI.TextField",
             Schema.DisplayKind.Loader => "NanamiUI.Loader",
             Schema.DisplayKind.Component when TryResolve(child.Source, packageId, out var dep) =>
-                $"UI.{dep.Package}.{Identifier(Path.GetFileNameWithoutExtension(dep.File))}",
+                $"UI.{Identifier(dep.Package)}.{Identifier(Path.GetFileNameWithoutExtension(dep.File))}",
             Schema.DisplayKind.Component => null,
             _ when IsMovieClip(child, packageId) => "NanamiUI.MovieClip",
-            _ => "RectTransform",
+            _ => "UnityEngine.RectTransform",
         };
 
         private static bool IsMovieClip(Schema.Display child, string packageId) =>
@@ -427,7 +427,7 @@ namespace NanamiUI.Editor
                 if (xml.Overflow == Schema.Overflow.Hidden)
                     root.AddComponent<RectMask2D>();
 
-                var componentType = FindType($"UI.{component.Package}.{Identifier(root.name)}");
+                var componentType = FindType($"UI.{Identifier(component.Package)}.{Identifier(root.name)}");
                 var comp = (Component)root.AddComponent(componentType);
 
                 var controllers = new Dictionary<string, ControllerData>();
@@ -495,9 +495,18 @@ namespace NanamiUI.Editor
 
                 if (IsButton(comp.GetType()))
                 {
+                    // FairyGUI 按钮整块可点，与内部图形无关。uGUI 需要一个覆盖全 rect 的 raycast 面：
+                    // 加一张透明(alpha=0，不改渲染)、raycastTarget 的 Image 到按钮根，保证点按钮任意位置都命中
+                    // （否则内部图形（如只描边的 Shape）没盖住中心时，点击会穿过按钮打到背景）。
+                    if (root.GetComponent<Graphic>() == null)
+                    {
+                        var hit = root.AddComponent<UnityEngine.UI.Image>();
+                        hit.color = new Color(0, 0, 0, 0);
+                        hit.raycastTarget = true;
+                    }
                     if (controllers.TryGetValue("button", out var buttonData))
                         comp.GetType().GetField("controller").SetValue(comp, buttonData.Value);
-                    comp.GetType().GetField("titleText").SetValue(comp, children.FirstOrDefault(c => c.Xml.Name == "title").Go?.GetComponent<Text>());
+                    comp.GetType().GetField("titleText").SetValue(comp, children.FirstOrDefault(c => c.Xml.Name == "title").Go?.GetComponent<TextField>());
                     comp.GetType().GetField("iconLoader").SetValue(comp, children.FirstOrDefault(c => c.Xml.Name == "icon").Go?.GetComponent<Loader>());
                     if (xml.Button is { } buttonEl)
                         ConfigureButton(root, buttonEl, component.PackageId);
@@ -510,7 +519,7 @@ namespace NanamiUI.Editor
                     SetupSlider(slider, xml, children, root);
                 else if (comp is Label label)
                 {
-                    label.titleText = Child(children, "title")?.GetComponent<Text>();
+                    label.titleText = Child(children, "title")?.GetComponent<TextField>();
                     label.iconLoader = Child(children, "icon")?.GetComponent<Loader>();
                 }
 
@@ -548,8 +557,8 @@ namespace NanamiUI.Editor
             {
                 case Schema.DisplayKind.Image:
                 {
-                    go = NewChild(name, parent, typeof(FlipImage));
-                    var image = go.GetComponent<FlipImage>();
+                    go = NewChild(name, parent, typeof(Image));
+                    var image = go.GetComponent<Image>();
                     var resource = Resolve(element.Source, owner.PackageId);
                     image.sprite = LoadSprite(element.Source, owner.PackageId);
                     ConfigureImage(image, resource, element);
@@ -561,8 +570,8 @@ namespace NanamiUI.Editor
                     break;
                 case Schema.DisplayKind.Graph:
                 {
-                    go = NewChild(name, parent, typeof(Shape));
-                    ConfigureShape(go.GetComponent<Shape>(), element);
+                    go = NewChild(name, parent, typeof(Graph));
+                    ConfigureShape(go.GetComponent<Graph>(), element);
                     break;
                 }
                 case Schema.DisplayKind.List:
@@ -575,8 +584,8 @@ namespace NanamiUI.Editor
                 case Schema.DisplayKind.RichText:
                 case Schema.DisplayKind.InputText:
                 {
-                    go = NewChild(name, parent, typeof(Text));
-                    var textComponent = go.GetComponent<Text>();
+                    go = NewChild(name, parent, typeof(TextField));
+                    var textComponent = go.GetComponent<TextField>();
                     ConfigureText(textComponent, element, owner);
                     if (element.StrokeColor is { } stroke)
                     {
@@ -655,7 +664,7 @@ namespace NanamiUI.Editor
             }
 
             SetRect((RectTransform)go.transform, element, size ?? Vector2.zero, parent);
-            if (go.GetComponent<Text>() is { } createdText)
+            if (go.GetComponent<TextField>() is { } createdText)
                 createdText.RebuildImages(); // 依赖最终 rect 的排版，须在 SetRect 之后烘焙
             ApplyElement(go, element);
             if (!element.Visible)
@@ -716,13 +725,13 @@ namespace NanamiUI.Editor
                     ConfigureGearAni(gearType, gear, gearXml);
                 else if (kind == Schema.GearKind.FontSize)
                 {
-                    var def = gearXml.Default is { } value ? int.Parse(value) : go.GetComponent<Text>().fontSize;
+                    var def = gearXml.Default is { } value ? int.Parse(value) : go.GetComponent<TextField>().fontSize;
                     gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : int.Parse(value)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
                 else if (kind == Schema.GearKind.Text)
                 {
-                    var def = gearXml.Default ?? go.GetComponentInChildren<Text>(true).text;
+                    var def = gearXml.Default ?? go.GetComponentInChildren<TextField>(true).text;
                     gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : value).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
@@ -769,31 +778,35 @@ namespace NanamiUI.Editor
             var parts = ids?.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
             var values = Array.CreateInstance(controller.PageType, parts.Length);
             for (var i = 0; i < parts.Length; i++)
-                values.SetValue(controller.PageValues[Array.IndexOf(controller.PageIds, parts[i])], i);
+            {
+                var idx = Array.IndexOf(controller.PageIds, parts[i]);
+                if (idx >= 0) // 跳过控制器已不存在的陈旧页 id（编辑器残留），避免越界；该槽留 default 页
+                    values.SetValue(controller.PageValues[idx], i);
+            }
             return values;
         }
 
-        private static void ConfigureImage(Image image, Resource resource, Schema.Display element)
+        private static void ConfigureImage(UnityEngine.UI.Image image, Resource resource, Schema.Display element)
         {
-            image.type = resource.Scale == "tile" ? Image.Type.Tiled : image.sprite.border == Vector4.zero ? Image.Type.Simple : Image.Type.Sliced;
+            image.type = resource.Scale == "tile" ? UnityEngine.UI.Image.Type.Tiled : image.sprite.border == Vector4.zero ? UnityEngine.UI.Image.Type.Simple : UnityEngine.UI.Image.Type.Sliced;
             image.color = ParseColor(element.Color ?? "#ffffffff");
             if (element.FillMethod != Schema.ImageFillMethod.None)
             {
-                image.type = Image.Type.Filled;
+                image.type = UnityEngine.UI.Image.Type.Filled;
                 image.fillMethod = element.FillMethod switch
                 {
-                    Schema.ImageFillMethod.Horizontal => Image.FillMethod.Horizontal,
-                    Schema.ImageFillMethod.Vertical => Image.FillMethod.Vertical,
-                    Schema.ImageFillMethod.Radial90 => Image.FillMethod.Radial90,
-                    Schema.ImageFillMethod.Radial180 => Image.FillMethod.Radial180,
-                    _ => Image.FillMethod.Radial360,
+                    Schema.ImageFillMethod.Horizontal => UnityEngine.UI.Image.FillMethod.Horizontal,
+                    Schema.ImageFillMethod.Vertical => UnityEngine.UI.Image.FillMethod.Vertical,
+                    Schema.ImageFillMethod.Radial90 => UnityEngine.UI.Image.FillMethod.Radial90,
+                    Schema.ImageFillMethod.Radial180 => UnityEngine.UI.Image.FillMethod.Radial180,
+                    _ => UnityEngine.UI.Image.FillMethod.Radial360,
                 };
-                if (image.fillMethod == Image.FillMethod.Radial360)
-                    image.fillOrigin = (int)Image.Origin360.Top;
+                if (image.fillMethod == UnityEngine.UI.Image.FillMethod.Radial360)
+                    image.fillOrigin = (int)UnityEngine.UI.Image.Origin360.Top;
                 image.fillClockwise = element.FillClockwise;
                 image.fillAmount = element.FillAmount / 100;
             }
-            if (image is FlipImage flip && element.Flip != Schema.Flip.None)
+            if (image is Image flip && element.Flip != Schema.Flip.None)
             {
                 flip.flipX = element.Flip is Schema.Flip.Horizontal or Schema.Flip.Both;
                 flip.flipY = element.Flip is Schema.Flip.Vertical or Schema.Flip.Both;
@@ -803,6 +816,8 @@ namespace NanamiUI.Editor
         private static void ConfigureButton(GameObject go, Schema.Extension buttonXml, string packageId)
         {
             var button = ButtonComponent(go);
+            if (button == null)
+                return; // 非 button 项（plain component/label 作 list item）：无按钮面可配，跳过
             if (buttonXml.Title is { } title)
                 button.GetType().GetProperty("Title").SetValue(button, title);
             if (buttonXml.SelectedTitle is { } selectedTitle)
@@ -817,18 +832,18 @@ namespace NanamiUI.Editor
 
         private static void ConfigureLabel(GameObject go, Schema.Extension labelXml, string packageId)
         {
-            if (labelXml.Title is { } title && FindChild(go.transform, "title")?.GetComponent<Text>() is { } titleText)
+            if (labelXml.Title is { } title && FindChild(go.transform, "title")?.GetComponent<TextField>() is { } titleText)
                 titleText.text = title;
-            if (labelXml.TitleColor is { } titleColor && FindChild(go.transform, "title")?.GetComponent<Text>() is { } colorText)
+            if (labelXml.TitleColor is { } titleColor && FindChild(go.transform, "title")?.GetComponent<TextField>() is { } colorText)
                 colorText.color = ParseColor(titleColor);
-            if (labelXml.Icon is { } icon && FindChild(go.transform, "icon")?.GetComponent<Image>() is { } image)
+            if (labelXml.Icon is { } icon && FindChild(go.transform, "icon")?.GetComponent<UnityEngine.UI.Image>() is { } image)
             {
                 image.sprite = LoadSprite(icon, packageId);
                 image.enabled = true;
             }
         }
 
-        private static void ConfigureShape(Shape shape, Schema.Display element)
+        private static void ConfigureShape(Graph shape, Schema.Display element)
         {
             shape.lineSize = element.LineSize;
             shape.lineColor = ParseColor(element.LineColor);
@@ -838,15 +853,15 @@ namespace NanamiUI.Editor
             switch (element.Type)
             {
                 case Schema.ShapeType.Ellipse:
-                    shape.kind = Shape.Kind.Ellipse;
+                    shape.kind = Graph.Kind.Ellipse;
                     break;
                 case Schema.ShapeType.Polygon:
-                    shape.kind = Shape.Kind.Polygon;
+                    shape.kind = Graph.Kind.Polygon;
                     var values = element.Points.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
                     shape.points = Enumerable.Range(0, values.Length / 2).Select(i => new Vector2(values[i * 2], values[i * 2 + 1])).ToArray();
                     break;
                 case Schema.ShapeType.RegularPolygon:
-                    shape.kind = Shape.Kind.RegularPolygon;
+                    shape.kind = Graph.Kind.RegularPolygon;
                     shape.sides = element.Sides;
                     shape.startAngle = element.StartAngle;
                     shape.distances = element.Distances?.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
@@ -854,12 +869,12 @@ namespace NanamiUI.Editor
                 default:
                     if (element.Corner is { } corner)
                     {
-                        shape.kind = Shape.Kind.RoundedRect;
+                        shape.kind = Graph.Kind.RoundedRect;
                         var radii = corner.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
                         shape.corners = Enumerable.Range(0, 4).Select(i => radii[Mathf.Min(i, radii.Length - 1)]).ToArray();
                     }
                     else
-                        shape.kind = Shape.Kind.Rect;
+                        shape.kind = Graph.Kind.Rect;
                     break;
             }
         }
@@ -876,7 +891,7 @@ namespace NanamiUI.Editor
             movieClip.playing = element.Playing;
             movieClip.frame = element.Frame;
             movieClip.sprite = movieClip.frames[movieClip.frame];
-            movieClip.type = Image.Type.Simple;
+            movieClip.type = UnityEngine.UI.Image.Type.Simple;
             movieClip.color = ParseColor(element.Color ?? "#ffffffff");
         }
 
@@ -885,7 +900,7 @@ namespace NanamiUI.Editor
             var ext = xml.ProgressBar;
             progress.titleType = ParseTitleType(ext.TitleType);
             progress.reverse = ext.Reverse;
-            progress.title = Child(children, "title")?.GetComponent<Text>();
+            progress.title = Child(children, "title")?.GetComponent<TextField>();
             var size = xml.Size;
             if (Child(children, "bar") is { } bar)
             {
@@ -909,7 +924,7 @@ namespace NanamiUI.Editor
         {
             var ext = xml.Slider;
             slider.titleType = ParseTitleType(ext.TitleType);
-            slider.title = Child(children, "title")?.GetComponent<Text>();
+            slider.title = Child(children, "title")?.GetComponent<TextField>();
             var size = xml.Size;
             if (Child(children, "bar") is { } bar)
             {
@@ -964,6 +979,7 @@ namespace NanamiUI.Editor
             var type = combo.GetType();
             if (xml.Dropdown is { } dropdown && TryResolve(dropdown, packageId, out var dropRes))
                 type.GetField("dropdownPrefab").SetValue(combo, LoadPrefab(dropRes));
+            type.GetField("visibleItemCount").SetValue(combo, xml.VisibleItemCount);
             var items = xml.Items;
             if (items.Length > 0)
             {
@@ -1410,7 +1426,7 @@ namespace NanamiUI.Editor
         }
 
         private static UnityEngine.Component ButtonComponent(GameObject go) =>
-            go.GetComponents<UnityEngine.Component>().First(component => IsButton(component.GetType()));
+            go.GetComponents<UnityEngine.Component>().FirstOrDefault(component => IsButton(component.GetType()));
 
         private static Transform FindChild(Transform parent, string name)
         {
@@ -1475,39 +1491,66 @@ namespace NanamiUI.Editor
                 rt.localScale = new Vector3(scale.x, scale.y, 1);
         }
 
-        // 把一个已配置好的显示 Text 升级为可编辑输入框（复刻 FairyGUI GTextInput）：加 uGUI InputField，
-        // 显示 Text 作 textComponent，prompt 另建一个 placeholder Text（空时显示）。
-        private static void ConfigureInput(GameObject go, Text display, Schema.Display element)
+        // 把显示 Text 升级为可编辑输入框（复刻 FairyGUI GTextInput）：走原生 uGUI InputField。
+        // 不复用 NanamiUI.TextField 作输入面——它的 OnEnable 会按 onClickLink 把 raycastTarget 清零（Text.cs），运行时把烘焙的
+        // raycastTarget 覆盖成 false → GraphicRaycaster 跳过 → 输入框永远无法聚焦；且它自绘 OnPopulateMesh 不填
+        // cachedTextGenerator，InputField 光标定位/选区失效。故：targetGraphic 用一张透明常驻 Image（空文本时 Text 无网格
+        // → 单靠 Text 不可点），textComponent 用普通 UI.Text（原生渲染 + 填充 generator，输入框功能完整）。
+        // 输入框不追求 FairyGUI 字体排版一致（项目允许）；prompt 仍用 NanamiUI.TextField 以复刻 UBB 斜体灰样式，
+        // 空文本静置时页面显示的正是 placeholder，故静态 golden 不受影响。
+        private static void ConfigureInput(GameObject go, TextField display, Schema.Display element)
         {
-            display.text = element.Text; // 撤销 ConfigureText 把 prompt 塞进显示文本；prompt 改做 placeholder
-            display.raycastTarget = true;
+            var fontSize = display.fontSize;
+            var color = display.color;
+            var alignment = display.alignment;
+            Object.DestroyImmediate(display); // 卸掉 NanamiUI.TextField 显示面，改用原生结构
+
+            var bg = go.AddComponent<UnityEngine.UI.Image>();
+            bg.color = Color.clear; // 透明但常驻 raycast，保证整框可点/可聚焦
 
             var field = go.AddComponent<InputField>();
-            field.textComponent = display;
-            field.targetGraphic = display;
-            field.text = element.Text;
+            field.targetGraphic = bg;
             field.lineType = element.SingleLine ? InputField.LineType.SingleLine : InputField.LineType.MultiLineNewline;
+            if (element.Password)
+                field.contentType = InputField.ContentType.Password;
+            if (element.MaxLength > 0)
+                field.characterLimit = element.MaxLength;
+
+            var textGo = NewChild("Text", (RectTransform)go.transform, typeof(UnityEngine.UI.Text));
+            var text = textGo.GetComponent<UnityEngine.UI.Text>();
+            text.font = UnityEngine.Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); // 可序列化的内置字体（Resources 名与本类字段冲突，需全限定）
+            text.fontSize = fontSize;
+            text.color = color;
+            text.alignment = alignment;
+            text.supportRichText = false;
+            StretchFull((RectTransform)textGo.transform);
+            field.textComponent = text;
+            field.text = element.Text; // textComponent 就绪后再设，UpdateLabel 才能写进显示
 
             if (element.Prompt is { } prompt)
             {
-                var phGo = NewChild("placeholder", (RectTransform)go.transform, typeof(Text));
-                var ph = phGo.GetComponent<Text>();
-                ph.fontSize = display.fontSize;
-                ph.alignment = display.alignment;
+                var phGo = NewChild("placeholder", (RectTransform)go.transform, typeof(TextField));
+                var ph = phGo.GetComponent<TextField>();
+                ph.fontSize = fontSize;
+                ph.alignment = alignment;
                 ph.ubb = true;
                 ph.text = prompt;
                 ph.raycastTarget = false;
-                var phRt = (RectTransform)phGo.transform;
-                phRt.anchorMin = Vector2.zero;
-                phRt.anchorMax = Vector2.one;
-                phRt.offsetMin = phRt.offsetMax = Vector2.zero;
+                StretchFull((RectTransform)phGo.transform);
                 field.placeholder = ph;
             }
 
-            go.AddComponent<InputText>().field = field;
+            go.AddComponent<TextInput>().field = field;
         }
 
-        private static void ConfigureText(Text text, Schema.Display element, Resource owner)
+        private static void StretchFull(RectTransform rt)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+        }
+
+        private static void ConfigureText(TextField text, Schema.Display element, Resource owner)
         {
             text.text = element.Text;
             text.fontSize = element.FontSize ?? Settings().fontSize;
@@ -1524,7 +1567,9 @@ namespace NanamiUI.Editor
                 text.ubb = true;
             }
             text.imageSprites = Regex.Matches(text.text, @"ui://\w+")
-                .Select(match => LoadSprite(match.Value, owner.PackageId))
+                .Select(match => TryResolve(match.Value, owner.PackageId, out var res)
+                    ? AssetDatabase.LoadAssetAtPath<Sprite>(SpritePath(res))
+                    : null) // 陈旧/非图片的内嵌 img 标签解析不到 → null 占位，不抛
                 .ToArray();
             var bold = element.Bold;
             var italic = element.Italic;
@@ -1734,8 +1779,8 @@ namespace NanamiUI.Editor
 
         private static string Identifier(string name)
         {
-            var id = new string(name.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray());
-            return char.IsDigit(id[0]) || Keywords.Contains(id) ? "_" + id : id;
+            var id = new string((name ?? "").Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray());
+            return id.Length == 0 || char.IsDigit(id[0]) || Keywords.Contains(id) ? "_" + id : id;
         }
 
         private static string Field(string name) => $"m_{Identifier(name)}";

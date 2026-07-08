@@ -34,7 +34,7 @@ namespace NanamiUI
         }
 
         // 运行时建矩形（复刻 GGraph.DrawRect）：Shape 的 Rect 网格已完全对齐 FairyGUI；按 order 插到正确兄弟位。
-        public static Shape CreateRect(RectTransform parent, Vector2 fairyXY, float w, float h, int lineSize, Color line, Color fill, int order)
+        public static Graph CreateRect(RectTransform parent, Vector2 fairyXY, float w, float h, int lineSize, Color line, Color fill, int order)
         {
             var go = new GameObject("graph", typeof(RectTransform), typeof(CanvasRenderer));
             var rt = (RectTransform)go.transform;
@@ -42,8 +42,8 @@ namespace NanamiUI
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
             rt.sizeDelta = new Vector2(w, h);
             rt.anchoredPosition = new Vector2(fairyXY.x, -fairyXY.y);
-            var shape = go.AddComponent<Shape>();
-            shape.kind = Shape.Kind.Rect;
+            var shape = go.AddComponent<Graph>();
+            shape.kind = Graph.Kind.Rect;
             shape.lineSize = lineSize;
             shape.lineColor = line;
             shape.color = fill;

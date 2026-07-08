@@ -11,7 +11,7 @@ namespace NanamiUI
     // 行高 = round(size*1.25)，基线 = round(size)，四周 2px gutter，对齐偏移取整，
     // 下划线取 "_" 字形中心 UV，行内图片基线 = 高度*0.8、占宽 = 宽度+2。
     // 支持 UBB（color/渐变/b/i/u/size/img）与 richtext 的 img/a 标签，以及位图字体。
-    public class Text : UnityEngine.UI.Text, IPointerClickHandler
+    public class TextField : UnityEngine.UI.Text, IPointerClickHandler
     {
         public static string defaultFont = "Arial";
 
@@ -174,14 +174,14 @@ namespace NanamiUI
             }
             foreach (var (image, position) in _placements)
             {
-                var go = new GameObject("img" + image, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                var go = new GameObject("img" + image, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
                 go.transform.SetParent(transform, false);
                 var rt = (RectTransform)go.transform;
                 rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
                 rt.anchoredPosition = new Vector2(position.x, -position.y);
                 var sprite = imageSprites[image];
                 rt.sizeDelta = sprite.rect.size;
-                var imageComponent = go.GetComponent<Image>();
+                var imageComponent = go.GetComponent<UnityEngine.UI.Image>();
                 imageComponent.sprite = sprite;
                 imageComponent.raycastTarget = false;
             }

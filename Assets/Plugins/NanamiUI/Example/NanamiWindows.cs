@@ -5,7 +5,7 @@ using UnityEngine;
 namespace NanamiUI.Example
 {
     // Demo 窗口（对标 Examples/Basics/Window1.cs）：居中显示。OnShown 本应填 6 项列表 "n6"，
-    // 但 GList 运行时未实现 → 暂留空（窗体/组合框/按钮照常显示，仅列表空）。
+    // 但 List 运行时未实现 → 暂留空（窗体/组合框/按钮照常显示，仅列表空）。
     public sealed class NanamiWindow1 : NanamiUI.Window
     {
         protected override void OnInit()
@@ -19,7 +19,7 @@ namespace NanamiUI.Example
             // 填 WindowA 里的列表（按 ListSource 找，不依赖名字）为 6 项（复刻 Window1.OnShown）。
             foreach (var src in go.GetComponentsInChildren<NanamiUI.ListSource>())
             {
-                NanamiUI.GList.Fill((RectTransform)src.transform, 6, (item, i) =>
+                NanamiUI.List.Fill((RectTransform)src.transform, 6, (item, i) =>
                 {
                     if (item.GetComponent<NanamiUI.ButtonBase>() is { } button)
                         button.Title = i.ToString();

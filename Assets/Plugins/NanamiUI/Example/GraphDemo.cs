@@ -12,13 +12,13 @@ namespace NanamiUI.Example
         {
             var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Graph");
 
-            var pie = (Shape)Field(demo, "m_pie");
+            var pie = (Graph)Field(demo, "m_pie");
             pie.startDegree = 30;
             pie.endDegree = 300;
             pie.SetVerticesDirty();
 
-            var trapezoid = (Shape)Field(demo, "m_trapezoid");
-            trapezoid.kind = Shape.Kind.Polygon;
+            var trapezoid = (Graph)Field(demo, "m_trapezoid");
+            trapezoid.kind = Graph.Kind.Polygon;
             trapezoid.usePercentPositions = true;
             trapezoid.lineSize = 0;
             trapezoid.points = new[] { new Vector2(0, 1), new Vector2(0.3f, 0), new Vector2(0.7f, 0), new Vector2(1, 1) };
@@ -39,7 +39,7 @@ namespace NanamiUI.Example
             line2.roundEdge = true;
             line2.SetPath(new[] { S(0, 120), S(60, 30), S(80, 90), S(140, 30), S(160, 90), S(220, 30) });
 
-            var line3src = (Image)Field(demo, "m_line3");
+            var line3src = (UnityEngine.UI.Image)Field(demo, "m_line3");
             var line3sprite = line3src.sprite; // 替换前取出，ReplaceWithLine 会销毁原 Image
             var line3 = ReplaceWithLine(line3src);
             line3.lineWidth = 30;

@@ -11,7 +11,7 @@ namespace NanamiUI
         public override void Apply(T page)
         {
             var index = Array.IndexOf(pages, page);
-            target.GetComponent<Text>().fontSize = index >= 0 ? values[index] : defaultValue;
+            target.GetComponent<TextField>().fontSize = index >= 0 ? values[index] : defaultValue;
         }
     }
 }

@@ -54,11 +54,11 @@ namespace NanamiUI.Example
 
         private void Awake()
         {
-            NanamiUI.Text.defaultFont = "Microsoft YaHei";
+            NanamiUI.TextField.defaultFont = "Microsoft YaHei";
             _main = Array.Find(GetComponents<NanamiUI.Component>(), component => component.GetType().FullName == "UI.Basics.Main");
             _mainType = _main.GetType();
             _container = ((UnityEngine.Component)Get("m_container")).transform;
-            NanamiUI.GRoot.Create((RectTransform)_main.transform); // 顶层覆盖层：承载 window/popup
+            NanamiUI.Root.Create((RectTransform)_main.transform); // 顶层覆盖层：承载 window/popup
 
             Bind("m_btn_Back", Back);
             foreach (var (name, field) in Buttons)
@@ -126,7 +126,7 @@ namespace NanamiUI.Example
                 var comp = ItemComp(item, "UI.Basics.GridItem");
                 SetText(comp, "m_t0", (i + 1).ToString());
                 SetText(comp, "m_t1", names[i]);
-                if (Get(comp, "m_t2") is NanamiUI.Text t2)
+                if (Get(comp, "m_t2") is NanamiUI.TextField t2)
                     t2.color = colors[UnityEngine.Random.Range(0, colors.Length)];
             });
             FillList((RectTransform)((UnityEngine.Component)Get(demo, "m_list2")).transform, gridItem2Prefab, names.Length, (item, i) =>
@@ -160,7 +160,7 @@ namespace NanamiUI.Example
 
         private static void SetText(object comp, string field, string value)
         {
-            if (Get(comp, field) is NanamiUI.Text text)
+            if (Get(comp, field) is NanamiUI.TextField text)
                 text.text = value;
         }
 
@@ -192,14 +192,14 @@ namespace NanamiUI.Example
         private void PlayText(GameObject go)
         {
             var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Text");
-            if (Get(demo, "m_n12") is NanamiUI.Text rich)
+            if (Get(demo, "m_n12") is NanamiUI.TextField rich)
                 rich.onClickLink = href =>
                     rich.text = $"[img]ui://Basics/pet[/img][color=#FF0000]You click the link[/color]：{href}";
             var n25 = (UnityEngine.Component)Get(demo, "m_n25");
             BindButton(n25, () =>
             {
-                var n22 = (NanamiUI.InputText)Get(demo, "m_n22"); // n22 是输入框
-                var n24 = (NanamiUI.Text)Get(demo, "m_n24");
+                var n22 = (NanamiUI.TextInput)Get(demo, "m_n22"); // n22 是输入框
+                var n24 = (NanamiUI.TextField)Get(demo, "m_n24");
                 n24.text = n22.text;
             });
         }
@@ -232,9 +232,9 @@ namespace NanamiUI.Example
                 if (_popupCom == null)
                 {
                     _popupCom = Instantiate(popupComPrefab);
-                    NanamiUI.GRoot.inst.Center((RectTransform)_popupCom.transform);
+                    NanamiUI.Root.inst.Center((RectTransform)_popupCom.transform);
                 }
-                NanamiUI.GRoot.inst.ShowPopup((RectTransform)_popupCom.transform);
+                NanamiUI.Root.inst.ShowPopup((RectTransform)_popupCom.transform);
             });
         }
 
@@ -243,7 +243,7 @@ namespace NanamiUI.Example
         {
             var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Depth");
             var container = (NanamiUI.Component)Get(demo, "m_n22");
-            var fixedShape = (NanamiUI.Shape)Get(container, "m_n0");
+            var fixedShape = (NanamiUI.Graph)Get(container, "m_n0");
             var containerRt = (RectTransform)((UnityEngine.Component)container).transform;
             var fixedRt = (RectTransform)fixedShape.transform;
             for (var i = containerRt.childCount - 1; i >= 0; i--)
@@ -318,9 +318,9 @@ namespace NanamiUI.Example
 
         private GameObject Placeholder(string name)
         {
-            var go = new GameObject("Demo_" + name, typeof(RectTransform), typeof(Text));
+            var go = new GameObject("Demo_" + name, typeof(RectTransform), typeof(TextField));
             go.transform.SetParent(_container, false);
-            var text = go.GetComponent<Text>();
+            var text = go.GetComponent<TextField>();
             text.text = "Not implemented: " + name;
             text.fontSize = 28;
             text.color = Color.white;

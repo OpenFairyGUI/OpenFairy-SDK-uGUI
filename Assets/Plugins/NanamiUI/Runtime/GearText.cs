@@ -12,7 +12,7 @@ namespace NanamiUI
         public override void Apply(T page)
         {
             var index = Array.IndexOf(pages, page);
-            target.GetComponentInChildren<Text>(true).text = index >= 0 ? values[index] : defaultValue;
+            target.GetComponentInChildren<TextField>(true).text = index >= 0 ? values[index] : defaultValue;
         }
     }
 }

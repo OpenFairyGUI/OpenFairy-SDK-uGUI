@@ -7,7 +7,7 @@ using UnityEngine.TestTools;
 
 namespace NanamiUI.Tests
 {
-    // GRoot 覆盖层 + PopupMenu + Window 的运行时机制回归。定位/居中/尺寸是分析精确值；交互直接调 handler（不经 raycast，
+    // Root 覆盖层 + PopupMenu + Window 的运行时机制回归。定位/居中/尺寸是分析精确值；交互直接调 handler（不经 raycast，
     // 因 golden rig 是 WorldSpace + 禁用相机，raycast 命中不可靠）。
     public class WindowPopupTests
     {
@@ -16,7 +16,7 @@ namespace NanamiUI.Tests
         private const string WindowAPrefab = "Assets/UIProject/Assets/Basics/WindowA.prefab";
 
         private NanamiPageRenderer _rig;
-        private GRoot _gr;
+        private Root _gr;
 
         private static GameObject Load(string path)
         {
@@ -39,7 +39,7 @@ namespace NanamiUI.Tests
             drt.anchorMin = drt.anchorMax = drt.pivot = new Vector2(0, 1);
             drt.sizeDelta = new Vector2(1136, 640);
             drt.anchoredPosition = Vector2.zero;
-            _gr = GRoot.Create(drt);
+            _gr = Root.Create(drt);
             yield return null;
         }
 
@@ -119,6 +119,90 @@ namespace NanamiUI.Tests
             close.onClick.Invoke();
             yield return null;
             Assert.IsFalse(win.Root.gameObject.activeSelf, "关闭后 window 应隐藏");
+        }
+
+        [UnityTest]
+        public IEnumerator Modal_window_shows_dim_layer_below_window_and_hides_on_close()
+        {
+            var win = new CenteringWindow { prefab = Load(WindowAPrefab), modal = true };
+            win.Show();
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+
+            Assert.IsTrue(_gr.HasModalWindow, "模态窗打开时应报告有模态窗");
+            var layer = FindDeep(_gr.rect, "ModalLayer");
+            Assert.IsNotNull(layer, "应创建模态层");
+            Assert.IsTrue(layer.gameObject.activeSelf, "模态层应激活");
+            Assert.Less(layer.GetSiblingIndex(), win.Root.GetSiblingIndex(), "模态层应铺在窗口之下");
+
+            win.HideImmediately();
+            yield return null;
+            Assert.IsFalse(_gr.HasModalWindow, "关窗后无模态窗");
+            Assert.IsFalse(layer.gameObject.activeSelf, "关窗后模态层应隐藏");
+        }
+
+        private const string ComboPopupPrefab = "Assets/UIProject/Assets/Basics/components/ComboBoxPopup.prefab";
+        private enum ComboPage { up, down, over, selectedOver }
+        private sealed class TestCombo : NanamiUI.ComboBox<ComboPage> { }
+
+        [UnityTest]
+        public IEnumerator ComboBox_dropdown_clips_to_visibleItemCount_and_scrolls()
+        {
+            var popup = Load(ComboPopupPrefab);
+            Assert.IsNotNull(popup, "需要已烘焙的 ComboBoxPopup 下拉");
+
+            // 长列表（15 项，可见 5）：下拉裁到 5 项高并挂 ScrollPane。
+            var combo = MakeCombo(15, 5);
+            combo.OnPointerClick(new PointerEventData(EventSystem.current));
+            yield return null;
+            var list = FindDeep(_gr.rect, "list");
+            Assert.IsNotNull(list, "应实例化下拉 list");
+            var source = list.GetComponent<ListSource>();
+            Assert.AreEqual(5 * source.itemSize.y, list.rect.height, 1f, "list 高应裁到 visibleItemCount*itemH");
+            Assert.IsNotNull(list.GetComponent<ScrollPane>(), "项数超可见数应挂 ScrollPane 以滚动");
+            _gr.HidePopup();
+            yield return null;
+
+            // 短列表（3 项，可见 5）：撑开显示全部，不挂 ScrollPane（与旧行为一致，golden 不受影响）。
+            var shortCombo = MakeCombo(3, 5);
+            shortCombo.OnPointerClick(new PointerEventData(EventSystem.current));
+            yield return null;
+            var list2 = FindDeep(_gr.rect, "list");
+            var source2 = list2.GetComponent<ListSource>();
+            Assert.AreEqual(3 * source2.itemSize.y, list2.rect.height, 1f, "短列表 list 高 = 项数*itemH");
+            Assert.IsNull(list2.GetComponent<ScrollPane>(), "未超可见数不应挂 ScrollPane");
+        }
+
+        private TestCombo MakeCombo(int itemCount, int visible)
+        {
+            var go = new GameObject("combo", typeof(RectTransform));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(_gr.rect, false);
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
+            rt.sizeDelta = new Vector2(150, 30);
+            rt.anchoredPosition = new Vector2(20, -20);
+            var combo = go.AddComponent<TestCombo>();
+            combo.dropdownPrefab = Load(ComboPopupPrefab);
+            combo.visibleItemCount = visible;
+            combo.items = new string[itemCount];
+            for (var i = 0; i < itemCount; i++)
+                combo.items[i] = "Item " + i;
+            return combo;
+        }
+
+        private static RectTransform FindDeep(Transform root, string name)
+        {
+            for (var i = 0; i < root.childCount; i++)
+            {
+                var c = root.GetChild(i);
+                if (!c.gameObject.activeSelf) // 跳过已收起的旧下拉，只找当前激活的
+                    continue;
+                if (c.name == name)
+                    return (RectTransform)c;
+                if (FindDeep(c, name) is { } found)
+                    return found;
+            }
+            return null;
         }
 
         private sealed class CenteringWindow : NanamiUI.Window

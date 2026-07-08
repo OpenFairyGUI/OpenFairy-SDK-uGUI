@@ -18,13 +18,13 @@ namespace NanamiUI.Tests
             canvasGo.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
             var raycaster = canvasGo.GetComponent<GraphicRaycaster>();
 
-            var textGo = new GameObject("T", typeof(RectTransform), typeof(CanvasRenderer), typeof(NanamiUI.Text));
+            var textGo = new GameObject("T", typeof(RectTransform), typeof(CanvasRenderer), typeof(NanamiUI.TextField));
             var trt = (RectTransform)textGo.transform;
             trt.SetParent(canvasGo.transform, false);
             trt.anchorMin = trt.anchorMax = trt.pivot = new Vector2(0, 1);
             trt.sizeDelta = new Vector2(300, 50);
             trt.anchoredPosition = new Vector2(50, -50);
-            var text = textGo.GetComponent<NanamiUI.Text>();
+            var text = textGo.GetComponent<NanamiUI.TextField>();
             text.html = true;
             text.fontSize = 24;
             text.text = "<a href='foo'>clickme</a>";

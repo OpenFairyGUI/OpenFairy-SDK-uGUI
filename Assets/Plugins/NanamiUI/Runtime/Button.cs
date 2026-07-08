@@ -12,7 +12,7 @@ namespace NanamiUI
         Radio,
     }
 
-    // 非泛型按钮基类：让 GRoot/Window/PopupMenu 不必知道 T 就能挂 onClick / 设 Title（复刻 FairyGUI GButton 面）。
+    // 非泛型按钮基类：让 Root/Window/PopupMenu 不必知道 T 就能挂 onClick / 设 Title（复刻 FairyGUI GButton 面）。
     // Selected/Mode 非泛型面用于 Radio 组互斥（同父兄弟间跨 T 取消选中）。
     public abstract class ButtonBase : Component
     {
@@ -25,7 +25,7 @@ namespace NanamiUI
     public abstract class Button<T> : ButtonBase, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler where T : struct, Enum
     {
         public Controller<T> controller;
-        public Text titleText;
+        public TextField titleText;
         public Loader iconLoader;
         public ButtonMode mode;
         public bool selected;

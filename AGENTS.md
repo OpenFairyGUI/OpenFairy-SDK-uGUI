@@ -27,7 +27,14 @@ NanamiUI 是基于 uGUI 的 FairyGUI Runtime SDK。目标是让用户继续用 F
 
 ## 代码结构
 
-- Runtime 基础组件尽量与 FairyGUI 的 `GObject` 子类 1:1 对应，例如 `Text`、`Button`、`Label`。不带 "G" 前缀
+- Runtime 控件命名 = 对应 FairyGUI 控件**精确去掉 `G` 前缀**：`Component`(GComponent)、`Button`(GButton)、`Label`(GLabel)、`ComboBox`(GComboBox)、`Slider`(GSlider)、`Loader`(GLoader)、`MovieClip`(GMovieClip)、`ProgressBar`(GProgressBar)、`TextField`(GTextField)、`TextInput`(GTextInput)、`Graph`(GGraph)、`Image`(GImage)、`List`(GList)、`Root`(GRoot)。历史遗留的 `GList`/`GRoot`/`Text`/`InputText`/`Shape`/`FlipImage` 已统一为 `List`/`Root`/`TextField`/`TextInput`/`Graph`/`Image`。
+  - `Line` 不是 FairyGUI 控件（GGraph 内含线绘制），是 Graph 演示用的内部折线渲染 helper，保留原名。`ButtonBase` 是 GButton 的非泛型面（复用其 onClick/Title），非 FairyGUI 类。
+  - `List` 与 `System.Collections.Generic.List<T>` 按泛型元数区分共存（`List.Fill` 是本类静态；`List<T>` 仍是 BCL 泛型），不冲突。
+  - `Image`(←GImage, `: UnityEngine.UI.Image`)、`TextField`(`: UnityEngine.UI.Text`) 与 uGUI 同基类同短名：NanamiUI 命名空间内**裸 `Image`/`Text` 指本类**，要引用 uGUI 基类须全限定 `UnityEngine.UI.Image`/`UnityEngine.UI.Text`（改名时已把所有裸 uGUI 用法全限定；`Image.Type`/`Image.FillMethod` 等静态访问也要限定）。`Run.Image`(int 字段)、`DisplayKind.Image`/`ResourceKind.Image`(enum) 不是类型引用，别误改。codegen 里 image 字段类型仍发 `UnityEngine.UI.Image`（`NanamiUI.Image` IS-A，GetComponent 取得到），故生成脚本不引用 `NanamiUI.Image`，改名不触发 codegen 死锁。
+  - `Root` 与 `Window.Root` 属性同名：`Window.cs` 里引用单例用全限定 `NanamiUI.Root.inst`。
+  - 重命名会引发 codegen 死锁坑：runtime 改名后，`Assets/UIProject/Scripts` 里**已生成**的组件脚本仍引用旧类型名 → Assembly-CSharp 编译失败 → 编辑器程序集(含 Migrate)无法重编译 → Migrate 跑的是**旧缓存程序集**，会把生成脚本再刷回旧名，死循环。解法：改名后先 `sed` 把生成脚本 + `Assets/Editor/NanamiUI`(BasicsRenderDiff 用 `using FairyGUI`，易漏) 里的旧类型名一并替换，再 `CompilationPipeline.RequestScriptCompilation(RequestScriptCompilationOptions.CleanBuildCache)` 强制干净重编译(普通 Refresh 不够，增量缓存会残留旧程序集)，确认 0 error 后再跑 Migrate(此时幂等)。
+  - `Root` 与 `Window.Root` 属性同名：`Window.cs` 里引用单例用全限定 `NanamiUI.Root.inst` 避开属性遮蔽。
+  - `NanamiUI.Editor` 里引用 FairyGUI 的同类须全限定 `FairyGUI.GRoot`/`FairyGUI.GList`（BasicsRenderDiff 已如此）；改名后 NanamiUI 侧是 `Root`/`List`，与 FairyGUI 的 `GRoot`/`GList` 不再同名，天然不遮蔽。
 - Runtime 组件是 `UIBehaviour` 子类；需要时可继承 uGUI 更具体的基类，以保持实现简单。
 - `Controller<T>` 是 `struct`，约束 `where T : struct, Enum`，不是 `MonoBehaviour`。
 - `Gear` 及子类不是 `MonoBehaviour`，按对应 controller enum 泛型化。
@@ -118,9 +125,55 @@ AI 操作流程：
 - 平铺图由 `FlipImage.OnPopulateMesh` 自己生成 tiled quad，以匹配 FairyGUI 从左上铺、残缺格落在右下的相位。
 - Runtime 类型移动程序集/命名空间会破坏 prefab 中 `[SerializeReference]` 的 gear 类型绑定；移动后必须重烘焙或迁移 serialized type。
 
+## 发布范围与取舍（AI 经验记录）
+
+本 SDK 走 **烘焙优先（bake-first）+ 复用 uGUI 原生**，不复刻 FairyGUI 的动态运行时对象模型。判定新需求是否要做时，先套下面的范围结论，别照搬 FairyGUI runtime API 清单。
+
+**明确不做（用户已定，别再问）**
+- Resource URL 加载、动态/异步资源加载：一律用 Unity 直接引用，`Loader`/`MovieClip` 的帧与内容都在 Migrate 期烘成 `Sprite`/prefab。
+- Runtime API 一致性：能用 Unity/uGUI 原生 API（`RectMask2D`、`CanvasGroup`、`InputField`、锚点拉伸…）就直接用，不为对齐 FairyGUI 签名造并列封装。
+
+**烘焙优先已覆盖、无需再造运行时组件**
+- 响应式/容器关联（relation to container）：已在 `Migrate.SetRect` 里映射成 uGUI 锚点（`anchorMin/Max` + 拉伸/居中/贴边），容器改尺寸时子物体自动重排。只有小数百分比锚点（FairyGUI `usePercent` 的分数位）未映射，各 demo 未用到。
+- `GGroup` 布局：子物体在烘焙期已绝对定位，组内相对布局在编辑器就解算完。组级 alpha/显隐用 `GearLook`/`GearDisplay` 逐 target 传播（`CanvasGroup`），不单造 runtime group。
+
+**FairyGUI 动态 runtime API：本版不实现（如需再评估）**
+- FairyGUI `GList` 的 selection / 虚拟化 / `AddItemFromPool` / `numItems`+`itemRenderer` 等：本版列表是 `List.Fill` 烘焙静态填充，够 demo 用。真要做动态列表再单开。
+- `GTree`/`TreeView`、`GObject.tooltips` 顶层浮层、`BlurFilter`、`TypingEffect` 逐字动画：无 demo 覆盖，未做。
+- Controller actions（`ChangePageAction`/`PlayTransitionAction`）与 Button `relatedController`（点按钮翻别的 controller 页，如 tab 栏）：**故意暂缓**。当前 controller 是「组件类里内嵌 enum + `Controller<该 enum>`」的静态强类型设计，跨组件按名翻页需要一个非泛型 controller 面或反射，和静态化原则冲突；若将来要做，应先设计非泛型 controller 面，别用字符串反射硬接。
+
+**本轮发布整改新增（已过 70/70）**
+- `ComboBox.selectedIndex` 改为属性：程序化赋值也刷新标题并发 `onChanged`；新增 `values[]`/`text`/`value`。下拉按 `visibleItemCount` 裁剪：项数超出时把 `list` 裁到可见高并 `ScrollPane.Attach` 支持滚动，未超出时撑开显示全部（短下拉与旧行为一致，golden 不受影响）。
+- `ScrollPane` 补全交互：鼠标滚轮（`IScrollHandler`）、滚动条 grip 拖动（`ScrollBarGrip`）、松手惯性衰减 + 越界橡皮筋回弹、`onScroll` 事件、`ScrollToView`。静态终态不受影响（无交互时内容静置在界内，`Update` 早退）。
+- `ProgressBar.TweenValue` 加 `Ease` 参数；`Slider` 加 `onGripTouchBegin/End`（仅按 grip 才发，点轨道不发）。
+- `MovieClip.SetFrame` 越界钳进有效帧范围，避免被 `ProgressBar` 等驱动到 100 帧时自播 `Update` 越界索引 `addDelays[frame]`。
+- `Window.modal` + `Root` 模态层：模态窗打开时铺半透明 `ModalLayer`（`modalColor`，可接收射线拦截下层），铺在最上层模态窗之下、其余内容之上；`Root.HasModalWindow` 查询。
+- `PopupMenu.AddItem` 改为返回项 `ButtonBase`（调用方直接设 grayed/勾选/Icon，不再逐个包 SetItemXxx）；加 `ClearItems`。
+- `InputText` 加 `password`/`maxLength`/`editable`/`onSubmit`，并由 Migrate 从 FairyGUI `password`/`maxLength` 属性烘焙。
+
+**转换器健壮性整改（对非 demo 的真实 FairyGUI 工程）**
+- 包名/空名进 C# 标识符前统一过 `Identifier`：`namespace UI.{包}`、跨包组件类型、`FindType` 三处都 sanitize，避免带空格/连字符/数字开头的包名（如 `My UI`/`2048`）生成不可编译代码。
+- list 的 `<item>` 不再假定是 button：`ConfigureButton` 找不到按钮面时跳过，支持 defaultItem 为普通 component/label 的列表。
+- gear 的 `pages` 引到控制器已删除的陈旧页 id 时跳过该槽（`Array.IndexOf==-1` 不再越界），对齐 transition 侧已有的 stale-target 防护。
+- `Image`/`RectTransform` 子物体字段类型改全限定（`UnityEngine.UI.Image`/`UnityEngine.RectTransform`），避免组件命名为 `Image`/`RectTransform` 时字段类型被外层类遮蔽。
+- 内嵌 `ui://` 图片标签用 `TryResolve`，陈旧引用留 null 占位不抛。
+
+**已知 codegen 约束（无法自动消解，命名时避免）**
+同一包内两个组件/控制器名若仅差标点或大小写折叠后相同（`Panel-A` 与 `Panel A`、`2p` 与 `_2p`），会折叠成同一 C# 标识符 → 重复类/枚举编译冲突。这是静态强类型 codegen 的固有边界；FairyGUI 工程里避免用仅靠标点区分的同名组件/控制器。
+
+**真跑才暴露的三个 bug + 测试教训（重要）**
+之前的 smoke 测试直接 `Invoke onClick` / 直接写 `.text`，绕过了真实输入路径，所以三个只在真跑时出现的问题一直没被发现。已补 `InteractionRuntimeTests`：经真实 `GraphicRaycaster` 命中 + `ExecuteEvents` 派发点击、要求命中落在目标子树内（能抓到"被背景穿透/遮挡"），并断言 MovieClip 真的在推进帧。改交互/转换后必须让这类真射线测试过。
+1. **MovieClip 渲染空白**：FairyGUI 编辑器工程里 movieclip 实例的显示标签用资源扩展名 `<jta>`（`.jta` 文件），不是 `<movieclip>`。反序列化的 `displayList` 没列 `jta` → 这些元素被整个丢弃，MovieClip 页几乎空白。修复：`FairyXml` 的 displayList 加 `[XmlArrayItem("jta")]`，并在 `Finish` 里把 `jta` 归一到 `movieclip` 类型。（同一 movieclip 在别的页用 `<movieclip>`、在 Demo_MovieClip 用 `<jta>`，两者都要认。）
+2. **Popup/Window 按钮点不动**：FairyGUI 按钮整块可点、与内部图形无关；但 uGUI 只有 raycastTarget 图形盖住的地方才收点击。用 Shape 描边画的按钮（如 Button1）中心没有 raycast 面，点击穿过按钮打到背景 graph（Main 的 n26 灰底），`hits=1` 只命中背景。修复：Migrate 给所有 button 组件根加一张透明(alpha=0，不改渲染)、raycastTarget 的 `Image` 铺满 rect，保证整块可点。静态 golden 不受影响（透明不渲染）。
+3. **Text 输入框不工作（点不动/不能编辑）**：根因**不是** Input System（uGUI `InputField` 在 `activeInputHandler=1` 新 Input System 下正常工作，保持 `1`；之前误判成要改 Both，已撤销）。真因是 **`NanamiUI.Text` 不该坐在 `InputField` 下面**：① `Text.OnEnable` 会执行 `raycastTarget = _onClickLink != null`，输入框的 `_onClickLink` 为 null → 运行时把烘焙的 `raycastTarget` 覆盖成 false → 它是 InputField 唯一的 targetGraphic → `GraphicRaycaster` 跳过 → 永远无法聚焦；② 它自绘 `OnPopulateMesh`（`vh.Clear()` + 自画 quad）不填 `cachedTextGenerator` → InputField 光标/选区定位失效，且空文本时无网格 → 该图形 `depth==-1` 连射线面都没有。修复：`Migrate.ConfigureInput` 改用原生结构——根上加一张透明常驻 `Image` 作 `targetGraphic`（稳定射线面），加一个普通 `UnityEngine.UI.Text` 子物体作 `textComponent`（原生渲染 + 填 generator，`LegacyRuntime.ttf` 内置可序列化字体）；prompt 仍用 `NanamiUI.Text`（非命中面、复刻 UBB 斜体灰）。输入框不追求字体排版一致（项目允许）；空文本静置显示的是 placeholder，故静态 Text golden 不受影响。真射线聚焦测试见 `InteractionRuntimeTests.TextInput_field_is_editable_and_readable`。
+   - 坑：`Migrate` 里 `Resources` 是本类的资源字典字段，要用内置 `UnityEngine.Resources.GetBuiltinResource<Font>(...)` 必须全限定，否则撞名编译错。
+
+**踩坑：别给烘焙的 scrollbar grip AddComponent 一个 `Graphic`**
+给已有 CanvasRenderer 的 grip 再加 `Graphic` 子类（当时想做无图形 grip 的射线面）会破坏 grip 的 CanvasRenderer 状态，`MainNavigation` 里 Main 页含滚动列表 → 整页场景污染 → 14 个导航 case 连锁失败。结论：`ScrollBarGrip.Bind` 只接**已带 `Graphic`** 的 grip（烘焙的可见 grip 都带 Image），绝不 AddComponent。改 runtime 交互后必跑 `Run PlayMode Tests`。
+
 ## 当前已知边界
 
 - Popup/ComboBox 外点关闭使用透明 blocker，表现为模态；这是为了避开新 Input System 下旧 `UnityEngine.Input` 的异常。
-- `ScrollPane` 只实现拖动滚动，无惯性、回弹、虚拟化。
-- ComboBox 下拉当前撑开显示全部项，未按 `visibleItemCount` 裁剪滚动；无 button 控制器的 Dropdown 变体不接下拉。
+- `ScrollPane` 拖动/滚轮/滚动条 grip 拖动/惯性回弹已支持；仍无虚拟化、无分页吸附、无下拉刷新。
+- ComboBox 下拉已按 `visibleItemCount` 裁剪滚动；无 button 控制器的 Dropdown 变体不接下拉。
 - Grid demo 主要填可见文本，star/cb/mc 细节从简。

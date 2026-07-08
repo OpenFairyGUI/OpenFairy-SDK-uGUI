@@ -52,7 +52,7 @@ namespace NanamiUI.TestSupport
                     w = xMax - xMin,
                     h = yTop - yBottom,
                     active = node.gameObject.activeSelf, // 对应 FairyGUI 的本地 visible 语义（非 activeInHierarchy）
-                    text = (node.GetComponent<Text>() is { } t) ? t.text : "",
+                    text = (node.GetComponent<TextField>() is { } t) ? t.text : "",
                 });
             }
             for (var i = 0; i < node.childCount; i++)

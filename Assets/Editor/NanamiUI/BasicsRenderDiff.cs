@@ -133,7 +133,7 @@ namespace NanamiUI.Editor
             Time.timeScale = 1;
             Time.captureDeltaTime = FixedDeltaTime; // 两侧动效同步的关键：锁定每帧步进量
             UIConfig.defaultFont = "Microsoft YaHei";
-            NanamiUI.Text.defaultFont = "Microsoft YaHei";
+            NanamiUI.TextField.defaultFont = "Microsoft YaHei";
             // 复刻 BasicsMain 的配置：FairyGUI 只有在这里配了滚动条资源才会创建滚动条。
             // 不配则 FairyGUI 侧无滚动条、viewport 用满宽，与已烤进滚动条的 NanamiUI 产物产生假 diff。
             UIConfig.verticalScrollBar = "ui://Basics/ScrollBar_VT";
@@ -356,7 +356,7 @@ namespace NanamiUI.Editor
             rt.localScale = Vector3.one;
             if (page.Component == "Main")
                 _nanamiInstance.transform.Find("btn_Back").gameObject.SetActive(true);
-            foreach (var text in _nanamiInstance.GetComponentsInChildren<NanamiUI.Text>(true))
+            foreach (var text in _nanamiInstance.GetComponentsInChildren<NanamiUI.TextField>(true))
                 text.WarmUp();
             _nanamiInstance.GetComponents<Transition>().FirstOrDefault(transition => transition.transitionName == "t0")?.Play();
             _nanamiGraphLine = page.Component == "Demo_Graph"

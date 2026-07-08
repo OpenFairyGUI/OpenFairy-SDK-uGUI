@@ -6,7 +6,7 @@ namespace NanamiUI
     // 复刻 FairyGUI GLabel：带标题文本（可选图标）的组件，供用户代码 label.Title 收发。
     public class Label : Component
     {
-        public Text titleText;
+        public TextField titleText;
         public Loader iconLoader;
 
         public string Title

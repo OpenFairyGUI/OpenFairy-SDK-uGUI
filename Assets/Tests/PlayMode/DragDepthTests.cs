@@ -33,7 +33,7 @@ namespace NanamiUI.Tests
         private RectTransform Child(RectTransform parent, string name, Vector2 fairyXY, Vector2 size, bool graphic)
         {
             var go = graphic
-                ? new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image))
+                ? new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image))
                 : new GameObject(name, typeof(RectTransform));
             var rt = (RectTransform)go.transform;
             rt.SetParent(parent, false);

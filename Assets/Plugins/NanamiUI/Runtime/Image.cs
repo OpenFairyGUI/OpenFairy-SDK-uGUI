@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace NanamiUI
 {
-    public class FlipImage : Image
+    public class Image : UnityEngine.UI.Image
     {
         public bool flipX;
         public bool flipY;

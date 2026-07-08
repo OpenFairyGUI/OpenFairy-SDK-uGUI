@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace NanamiUI
 {
-    public class Slider : Component, IPointerDownHandler, IDragHandler
+    public class Slider : Component, IPointerDownHandler, IDragHandler, IPointerUpHandler
     {
         public float value = 50;
         public float max = 100;
@@ -13,13 +13,15 @@ namespace NanamiUI
         public bool wholeNumbers;
         public bool changeOnClick = true; // FairyGUI GSlider 默认 true：点 bar 直接跳值；点 grip 则相对拖动、不跳
         public ProgressTitleType titleType;
-        public Text title;
+        public TextField title;
         public RectTransform bar;
         public RectTransform barV;
         public RectTransform grip;
         public float barMaxWidthDelta;
         public float barMaxHeightDelta;
         public UnityEvent onChanged = new();
+        public UnityEvent onGripTouchBegin = new(); // 复刻 GSlider.onGripTouchBegin/End
+        public UnityEvent onGripTouchEnd = new();
 
         private bool _gripDrag;
         private Vector2 _clickPoint;
@@ -29,13 +31,7 @@ namespace NanamiUI
         {
             var percent = Mathf.Clamp01((value - min) / (max - min));
             if (title != null)
-                title.text = titleType switch
-                {
-                    ProgressTitleType.Percent => Mathf.FloorToInt(percent * 100) + "%",
-                    ProgressTitleType.ValueAndMax => Mathf.Round(value) + "/" + Mathf.Round(max),
-                    ProgressTitleType.Value => "" + Mathf.Round(value),
-                    _ => "" + Mathf.Round(max),
-                };
+                title.text = ProgressTitle.Format(titleType, value, min, max);
 
             var rect = ((RectTransform)transform).rect;
             if (bar != null)
@@ -52,9 +48,16 @@ namespace NanamiUI
             {
                 _clickPoint = point;
                 _clickPercent = Mathf.Clamp01((value - min) / (max - min));
+                onGripTouchBegin.Invoke(); // 复刻 FairyGUI：仅按到 grip 才发，点轨道不发
             }
             else if (changeOnClick)
                 UpdateFromPoint(point);
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            if (_gripDrag)
+                onGripTouchEnd.Invoke();
         }
 
         public void OnDrag(PointerEventData eventData)
