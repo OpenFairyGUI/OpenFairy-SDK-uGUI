@@ -32,14 +32,22 @@ namespace NanamiUI
             if (_dropdown == null)
                 Build();
             if (_dropdownRt != null)
-                GRoot.inst.ShowPopup(_dropdownRt, (RectTransform)transform, PopupDirection.Down);
+            {
+                if (Enum.TryParse<T>("down", out var down)) // 打开时按钮进 down 态（复刻 GComboBox）
+                    controller.page = down;
+                GRoot.inst.ShowPopup(_dropdownRt, (RectTransform)transform, PopupDirection.Down, RefreshState); // 关闭（含外点）恢复态
+            }
         }
 
         private void Build()
         {
-            _dropdown = Instantiate(dropdownPrefab);
-            if (_dropdown.transform.Find("list") is not RectTransform list || list.GetComponent<ListSource>() == null)
-                return; // 下拉资源结构不符（无 list/ListSource），不弹
+            var dropdown = Instantiate(dropdownPrefab);
+            if (dropdown.transform.Find("list") is not RectTransform list || list.GetComponent<ListSource>() == null)
+            {
+                Destroy(dropdown); // 下拉资源结构不符（无 list/ListSource），销毁实例、留待下次重试
+                return;
+            }
+            _dropdown = dropdown;
             _dropdownRt = (RectTransform)_dropdown.transform;
             var source = list.GetComponent<ListSource>();
             GList.Fill(list, items.Length, (itemGo, i) =>

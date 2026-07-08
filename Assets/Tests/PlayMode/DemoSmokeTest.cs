@@ -97,11 +97,12 @@ namespace NanamiUI.Tests
             yield return null;
             var demo = Comp("UI.Basics.Demo_Text");
             Assert.IsNotNull(demo);
-            var n22 = (NanamiUI.Text)Field(demo, "m_n22");
+            var n22 = (NanamiUI.InputText)Field(demo, "m_n22"); // n22 是可编辑输入框
             var n24 = (NanamiUI.Text)Field(demo, "m_n24");
+            n22.text = "Alice"; // 模拟用户输入姓名
             Click(Field(demo, "m_n25")); // 拷 n22 → n24
             yield return null;
-            Assert.AreEqual(n22.text, n24.text, "点 n25 应把 n22 文本拷到 n24");
+            Assert.AreEqual("Alice", n24.text, "点 n25 应把输入框文本拷到 n24（验证 InputText 读写 + 拷贝）");
         }
 
         [UnityTest]
@@ -122,7 +123,9 @@ namespace NanamiUI.Tests
             pane.OnBeginDrag(At(Screen(center)));
             pane.OnDrag(At(Screen(center + new Vector3(0, 60, 0)))); // 向上拖露出下方内容
             yield return null;
-            Assert.GreaterOrEqual(content.anchoredPosition.y, y0, "向上拖后 content.y 应 >= 起始（可滚动则增大，clamp 有效）");
+            var moved = content.anchoredPosition.y - y0;
+            Assert.Greater(moved, 0.5f, "向上拖后 content 应实际上移（非 no-op），说明拖动真正生效");
+            Assert.LessOrEqual(moved, 61f, "移动量不应超过拖动距离 60px");
         }
 
         [UnityTest]

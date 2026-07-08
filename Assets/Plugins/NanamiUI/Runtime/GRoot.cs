@@ -22,6 +22,7 @@ namespace NanamiUI
 
         public RectTransform rect;
         private readonly List<RectTransform> _popups = new();
+        private readonly Dictionary<RectTransform, System.Action> _onClose = new();
         private readonly List<Window> _windows = new();
         private GameObject _blocker;
 
@@ -72,7 +73,7 @@ namespace NanamiUI
             }
         }
 
-        public void ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
+        public void ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto, System.Action onClose = null)
         {
             if (_popups.Contains(popup))
                 HidePopup(popup); // 去重：已在栈里则先收起该 popup 以上
@@ -83,6 +84,8 @@ namespace NanamiUI
             _blocker.transform.SetAsLastSibling();
             popup.SetAsLastSibling(); // popup 在 blocker 之上
             _popups.Add(popup);
+            if (onClose != null)
+                _onClose[popup] = onClose;
 
             var pos = GetPopupPosition(popup, target, dir); // 设计坐标（y-down）
             popup.anchorMin = popup.anchorMax = popup.pivot = new Vector2(0, 1);
@@ -106,6 +109,8 @@ namespace NanamiUI
             for (var i = _popups.Count - 1; i >= from; i--)
             {
                 _popups[i].gameObject.SetActive(false);
+                if (_onClose.Remove(_popups[i], out var onClose))
+                    onClose();
                 _popups.RemoveAt(i);
             }
             if (_popups.Count == 0 && _blocker != null)
@@ -160,12 +165,13 @@ namespace NanamiUI
             return new Vector2(Mathf.Round(xx), Mathf.Round(yy));
         }
 
+        private readonly Vector3[] _corners = new Vector3[4];
+
         // 节点左上角在 GRoot 设计坐标（y-down）里的位置。
         public Vector2 RootTopLeft(RectTransform node)
         {
-            var corners = new Vector3[4];
-            node.GetWorldCorners(corners); // [1] = top-left（world）
-            var local = rect.InverseTransformPoint(corners[1]); // GRoot 局部（pivot 0,1 → 原点在左上、y 向上）
+            node.GetWorldCorners(_corners); // [1] = top-left（world）
+            var local = rect.InverseTransformPoint(_corners[1]); // GRoot 局部（pivot 0,1 → 原点在左上、y 向上）
             return new Vector2(local.x, -local.y);
         }
 

@@ -23,6 +23,7 @@ namespace NanamiUI
         Shake,
         ColorFilter,
         Text,
+        Skew,
     }
 
     [Serializable]
@@ -63,6 +64,7 @@ namespace NanamiUI
 
         private bool _playing;
         private bool _smoothStart;
+        private bool _reversed;
         private float _time;
         private int _remainingTimes;
         private Action _onComplete;
@@ -75,7 +77,20 @@ namespace NanamiUI
                 Play(autoPlayTimes, autoPlayDelay);
         }
 
+        // 倒放（复刻 FairyGUI PlayReverse）：时间轴翻转，各 item 由末态回到起态。用于窗口关闭等"进场倒放"。
+        public void PlayReverse(int times = 1, float delay = 0, Action onComplete = null)
+        {
+            _reversed = true;
+            PlayFrom(times, delay, onComplete);
+        }
+
         public void Play(int times = 1, float delay = 0, Action onComplete = null)
+        {
+            _reversed = false;
+            PlayFrom(times, delay, onComplete);
+        }
+
+        private void PlayFrom(int times, float delay, Action onComplete)
         {
             _playing = true;
             _smoothStart = true;
@@ -124,8 +139,11 @@ namespace NanamiUI
             if (_time < 0)
                 return;
 
+            // 倒放：把全局时间沿时间轴翻转，各 item 收到递减的 local，从末态求值回到起态。
+            // 钳到 ≥0，保证收尾时 time=0 的 item 落在 local=0（= start 值），而非负 local 被提前 return 卡在中途。
+            var effectiveTime = _reversed ? Mathf.Max(0, _totalDuration - _time) : _time;
             foreach (var item in items)
-                Evaluate(item, _time - item.time);
+                Evaluate(item, effectiveTime - item.time);
 
             if (_hasInfinite || _time < _totalDuration)
                 return;
@@ -236,7 +254,7 @@ namespace NanamiUI
                         AudioSource.PlayClipAtPoint(item.sound, Vector3.zero);
                     break;
                 case TransitionItemType.Nested:
-                    GetComponents<Transition>().First(transition => transition.transitionName == item.stringValue).Play();
+                    Target(item).GetComponents<Transition>().First(transition => transition.transitionName == item.stringValue).Play();
                     break;
                 case TransitionItemType.Pivot:
                 {
@@ -282,6 +300,13 @@ namespace NanamiUI
                 case TransitionItemType.Rotation:
                     rt.localEulerAngles = new Vector3(0, 0, -value[0]);
                     break;
+                case TransitionItemType.Skew:
+                    if (rt.GetComponent<Shape>() is { } skewShape) // 目前仅 Shape 支持逐顶点 skew
+                    {
+                        skewShape.skew = new Vector2(value[0], value[1]);
+                        skewShape.SetVerticesDirty();
+                    }
+                    break;
                 case TransitionItemType.Color:
                     rt.GetComponent<Graphic>().color = new Color(value[0], value[1], value[2], value.Length > 3 ? value[3] : 1);
                     break;
@@ -317,6 +342,7 @@ namespace NanamiUI
                 TransitionItemType.Scale => index == 0 ? rt.localScale.x : rt.localScale.y,
                 TransitionItemType.Alpha => rt.GetComponent<CanvasGroup>() is { } group ? group.alpha : 1,
                 TransitionItemType.Rotation => -rt.localEulerAngles.z,
+                TransitionItemType.Skew => rt.GetComponent<Shape>() is { } shape ? (index == 0 ? shape.skew.x : shape.skew.y) : 0,
                 _ => 0,
             };
         }

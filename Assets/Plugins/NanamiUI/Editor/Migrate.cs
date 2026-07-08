@@ -180,8 +180,10 @@ namespace NanamiUI.Editor
             if (xml.ComboBox?.Dropdown is { } dropdown
                 && TryResolve(dropdown, component.PackageId, out var dropdownRes) && dropdownRes.Type == Schema.ResourceKind.Component)
                 Collect(dropdownRes, components, images);
-            // 覆盖 icon 属性、富文本内嵌图、动效 Sound 之外的一切 ui:// 引用
-            foreach (Match match in Regex.Matches(File.ReadAllText(component.File), @"ui://\w+"))
+            // 覆盖 icon 属性、富文本内嵌图、动效 Sound 之外的一切 ui:// 引用。
+            // 编辑器源 XML 里的引用一律是 hex id（ui://<pkgId><itemId>）；命名引用（ui://Pkg/Name）只出现在运行时代码、这里读不到。
+            // token 用 [\w/] 兜住命名形式的完整串（TryResolve 解析不到就跳过），避免在 '/' 处截断成错误的部分匹配。
+            foreach (Match match in Regex.Matches(File.ReadAllText(component.File), @"ui://[\w/]+"))
                 if (TryResolve(match.Value, component.PackageId, out var embedded) && embedded.Type is Schema.ResourceKind.Image or Schema.ResourceKind.MovieClip)
                     images.Add(embedded);
             components.Add(component);
@@ -339,9 +341,10 @@ namespace NanamiUI.Editor
                     fields.Add($"        public {fieldType} {Field(fieldName)};");
             }
 
-            // FairyGUI 允许 Button 组件没有 button 控制器（如 BagGridSub2），补一个占位 enum。
-            // ComboBox 无控制器时退化为 Component（见 baseType），不生成占位——避免与"button"子节点字段撞名（Dropdown）。
-            if (xml.Extension == Schema.ComponentExtension.Button && xml.Controllers.Length == 0 && used.Add(Field("button")))
+            // FairyGUI 的 GButton/GComboBox 状态控制器固定名为 "button"（GetController("button")），不靠位置。
+            // Button 组件没有名为 button 的控制器（如 BagGridSub2）时补一个占位 enum。
+            // ComboBox 无 button 控制器时退化为 Component（见 baseType），不生成占位——避免与"button"子节点字段撞名（Dropdown）。
+            if (xml.Extension == Schema.ComponentExtension.Button && !xml.Controllers.Any(c => c.Name == "button") && used.Add(Field("button")))
                 fields.InsertRange(0, new[]
                 {
                     "        public enum button",
@@ -351,11 +354,12 @@ namespace NanamiUI.Editor
                 });
             var baseType = xml.Extension switch
             {
-                Schema.ComponentExtension.Button => $"NanamiUI.Button<{name}.{(xml.Controllers.FirstOrDefault() is { } buttonController ? Identifier(buttonController.Name) : "button")}>",
+                Schema.ComponentExtension.Button => $"NanamiUI.Button<{name}.{(xml.Controllers.FirstOrDefault(c => c.Name == "button") is { } buttonController ? Identifier(buttonController.Name) : "button")}>",
                 // 有 button 控制器才做成 ComboBox<T>（复用其视觉态 + 下拉）；无控制器（如 Dropdown）退化为 Component。
-                Schema.ComponentExtension.ComboBox when xml.Controllers.FirstOrDefault() is { } comboController => $"NanamiUI.ComboBox<{name}.{Identifier(comboController.Name)}>",
+                Schema.ComponentExtension.ComboBox when xml.Controllers.FirstOrDefault(c => c.Name == "button") is { } comboController => $"NanamiUI.ComboBox<{name}.{Identifier(comboController.Name)}>",
                 Schema.ComponentExtension.ProgressBar => "NanamiUI.ProgressBar",
                 Schema.ComponentExtension.Slider => "NanamiUI.Slider",
+                Schema.ComponentExtension.Label => "NanamiUI.Label",
                 _ => "NanamiUI.Component",
             };
             var code = new StringBuilder();
@@ -399,7 +403,7 @@ namespace NanamiUI.Editor
         {
             Schema.DisplayKind.Image => "Image",
             Schema.DisplayKind.Graph => "NanamiUI.Shape",
-            Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText => "NanamiUI.Text",
+            Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText => child.Input ? "NanamiUI.InputText" : "NanamiUI.Text",
             Schema.DisplayKind.Loader => "NanamiUI.Loader",
             Schema.DisplayKind.Component when TryResolve(child.Source, packageId, out var dep) =>
                 $"UI.{dep.Package}.{Identifier(Path.GetFileNameWithoutExtension(dep.File))}",
@@ -504,6 +508,11 @@ namespace NanamiUI.Editor
                     SetupProgressBar(progressBar, xml, children, root);
                 else if (comp is Slider slider)
                     SetupSlider(slider, xml, children, root);
+                else if (comp is Label label)
+                {
+                    label.titleText = Child(children, "title")?.GetComponent<Text>();
+                    label.iconLoader = Child(children, "icon")?.GetComponent<Loader>();
+                }
 
                 var byName = new Dictionary<string, GameObject>();
                 foreach (var (element, go) in children)
@@ -581,6 +590,8 @@ namespace NanamiUI.Editor
                         effect.color = ParseColor(shadow);
                         effect.offset = element.ShadowOffset ?? new Vector2(1, 1);
                     }
+                    if (element.Input)
+                        ConfigureInput(go, textComponent, element);
                     break;
                 }
                 case Schema.DisplayKind.Loader:
@@ -663,6 +674,8 @@ namespace NanamiUI.Editor
                     Schema.GearKind.Look => typeof(GearLook<>),
                     Schema.GearKind.Ani => typeof(GearAni<>),
                     Schema.GearKind.FontSize => typeof(GearFontSize<>),
+                    Schema.GearKind.Text => typeof(GearText<>),
+                    Schema.GearKind.Icon => typeof(GearIcon<>),
                     _ => typeof(GearSize<>),
                 }).MakeGenericType(controller.PageType);
                 var gear = Activator.CreateInstance(gearType);
@@ -705,6 +718,18 @@ namespace NanamiUI.Editor
                 {
                     var def = gearXml.Default is { } value ? int.Parse(value) : go.GetComponent<Text>().fontSize;
                     gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : int.Parse(value)).ToArray());
+                    gearType.GetField("defaultValue").SetValue(gear, def);
+                }
+                else if (kind == Schema.GearKind.Text)
+                {
+                    var def = gearXml.Default ?? go.GetComponentInChildren<Text>(true).text;
+                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : value).ToArray());
+                    gearType.GetField("defaultValue").SetValue(gear, def);
+                }
+                else if (kind == Schema.GearKind.Icon)
+                {
+                    var def = gearXml.Default is { } value ? LoadSprite(value, owner.PackageId) : null;
+                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : LoadSprite(value, owner.PackageId)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
                 else if (kind == Schema.GearKind.Display)
@@ -1315,6 +1340,7 @@ namespace NanamiUI.Editor
             "Shake" => TransitionItemType.Shake,
             "ColorFilter" => TransitionItemType.ColorFilter,
             "Text" => TransitionItemType.Text,
+            "Skew" => TransitionItemType.Skew,
             _ => null,
         };
 
@@ -1349,6 +1375,8 @@ namespace NanamiUI.Editor
             if (value == "Linear")
                 return Ease.Linear;
             var parts = value.Split('.');
+            if (parts.Length < 2) // "Custom"（编辑器自绘曲线）等单段值 DOTween 无对应，回退
+                return Ease.OutQuad;
             return (Ease)Enum.Parse(typeof(Ease), parts[1] + parts[0]);
         }
 
@@ -1447,11 +1475,44 @@ namespace NanamiUI.Editor
                 rt.localScale = new Vector3(scale.x, scale.y, 1);
         }
 
+        // 把一个已配置好的显示 Text 升级为可编辑输入框（复刻 FairyGUI GTextInput）：加 uGUI InputField，
+        // 显示 Text 作 textComponent，prompt 另建一个 placeholder Text（空时显示）。
+        private static void ConfigureInput(GameObject go, Text display, Schema.Display element)
+        {
+            display.text = element.Text; // 撤销 ConfigureText 把 prompt 塞进显示文本；prompt 改做 placeholder
+            display.raycastTarget = true;
+
+            var field = go.AddComponent<InputField>();
+            field.textComponent = display;
+            field.targetGraphic = display;
+            field.text = element.Text;
+            field.lineType = element.SingleLine ? InputField.LineType.SingleLine : InputField.LineType.MultiLineNewline;
+
+            if (element.Prompt is { } prompt)
+            {
+                var phGo = NewChild("placeholder", (RectTransform)go.transform, typeof(Text));
+                var ph = phGo.GetComponent<Text>();
+                ph.fontSize = display.fontSize;
+                ph.alignment = display.alignment;
+                ph.ubb = true;
+                ph.text = prompt;
+                ph.raycastTarget = false;
+                var phRt = (RectTransform)phGo.transform;
+                phRt.anchorMin = Vector2.zero;
+                phRt.anchorMax = Vector2.one;
+                phRt.offsetMin = phRt.offsetMax = Vector2.zero;
+                field.placeholder = ph;
+            }
+
+            go.AddComponent<InputText>().field = field;
+        }
+
         private static void ConfigureText(Text text, Schema.Display element, Resource owner)
         {
             text.text = element.Text;
             text.fontSize = element.FontSize ?? Settings().fontSize;
             text.leading = element.Leading;
+            text.letterSpacing = element.LetterSpacing;
             text.color = ParseColor(element.Color ?? Settings().textColor);
             text.supportRichText = false;
             text.html = element.Kind == Schema.DisplayKind.RichText;
@@ -1618,8 +1679,16 @@ namespace NanamiUI.Editor
 
         private static IEnumerable<(string Id, string Member)> PageMembers(Schema.Controller controller)
         {
+            // 两个页名经 Identifier 折叠后可能相同（如 "my page" 与 "my-page"），去重避免枚举成员重名编译失败。
+            var used = new HashSet<string>();
             foreach (var (id, name) in controller.Pages)
-                yield return (id, Identifier(name == "" ? id : name));
+            {
+                var member = Identifier(name == "" ? id : name);
+                var unique = member;
+                for (var i = 2; !used.Add(unique); i++)
+                    unique = $"{member}_{i}";
+                yield return (id, unique);
+            }
         }
 
         private static GameObject NewChild(string name, RectTransform parent, params Type[] components)

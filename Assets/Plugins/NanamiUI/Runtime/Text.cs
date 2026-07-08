@@ -17,6 +17,7 @@ namespace NanamiUI
 
         public string fontNames;
         public int leading = 3;
+        public int letterSpacing;
         public bool ubb;
         public bool html;
         public bool underlined;
@@ -75,6 +76,25 @@ namespace NanamiUI
                 }
         }
 
+        // 从标签串里取属性值，支持带引号或裸值（如 font color='#fff' size=20）。
+        private static string AttrValue(string tag, string name)
+        {
+            var idx = tag.IndexOf(name + "=", StringComparison.Ordinal);
+            if (idx < 0)
+                return null;
+            var start = idx + name.Length + 1;
+            if (start < tag.Length && (tag[start] == '\'' || tag[start] == '"'))
+            {
+                var quote = tag[start];
+                var end = tag.IndexOf(quote, start + 1);
+                return end > start ? tag[(start + 1)..end] : null;
+            }
+            var stop = start;
+            while (stop < tag.Length && tag[stop] != ' ')
+                stop++;
+            return tag[start..stop];
+        }
+
         private static string ParseHref(string tag)
         {
             var idx = tag.IndexOf("href", StringComparison.Ordinal);
@@ -126,7 +146,12 @@ namespace NanamiUI
         {
             if (bitmapFont != null || font == null)
                 return;
-            foreach (var run in Parse())
+            RequestChars(Parse());
+        }
+
+        private void RequestChars(List<Run> runs)
+        {
+            foreach (var run in runs)
                 if (run.Text != null)
                     font.RequestCharactersInTexture(run.Text, run.Size, run.Style);
             font.RequestCharactersInTexture("_", 50, FontStyle.Normal);
@@ -169,9 +194,11 @@ namespace NanamiUI
             var runs = new List<Run>();
             var current = new Run { Size = fontSize, Style = fontStyle, Underline = underlined, Image = -1 };
             SetColors(ref current, new[] { (Color32)color });
+            // 复刻 FairyGUI ParseText：归一 \r\n → \n，制表符按 4 空格宽展开。
+            var source = (text ?? "").Replace("\r\n", "\n").Replace("\r", "\n").Replace("\t", "    ");
             if (!ubb && !html)
             {
-                current.Text = text ?? "";
+                current.Text = source;
                 runs.Add(current);
                 return runs;
             }
@@ -190,7 +217,7 @@ namespace NanamiUI
                 buffer.Clear();
             }
 
-            var value = text ?? "";
+            var value = source;
             for (var i = 0; i < value.Length; i++)
             {
                 var ch = value[i];
@@ -231,12 +258,31 @@ namespace NanamiUI
                         current.Underline = true;
                         current.Href = ParseHref(tag);
                     }
-                    else if (tag.StartsWith("/a"))
+                    else if (tag.StartsWith("font"))
+                    {
+                        Flush();
+                        stack.Push(current);
+                        if (AttrValue(tag, "color") is { } col)
+                            SetColors(ref current, new[] { ParseColor(col) });
+                        if (AttrValue(tag, "size") is { } sz && int.TryParse(sz, out var size))
+                            current.Size = size;
+                    }
+                    else if (tag is "b" or "i" or "u")
+                    {
+                        Flush();
+                        stack.Push(current);
+                        if (tag == "b") current.Style |= FontStyle.Bold;
+                        else if (tag == "i") current.Style |= FontStyle.Italic;
+                        else current.Underline = true;
+                    }
+                    else if (tag is "/a" or "/font" or "/b" or "/i" or "/u")
                     {
                         Flush();
                         if (stack.Count > 0)
                             current = stack.Pop();
                     }
+                    else if (tag is "br" or "br/")
+                        buffer.Append('\n');
                     i = end;
                 }
                 else
@@ -268,10 +314,21 @@ namespace NanamiUI
                 case "/u":
                 case "/size":
                 case "/color":
+                case "/url":
                     flush();
                     if (stack.Count > 0)
                         current = stack.Pop();
                     return true;
+            }
+            if (tag.StartsWith("url"))
+            {
+                // [url=href] 超链接（复刻 UBBParser）：默认样式 #3A67CC + 下划线，命中回调同 <a>。
+                flush();
+                stack.Push(current);
+                SetColors(ref current, new[] { new Color32(0x3A, 0x67, 0xCC, 0xFF) });
+                current.Underline = true;
+                current.Href = tag.StartsWith("url=") ? tag[4..].Trim('\'', '"') : "";
+                return true;
             }
             if (tag.StartsWith("size="))
             {
@@ -327,10 +384,7 @@ namespace NanamiUI
             {
                 if (font == null)
                     return;
-                foreach (var run in runs)
-                    if (run.Text != null)
-                        font.RequestCharactersInTexture(run.Text, run.Size, run.Style);
-                font.RequestCharactersInTexture("_", 50, FontStyle.Normal);
+                RequestChars(runs);
             }
 
             var rect = rectTransform.rect;
@@ -370,7 +424,7 @@ namespace NanamiUI
                     {
                         var sprite = imageSprites[segment.Run.Image];
                         _placements.Add((segment.Run.Image, new Vector2(x + 1, baselineY - sprite.rect.height * 0.8f)));
-                        x += sprite.rect.width + 2;
+                        x += sprite.rect.width + 2 + letterSpacing;
                         continue;
                     }
 
@@ -391,7 +445,7 @@ namespace NanamiUI
             if (bitmapFont != null)
             {
                 if (ch == ' ')
-                    return Mathf.RoundToInt(bitmapFont.size / 2f);
+                    return Mathf.RoundToInt(bitmapFont.size / 2f) + letterSpacing;
                 if (!bitmapFont.TryGetGlyph(ch, out var glyph))
                     return 0;
                 var top = baselineY - glyph.lineHeight + glyph.y;
@@ -406,7 +460,7 @@ namespace NanamiUI
                     UvTR = new Vector2(glyph.uv.xMax, glyph.uv.yMax),
                     UvBR = new Vector2(glyph.uv.xMax, glyph.uv.yMin),
                 });
-                return glyph.advance;
+                return glyph.advance + letterSpacing;
             }
 
             if (!font.GetCharacterInfo(ch, out var info, run.Size, run.Style))
@@ -421,7 +475,7 @@ namespace NanamiUI
                     UvTR = info.uvTopRight,
                     UvBR = info.uvBottomRight,
                 });
-            return info.advance;
+            return info.advance + letterSpacing;
         }
 
         private void DrawUnderline(Run run, float from, float to, float baselineY)
@@ -443,11 +497,11 @@ namespace NanamiUI
         private float CharWidth(char ch, Run run)
         {
             if (run.Image >= 0)
-                return imageSprites[run.Image].rect.width + 2;
+                return imageSprites[run.Image].rect.width + 2 + letterSpacing;
             if (bitmapFont != null)
-                return ch == ' ' ? Mathf.RoundToInt(bitmapFont.size / 2f)
-                    : bitmapFont.TryGetGlyph(ch, out var glyph) ? glyph.advance : 0;
-            return font.GetCharacterInfo(ch, out var info, run.Size, run.Style) ? info.advance : 0;
+                return ch == ' ' ? Mathf.RoundToInt(bitmapFont.size / 2f) + letterSpacing
+                    : bitmapFont.TryGetGlyph(ch, out var glyph) ? glyph.advance + letterSpacing : 0;
+            return font.GetCharacterInfo(ch, out var info, run.Size, run.Style) ? info.advance + letterSpacing : 0;
         }
 
         private (float Baseline, float Height, float Width) MeasureLine(List<Segment> line)
@@ -460,7 +514,7 @@ namespace NanamiUI
                     var size = imageSprites[segment.Run.Image].rect.size;
                     baseline = Mathf.Max(baseline, size.y * 0.8f);
                     descent = Mathf.Max(descent, size.y * 0.2f);
-                    width += size.x + 2;
+                    width += size.x + 2 + letterSpacing;
                     continue;
                 }
                 float glyphBaseline, glyphHeight;

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
@@ -9,6 +10,8 @@ namespace NanamiUI
         public float value = 50;
         public float max = 100;
         public float min;
+        public bool wholeNumbers;
+        public bool changeOnClick = true; // FairyGUI GSlider 默认 true：点 bar 直接跳值；点 grip 则相对拖动、不跳
         public ProgressTitleType titleType;
         public Text title;
         public RectTransform bar;
@@ -16,6 +19,11 @@ namespace NanamiUI
         public RectTransform grip;
         public float barMaxWidthDelta;
         public float barMaxHeightDelta;
+        public UnityEvent onChanged = new();
+
+        private bool _gripDrag;
+        private Vector2 _clickPoint;
+        private float _clickPercent;
 
         public void Apply()
         {
@@ -36,17 +44,53 @@ namespace NanamiUI
                 barV.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, Mathf.RoundToInt((rect.height - barMaxHeightDelta) * percent));
         }
 
-        public void OnPointerDown(PointerEventData eventData) => OnDrag(eventData);
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)transform, eventData.position, eventData.pressEventCamera, out var point);
+            _gripDrag = grip != null && RectTransformUtility.RectangleContainsScreenPoint(grip, eventData.position, eventData.pressEventCamera);
+            if (_gripDrag)
+            {
+                _clickPoint = point;
+                _clickPercent = Mathf.Clamp01((value - min) / (max - min));
+            }
+            else if (changeOnClick)
+                UpdateFromPoint(point);
+        }
 
         public void OnDrag(PointerEventData eventData)
         {
             RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)transform, eventData.position, eventData.pressEventCamera, out var point);
+            if (_gripDrag)
+            {
+                var rect = ((RectTransform)transform).rect;
+                var deltaPercent = bar != null
+                    ? (point.x - _clickPoint.x) / (rect.width - barMaxWidthDelta)
+                    : (_clickPoint.y - point.y) / (rect.height - barMaxHeightDelta);
+                SetPercent(_clickPercent + deltaPercent);
+            }
+            else if (changeOnClick)
+                UpdateFromPoint(point);
+        }
+
+        private void UpdateFromPoint(Vector2 point)
+        {
             var rect = ((RectTransform)transform).rect;
             var percent = bar != null
                 ? (point.x - rect.xMin) / (rect.width - barMaxWidthDelta)
                 : (rect.yMax - point.y) / (rect.height - barMaxHeightDelta);
-            value = min + (max - min) * Mathf.Clamp01(percent);
+            SetPercent(percent);
+        }
+
+        private void SetPercent(float percent)
+        {
+            var newValue = min + (max - min) * Mathf.Clamp01(percent);
+            if (wholeNumbers)
+                newValue = Mathf.Round(newValue);
+            if (newValue == value)
+                return;
+            value = newValue;
             Apply();
+            onChanged.Invoke();
         }
     }
 }

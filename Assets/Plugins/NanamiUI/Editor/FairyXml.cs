@@ -298,6 +298,10 @@ namespace NanamiUI.Editor.Schema
         Ani,
         [XmlEnum("gearFontSize")]
         FontSize,
+        [XmlEnum("gearText")]
+        Text,
+        [XmlEnum("gearIcon")]
+        Icon,
     }
 
     [XmlRoot("packageDescription")]
@@ -432,7 +436,9 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("text")] public string Text = "";
         [XmlAttribute("fontSize")] public int? FontSize;
         [XmlAttribute("leading")] public int Leading = 3;
+        [XmlAttribute("letterSpacing")] public int LetterSpacing;
         [XmlAttribute("ubb")] public bool Ubb;
+        [XmlAttribute("input")] public bool Input;
         [XmlAttribute("underline")] public bool Underline;
         [XmlAttribute("prompt")] public string Prompt;
         [XmlAttribute("bold")] public bool Bold;
@@ -450,6 +456,8 @@ namespace NanamiUI.Editor.Schema
         [XmlElement("gearSize")]
         [XmlElement("gearAni")]
         [XmlElement("gearFontSize")]
+        [XmlElement("gearText")]
+        [XmlElement("gearIcon")]
         public Gear[] Gears = Array.Empty<Gear>();
 
         [XmlElement("item")] public Extension[] Items = Array.Empty<Extension>();

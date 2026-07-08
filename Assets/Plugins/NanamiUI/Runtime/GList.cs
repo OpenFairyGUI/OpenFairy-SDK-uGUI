@@ -18,13 +18,26 @@ namespace NanamiUI
             var container = Container(list);
             for (var i = container.childCount - 1; i >= 0; i--)
                 UnityEngine.Object.DestroyImmediate(container.GetChild(i).gameObject);
-            var step = source.itemSize.y + source.lineGap;
+
+            // 复刻 FairyGUI ListLayoutType：column（竖排，默认）/ row（横排）/ flow_hz（横向流式换行网格）/ flow_vt（纵向流式）。
+            var stepX = source.itemSize.x + source.colGap;
+            var stepY = source.itemSize.y + source.lineGap;
+            var columns = stepX > 0 ? Mathf.Max(1, Mathf.FloorToInt((list.rect.width + source.colGap) / stepX)) : 1;
+            var rows = stepY > 0 ? Mathf.Max(1, Mathf.FloorToInt((list.rect.height + source.lineGap) / stepY)) : 1;
+
             for (var i = 0; i < count; i++)
             {
                 var item = UnityEngine.Object.Instantiate(source.itemPrefab, container, false);
                 var rt = (RectTransform)item.transform;
                 rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
-                rt.anchoredPosition = new Vector2(0, -i * step);
+                var (col, row) = source.layout switch
+                {
+                    "row" => (i, 0),
+                    "flow_hz" or "pagination" => (i % columns, i / columns),
+                    "flow_vt" => (i / rows, i % rows),
+                    _ => (0, i), // column（默认）
+                };
+                rt.anchoredPosition = new Vector2(col * stepX, -row * stepY);
                 setup(item, i);
             }
         }

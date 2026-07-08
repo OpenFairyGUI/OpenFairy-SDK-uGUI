@@ -83,6 +83,7 @@ namespace NanamiUI
 
         public void OnBeginDrag(PointerEventData e)
         {
+            _contentSize = ContentBounds(_content); // 内容可能在 Attach 之后被 GList.Fill 填充，起拖时重算滚动范围
             _startContent = _content.anchoredPosition;
             RectTransformUtility.ScreenPointToLocalPointInRectangle(_viewport, e.position, e.pressEventCamera, out _startPointer);
         }

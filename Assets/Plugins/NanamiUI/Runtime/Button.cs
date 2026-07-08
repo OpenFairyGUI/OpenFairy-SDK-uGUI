@@ -13,10 +13,13 @@ namespace NanamiUI
     }
 
     // 非泛型按钮基类：让 GRoot/Window/PopupMenu 不必知道 T 就能挂 onClick / 设 Title（复刻 FairyGUI GButton 面）。
+    // Selected/Mode 非泛型面用于 Radio 组互斥（同父兄弟间跨 T 取消选中）。
     public abstract class ButtonBase : Component
     {
         public UnityEvent onClick = new();
         public abstract string Title { get; set; }
+        public abstract bool Selected { get; set; }
+        public abstract ButtonMode Mode { get; }
     }
 
     public abstract class Button<T> : ButtonBase, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler where T : struct, Enum
@@ -40,6 +43,18 @@ namespace NanamiUI
             {
                 _title = value;
                 RefreshTitle();
+            }
+        }
+
+        public override ButtonMode Mode => mode;
+
+        public override bool Selected
+        {
+            get => selected;
+            set
+            {
+                selected = value;
+                RefreshState();
             }
         }
 
@@ -94,7 +109,15 @@ namespace NanamiUI
             if (mode == ButtonMode.Check)
                 selected = !selected;
             else if (mode == ButtonMode.Radio)
+            {
+                // 同父兄弟里的其它 Radio 取消选中（复刻 FairyGUI radio 组互斥的常见单组布局）。
+                var parent = transform.parent;
+                for (var i = 0; i < parent.childCount; i++)
+                    if (parent.GetChild(i).GetComponent<ButtonBase>() is { } sibling
+                        && !ReferenceEquals(sibling, this) && sibling.Mode == ButtonMode.Radio && sibling.Selected)
+                        sibling.Selected = false;
                 selected = true;
+            }
             RefreshState();
             onClick.Invoke();
         }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace NanamiUI
@@ -23,16 +24,17 @@ namespace NanamiUI
         public Texture2D texture;
         public Glyph[] glyphs;
 
+        [NonSerialized] private Dictionary<int, Glyph> _lookup;
+
         public bool TryGetGlyph(char ch, out Glyph glyph)
         {
-            foreach (var candidate in glyphs)
-                if (candidate.code == ch)
-                {
-                    glyph = candidate;
-                    return true;
-                }
-            glyph = default;
-            return false;
+            if (_lookup == null)
+            {
+                _lookup = new Dictionary<int, Glyph>(glyphs.Length);
+                foreach (var candidate in glyphs)
+                    _lookup[candidate.code] = candidate;
+            }
+            return _lookup.TryGetValue(ch, out glyph);
         }
     }
 }

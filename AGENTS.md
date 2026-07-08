@@ -27,7 +27,7 @@ NanamiUI 是基于 uGUI 的 FairyGUI Runtime SDK。目标是让用户继续用 F
 
 ## 代码结构
 
-- Runtime 基础组件尽量与 FairyGUI 的 `GObject` 子类 1:1 对应，例如 `Text`、`Button`、`Label`。
+- Runtime 基础组件尽量与 FairyGUI 的 `GObject` 子类 1:1 对应，例如 `Text`、`Button`、`Label`。不带 "G" 前缀
 - Runtime 组件是 `UIBehaviour` 子类；需要时可继承 uGUI 更具体的基类，以保持实现简单。
 - `Controller<T>` 是 `struct`，约束 `where T : struct, Enum`，不是 `MonoBehaviour`。
 - `Gear` 及子类不是 `MonoBehaviour`，按对应 controller enum 泛型化。

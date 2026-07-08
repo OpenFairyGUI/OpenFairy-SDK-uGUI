@@ -198,7 +198,7 @@ namespace NanamiUI.Example
             var n25 = (UnityEngine.Component)Get(demo, "m_n25");
             BindButton(n25, () =>
             {
-                var n22 = (NanamiUI.Text)Get(demo, "m_n22");
+                var n22 = (NanamiUI.InputText)Get(demo, "m_n22"); // n22 是输入框
                 var n24 = (NanamiUI.Text)Get(demo, "m_n24");
                 n24.text = n22.text;
             });

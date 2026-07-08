@@ -1,3 +1,4 @@
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -26,6 +27,20 @@ namespace NanamiUI
         public float barMaxHeightDelta;
         public float barStartX;
         public float barStartY;
+
+        [System.NonSerialized] private Tweener _tweener;
+
+        // 复刻 FairyGUI GProgressBar.TweenValue：从当前值平滑过渡到目标值。
+        public void TweenValue(float target, float duration)
+        {
+            _tweener?.Kill();
+            var start = value;
+            _tweener = DOTween.To(() => 0f, t =>
+            {
+                value = Mathf.Lerp(start, target, t);
+                Apply();
+            }, 1f, duration).SetLink(gameObject).OnComplete(() => _tweener = null);
+        }
 
         public void Apply()
         {

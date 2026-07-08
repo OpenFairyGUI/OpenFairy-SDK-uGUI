@@ -37,30 +37,56 @@ namespace NanamiUI
             lastSize = size;
 
             var rt = (RectTransform)transform;
+            // X 位置关联 = 目标锚点 x 的变化（左锚 move.x、中锚 +0.5 grow.x、右锚 +grow.x）；
+            // Y 位置关联 = 目标锚点 y 的变化（上锚 move.y、中锚 -0.5 grow.y、下锚 -grow.y，y 向下取负 grow）。
+            // 复刻 FairyGUI RelationItem 非 percent、pivot=0 的情形；size 关联按 grow 增量跟随（"width"=="width-width"→RelationType.Width）。
             foreach (var pair in sidePairs)
                 switch (pair)
                 {
                     case "left-left":
+                    case "right-left":
                         rt.anchoredPosition += new Vector2(move.x, 0);
                         break;
-                    case "top-top":
-                        rt.anchoredPosition += new Vector2(0, move.y);
+                    case "left-center":
+                    case "center-center":
+                    case "right-center":
+                        rt.anchoredPosition += new Vector2(move.x + grow.x * 0.5f, 0);
                         break;
+                    case "left-right":
                     case "right-right":
                         rt.anchoredPosition += new Vector2(move.x + grow.x, 0);
                         break;
+                    case "top-top":
+                    case "bottom-top":
+                        rt.anchoredPosition += new Vector2(0, move.y);
+                        break;
+                    case "top-middle":
+                    case "middle-middle":
+                    case "bottom-middle":
+                        rt.anchoredPosition += new Vector2(0, move.y - grow.y * 0.5f);
+                        break;
+                    case "top-bottom":
                     case "bottom-bottom":
                         rt.anchoredPosition += new Vector2(0, move.y - grow.y);
                         break;
+                    case "width":
                     case "width-width":
                         rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rt.rect.width + grow.x);
                         break;
+                    case "height":
                     case "height-height":
                         rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rt.rect.height + grow.y);
+                        break;
+                    case "leftext-left":
+                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rt.rect.width - move.x);
+                        rt.anchoredPosition += new Vector2(move.x, 0);
                         break;
                     case "leftext-right":
                         rt.anchoredPosition += new Vector2(move.x + grow.x, 0);
                         rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rt.rect.width - grow.x - move.x);
+                        break;
+                    case "rightext-right":
+                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rt.rect.width + grow.x);
                         break;
                 }
         }
