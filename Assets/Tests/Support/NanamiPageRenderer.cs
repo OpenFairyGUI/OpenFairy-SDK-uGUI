@@ -133,18 +133,31 @@ namespace NanamiUI.TestSupport
         public void Unload()
         {
             if (_instance != null)
-                Object.DestroyImmediate(_instance);
+            {
+                Object.Destroy(_instance);
+                _instance = null;
+            }
         }
 
         public void Teardown()
         {
             Time.captureDeltaTime = 0;
             if (_canvas != null)
-                Object.DestroyImmediate(_canvas);
+            {
+                Object.Destroy(_canvas);
+                _canvas = null;
+                _canvasRt = null;
+            }
             if (_camera != null)
-                Object.DestroyImmediate(_camera.gameObject);
+            {
+                Object.Destroy(_camera.gameObject);
+                _camera = null;
+            }
             if (_eventSystem != null)
-                Object.DestroyImmediate(_eventSystem);
+            {
+                Object.Destroy(_eventSystem);
+                _eventSystem = null;
+            }
         }
     }
 

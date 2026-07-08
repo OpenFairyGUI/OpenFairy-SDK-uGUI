@@ -43,14 +43,14 @@ namespace NanamiUI.Example
             SetPivotKeepPosition(contentPane, new Vector2(0.5f, 0.5f)); // 绕中心缩放
             contentPane.localScale = Vector3.one * 0.1f;
             DOTween.To(() => contentPane.localScale, v => contentPane.localScale = v, Vector3.one, 0.3f)
-                .SetEase(Ease.OutQuad).OnComplete(OnShown);
+                .SetEase(Ease.OutQuad).SetLink(contentPane.gameObject, LinkBehaviour.KillOnDestroy).OnComplete(OnShown);
         }
 
         protected override void DoHideAnimation()
         {
             // 关键：整段缩小 tween 结束后才 HideImmediately（同"旧页飞出再消失"的 display-lock 类，避免瞬间消失）。
             DOTween.To(() => contentPane.localScale, v => contentPane.localScale = v, Vector3.one * 0.1f, 0.3f)
-                .SetEase(Ease.OutQuad).OnComplete(HideImmediately);
+                .SetEase(Ease.OutQuad).SetLink(contentPane.gameObject, LinkBehaviour.KillOnDestroy).OnComplete(HideImmediately);
         }
 
         protected override void OnShown() => Transition("t1")?.Play();

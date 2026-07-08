@@ -49,8 +49,8 @@ namespace NanamiUI.Tests
             var actual = _rig.Capture();
             var golden = GoldenImage.Load(goldenPath);
             var ratio = GoldenImage.DiffRatio(actual, golden);
-            Object.DestroyImmediate(actual);
-            Object.DestroyImmediate(golden);
+            Object.Destroy(actual);
+            Object.Destroy(golden);
 
             Assert.LessOrEqual(ratio, page.Threshold,
                 $"{page.Name}: diff {ratio:P2} exceeds threshold {page.Threshold:P2}");

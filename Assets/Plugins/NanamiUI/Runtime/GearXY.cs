@@ -55,7 +55,7 @@ namespace NanamiUI
             // 用核心 DOTween.To 而非 rt.DOAnchorPos 扩展：后者定义在 DOTween 的松散 UI 模块 .cs（编进
             // Assembly-CSharp），Runtime 独立成程序集后就够不到了。核心 To 在 DOTween.dll 里，自动引用可用。
             _tweener = DOTween.To(() => rt.anchoredPosition, v => rt.anchoredPosition = v, end, duration)
-                .SetEase(ease).SetDelay(delay).OnComplete(() =>
+                .SetEase(ease).SetDelay(delay).SetLink(rt.gameObject, LinkBehaviour.KillOnDestroy).OnComplete(() =>
                 {
                     _tweener = null;
                     if (_lockedDisplay != null)

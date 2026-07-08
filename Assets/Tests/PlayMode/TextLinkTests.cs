@@ -42,9 +42,9 @@ namespace NanamiUI.Tests
 
             Assert.AreEqual("foo", clicked, "点链接应触发 onClickLink(href)");
 
-            Object.DestroyImmediate(canvasGo);
+            Object.Destroy(canvasGo);
             if (es != null)
-                Object.DestroyImmediate(es);
+                Object.Destroy(es);
         }
     }
 }

@@ -70,7 +70,7 @@ namespace NanamiUI
                 SetSize(rt, Vector2.Lerp(startSize, size, t));
                 var s = Vector2.Lerp(startScale, scale, t);
                 rt.localScale = new Vector3(s.x, s.y, 1);
-            }, 1f, duration).SetEase(ease).SetDelay(delay).OnComplete(() =>
+            }, 1f, duration).SetEase(ease).SetDelay(delay).SetLink(rt.gameObject, LinkBehaviour.KillOnDestroy).OnComplete(() =>
             {
                 _tweener = null;
                 if (_lockedDisplay != null)

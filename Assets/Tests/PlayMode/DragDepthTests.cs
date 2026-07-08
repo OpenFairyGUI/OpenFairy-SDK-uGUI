@@ -67,7 +67,7 @@ namespace NanamiUI.Tests
             for (var i = 0; i < order.Length; i++)
                 Assert.AreEqual(i, order[i].GetSiblingIndex(), $"child {order[i].name} at wrong sibling index");
 
-            Object.DestroyImmediate(container.gameObject);
+            Object.Destroy(container.gameObject);
         }
 
         [UnityTest]
@@ -87,7 +87,7 @@ namespace NanamiUI.Tests
 
             Assert.AreEqual(start.x + 40, child.anchoredPosition.x, 1.0f);
             Assert.AreEqual(start.y - 25, child.anchoredPosition.y, 1.0f);
-            Object.DestroyImmediate(container.gameObject);
+            Object.Destroy(container.gameObject);
         }
 
         [UnityTest]
@@ -107,7 +107,7 @@ namespace NanamiUI.Tests
 
             Assert.AreEqual(220f, child.anchoredPosition.x, 1.0f, "x 应钳到 bounds.xMax - width");
             Assert.AreEqual(-220f, child.anchoredPosition.y, 1.0f, "y 应钳到 -(bounds.yMax - height)");
-            Object.DestroyImmediate(container.gameObject);
+            Object.Destroy(container.gameObject);
         }
 
         [UnityTest]
@@ -152,8 +152,8 @@ namespace NanamiUI.Tests
             Assert.IsFalse(NanamiUI.DragDropManager.inst.dragging, "松手后 agent 应停用");
             Assert.AreEqual(new Vector2(20, -20), b.anchoredPosition, "b 本体不应移动（PreventDefault）");
 
-            Object.DestroyImmediate(canvasGo);
-            Object.DestroyImmediate(tex);
+            Object.Destroy(canvasGo);
+            Object.Destroy(tex);
         }
     }
 }

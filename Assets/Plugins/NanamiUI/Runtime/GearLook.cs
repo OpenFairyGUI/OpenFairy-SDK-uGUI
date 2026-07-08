@@ -66,7 +66,7 @@ namespace NanamiUI
             {
                 SetAlpha(Mathf.Lerp(startAlpha, alpha, t));
                 rt.localEulerAngles = new Vector3(0, 0, Mathf.LerpAngle(startRot, rotation, t));
-            }, 1f, duration).SetEase(ease).SetDelay(delay).OnComplete(() => _tweener = null);
+            }, 1f, duration).SetEase(ease).SetDelay(delay).SetLink(rt.gameObject, LinkBehaviour.KillOnDestroy).OnComplete(() => _tweener = null);
         }
     }
 }

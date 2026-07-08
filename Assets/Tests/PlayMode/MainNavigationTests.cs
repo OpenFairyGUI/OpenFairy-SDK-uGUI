@@ -35,7 +35,8 @@ namespace NanamiUI.Tests
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            UnityEngine.Object.DestroyImmediate(_main);
+            UnityEngine.Object.Destroy(_main);
+            _main = null;
             _rig.Teardown();
             yield return null;
         }
