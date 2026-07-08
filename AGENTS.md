@@ -45,6 +45,7 @@ NanamiUI 是基于 uGUI 的 FairyGUI Runtime SDK。目标是让用户继续用 F
 - 不加无关注释、日志、配置或临时菜单。
 - 保持周围命名、缩进和 Unity 序列化字段风格一致。
 - 使用当前 Unity 版本支持的现代 C# 写法。
+- 静态结构优于动态解析；不要滥用 `string`。只有真实文本内容才用 `string`，有限选项用 enum，结构化值用 struct/class 字段等能保持静态引用和编译期检查的表达方式。
 
 ## 标准工具入口
 

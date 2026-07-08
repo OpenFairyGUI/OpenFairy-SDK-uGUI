@@ -10,7 +10,7 @@
   - `Tools/NanamiUI/Migrate`
   - `Tools/NanamiUI/Generate Golden References`
   - `Tools/NanamiUI/Run PlayMode Tests`
-- 最近一次验证：`Run PlayMode Tests` 通过 `40/40`。
+- 最近一次验证：2026-07-08 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `40/40`。
 
 ## 标准验证流程
 
@@ -69,6 +69,7 @@
 ## Runtime / 转换器现状
 
 - Migrate 按 `package.xml` 的 `exported="true"` 发现组件，并通过依赖闭包收集引用组件、图片、movieclip、字体、声音。
+- FairyGUI XML 通过 `XmlAttribute` / `XmlElement` / `XmlArrayItem` 标注的 `NanamiUI.Editor.Schema` 类型和轻量自定义 converter reader 反序列化为 `Schema.Package` / `Schema.Component` / `Schema.Display` 等结构化数据，`Vector2`、bool 默认值、派生字段和有限选项 enum 在 schema 层落型，转换器后续逻辑不再直接读取 XML attribute。
 - 运行时配置来自 `settings/Common.json` 和可选的 `NanamiUISettings`，本工程限定导出 `Basics`、`Transition`。
 - codegen 已支持 C# 关键字转义、controller enum 内嵌、`Button<T>`、`ComboBox<T>`、`ProgressBar`、`Slider` 等基类选择。
 - `ListSource`、ComboBox items/dropdown、Window1 列表已通过全量 Migrate 重烘焙。

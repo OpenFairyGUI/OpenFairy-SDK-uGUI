@@ -1,17 +1,17 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 using DG.Tweening;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using Schema = NanamiUI.Editor.Schema;
 
 namespace NanamiUI.Editor
 {
@@ -29,7 +29,7 @@ namespace NanamiUI.Editor
 
         private class Resource
         {
-            public string Type;
+            public Schema.ResourceKind Type;
             public string File;
             public string Package;
             public string PackageId;
@@ -37,6 +37,9 @@ namespace NanamiUI.Editor
             public string Scale9Grid;
             public string Texture;
             public bool Exported;
+            private Schema.Component _componentXml;
+
+            public Schema.Component ComponentXml => _componentXml ??= Schema.Component.Load(File);
         }
 
         private class ControllerData
@@ -90,7 +93,7 @@ namespace NanamiUI.Editor
             // Collect 会按依赖顺序把它们引用到的（可能未导出、可能跨包的）组件一并带出。
             var scope = Config()?.packages;
             bool InScope(Resource r) => scope == null || scope.Length == 0 || Array.IndexOf(scope, r.Package) >= 0;
-            foreach (var entry in Resources.Values.Where(r => r.Type == "component" && r.Exported && InScope(r)).ToArray())
+            foreach (var entry in Resources.Values.Where(r => r.Type == Schema.ResourceKind.Component && r.Exported && InScope(r)).ToArray())
                 Collect(entry, components, images);
 
             foreach (var image in images)
@@ -100,9 +103,9 @@ namespace NanamiUI.Editor
                 foreach (Match match in Regex.Matches(File.ReadAllText(component.File), @"ui://\w+"))
                     if (TryResolve(match.Value, component.PackageId, out var dep))
                     {
-                        if (dep.Type == "font")
+                        if (dep.Type == Schema.ResourceKind.Font)
                             ImportFont(dep);
-                        else if (dep.Type == "sound")
+                        else if (dep.Type == Schema.ResourceKind.Sound)
                             ImportSound(dep);
                     }
             _scriptsChanged = false;
@@ -137,21 +140,20 @@ namespace NanamiUI.Editor
 
         private static void IndexPackage(string packagePath)
         {
-            var package = XDocument.Load(packagePath).Root;
-            var packageId = package.Attribute("id").Value;
-            var packageDir = Path.GetDirectoryName(packagePath).Replace('\\', '/');
+            var package = Schema.Package.Load(packagePath);
+            var packageName = Path.GetFileName(Path.GetDirectoryName(packagePath));
 
-            foreach (var resource in package.Element("resources").Elements())
-                Resources[packageId + resource.Attribute("id").Value] = new Resource
+            foreach (var resource in package.Resources)
+                Resources[package.Id + resource.Id] = new Resource
                 {
-                    Type = resource.Name.LocalName,
-                    File = $"{packageDir}{resource.Attribute("path").Value.TrimEnd('/')}/{resource.Attribute("name").Value}",
-                    Package = Path.GetFileName(packageDir),
-                    PackageId = packageId,
-                    Scale = resource.Attribute("scale")?.Value,
-                    Scale9Grid = resource.Attribute("scale9grid")?.Value,
-                    Texture = resource.Attribute("texture")?.Value,
-                    Exported = resource.Attribute("exported")?.Value == "true",
+                    Type = resource.Kind,
+                    File = resource.File,
+                    Package = packageName,
+                    PackageId = package.Id,
+                    Scale = resource.Scale,
+                    Scale9Grid = resource.Scale9Grid,
+                    Texture = resource.Texture,
+                    Exported = resource.Exported,
                 };
         }
 
@@ -160,33 +162,34 @@ namespace NanamiUI.Editor
             if (components.Contains(component))
                 return;
 
-            foreach (var child in DisplayList(component.File))
+            var xml = component.ComponentXml;
+            foreach (var child in xml.DisplayList)
             {
-                var src = child.Attribute("src")?.Value ?? child.Attribute("url")?.Value;
+                var src = child.Source;
                 if (src != null && TryResolve(src, component.PackageId, out var dep))
                 {
-                    if (dep.Type == "component")
+                    if (dep.Type == Schema.ResourceKind.Component)
                         Collect(dep, components, images);
-                    else if (dep.Type is "image" or "movieclip")
+                    else if (dep.Type is Schema.ResourceKind.Image or Schema.ResourceKind.MovieClip)
                         images.Add(dep);
                 }
-                if (child.Attribute("defaultItem") is { } defaultItem && TryResolve(defaultItem.Value, component.PackageId, out var item))
+                if (child.DefaultItem is { } defaultItem && TryResolve(defaultItem, component.PackageId, out var item))
                     Collect(item, components, images);
             }
             // ComboBox 的 dropdown 组件只在根 <ComboBox dropdown> 属性引用（displayList 里没有），单独跟随。
-            if (XDocument.Load(component.File).Root?.Element("ComboBox")?.Attribute("dropdown")?.Value is { } dropdown
-                && TryResolve(dropdown, component.PackageId, out var dropdownRes) && dropdownRes.Type == "component")
+            if (xml.ComboBox?.Dropdown is { } dropdown
+                && TryResolve(dropdown, component.PackageId, out var dropdownRes) && dropdownRes.Type == Schema.ResourceKind.Component)
                 Collect(dropdownRes, components, images);
             // 覆盖 icon 属性、富文本内嵌图、动效 Sound 之外的一切 ui:// 引用
             foreach (Match match in Regex.Matches(File.ReadAllText(component.File), @"ui://\w+"))
-                if (TryResolve(match.Value, component.PackageId, out var embedded) && embedded.Type is "image" or "movieclip")
+                if (TryResolve(match.Value, component.PackageId, out var embedded) && embedded.Type is Schema.ResourceKind.Image or Schema.ResourceKind.MovieClip)
                     images.Add(embedded);
             components.Add(component);
         }
 
         private static void ImportImage(Resource image)
         {
-            if (image.Type == "movieclip")
+            if (image.Type == Schema.ResourceKind.MovieClip)
             {
                 ImportMovieClip(image);
                 return;
@@ -308,15 +311,15 @@ namespace NanamiUI.Editor
 
         private static void GenerateScript(Resource component)
         {
-            var xml = XDocument.Load(component.File).Root;
+            var xml = component.ComponentXml;
             var name = Identifier(Path.GetFileNameWithoutExtension(component.File));
             var path = ScriptPath(component.File);
             var used = new HashSet<string>();
             var fields = new List<string>();
 
-            foreach (var controller in xml.Elements("controller"))
+            foreach (var controller in xml.Controllers)
             {
-                var cname = Identifier(controller.Attribute("name").Value);
+                var cname = Identifier(controller.Name);
                 DeleteScript($"{Path.GetDirectoryName(path)}/{name}_{cname}.cs".Replace('\\', '/'));
                 if (used.Add(Field(cname)))
                 {
@@ -328,9 +331,9 @@ namespace NanamiUI.Editor
                 }
             }
 
-            foreach (var child in xml.Element("displayList")?.Elements() ?? Enumerable.Empty<XElement>())
+            foreach (var child in xml.DisplayList)
             {
-                var fieldName = Identifier(child.Attribute("name").Value);
+                var fieldName = Identifier(child.Name);
                 var fieldType = FieldType(child, component.PackageId);
                 if (fieldType != null && used.Add(Field(fieldName)))
                     fields.Add($"        public {fieldType} {Field(fieldName)};");
@@ -338,7 +341,7 @@ namespace NanamiUI.Editor
 
             // FairyGUI 允许 Button 组件没有 button 控制器（如 BagGridSub2），补一个占位 enum。
             // ComboBox 无控制器时退化为 Component（见 baseType），不生成占位——避免与"button"子节点字段撞名（Dropdown）。
-            if (xml.Attribute("extention")?.Value == "Button" && xml.Element("controller") == null && used.Add(Field("button")))
+            if (xml.Extension == Schema.ComponentExtension.Button && xml.Controllers.Length == 0 && used.Add(Field("button")))
                 fields.InsertRange(0, new[]
                 {
                     "        public enum button",
@@ -346,17 +349,17 @@ namespace NanamiUI.Editor
                     "            up,",
                     "        }",
                 });
-            var baseType = xml.Attribute("extention")?.Value switch
+            var baseType = xml.Extension switch
             {
-                "Button" => $"NanamiUI.Button<{name}.{(xml.Element("controller") is { } buttonController ? Identifier(buttonController.Attribute("name").Value) : "button")}>",
+                Schema.ComponentExtension.Button => $"NanamiUI.Button<{name}.{(xml.Controllers.FirstOrDefault() is { } buttonController ? Identifier(buttonController.Name) : "button")}>",
                 // 有 button 控制器才做成 ComboBox<T>（复用其视觉态 + 下拉）；无控制器（如 Dropdown）退化为 Component。
-                "ComboBox" when xml.Element("controller") is { } comboController => $"NanamiUI.ComboBox<{name}.{Identifier(comboController.Attribute("name").Value)}>",
-                "ProgressBar" => "NanamiUI.ProgressBar",
-                "Slider" => "NanamiUI.Slider",
+                Schema.ComponentExtension.ComboBox when xml.Controllers.FirstOrDefault() is { } comboController => $"NanamiUI.ComboBox<{name}.{Identifier(comboController.Name)}>",
+                Schema.ComponentExtension.ProgressBar => "NanamiUI.ProgressBar",
+                Schema.ComponentExtension.Slider => "NanamiUI.Slider",
                 _ => "NanamiUI.Component",
             };
             var code = new StringBuilder();
-            if (xml.Elements("controller").Any())
+            if (xml.Controllers.Length > 0)
                 code.AppendLine("using NanamiUI;");
             code.AppendLine("using UnityEngine;");
             code.AppendLine("using UnityEngine.UI;");
@@ -392,73 +395,73 @@ namespace NanamiUI.Editor
             _scriptsChanged = true;
         }
 
-        private static string FieldType(XElement child, string packageId) => child.Name.LocalName switch
+        private static string FieldType(Schema.Display child, string packageId) => child.Kind switch
         {
-            "image" => "Image",
-            "graph" => "NanamiUI.Shape",
-            "text" or "richtext" or "inputtext" => "NanamiUI.Text",
-            "loader" => "NanamiUI.Loader",
-            "component" when TryResolve(child.Attribute("src").Value, packageId, out var dep) =>
+            Schema.DisplayKind.Image => "Image",
+            Schema.DisplayKind.Graph => "NanamiUI.Shape",
+            Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText => "NanamiUI.Text",
+            Schema.DisplayKind.Loader => "NanamiUI.Loader",
+            Schema.DisplayKind.Component when TryResolve(child.Source, packageId, out var dep) =>
                 $"UI.{dep.Package}.{Identifier(Path.GetFileNameWithoutExtension(dep.File))}",
-            "component" => null,
+            Schema.DisplayKind.Component => null,
             _ when IsMovieClip(child, packageId) => "NanamiUI.MovieClip",
             _ => "RectTransform",
         };
 
-        private static bool IsMovieClip(XElement child, string packageId) =>
-            child.Attribute("src") is { } src && TryResolve(src.Value, packageId, out var resource) && resource.Type == "movieclip";
+        private static bool IsMovieClip(Schema.Display child, string packageId) =>
+            child.Source != null && TryResolve(child.Source, packageId, out var resource) && resource.Type == Schema.ResourceKind.MovieClip;
 
         private static void BuildPrefab(Resource component)
         {
-            var xml = XDocument.Load(component.File).Root;
+            var xml = component.ComponentXml;
             var root = new GameObject(Path.GetFileNameWithoutExtension(component.File), typeof(RectTransform));
             try
             {
                 var rt = (RectTransform)root.transform;
                 rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
-                rt.sizeDelta = Pair(xml, "size").Value;
-                if (xml.Attribute("overflow")?.Value == "hidden")
+                rt.sizeDelta = xml.Size;
+                if (xml.Overflow == Schema.Overflow.Hidden)
                     root.AddComponent<RectMask2D>();
 
                 var componentType = FindType($"UI.{component.Package}.{Identifier(root.name)}");
                 var comp = (Component)root.AddComponent(componentType);
 
                 var controllers = new Dictionary<string, ControllerData>();
-                foreach (var element in xml.Elements("controller"))
+                foreach (var element in xml.Controllers)
                 {
-                    var name = Identifier(element.Attribute("name").Value);
+                    var name = Identifier(element.Name);
                     var pages = PageMembers(element).ToArray();
                     var pageType = componentType.GetNestedType(name);
-                    controllers[element.Attribute("name").Value] = new ControllerData
+                    controllers[element.Name] = new ControllerData
                     {
                         Name = name,
                         PageType = pageType,
                         PageIds = pages.Select(page => page.Id).ToArray(),
                         PageValues = pages.Select(page => Enum.Parse(pageType, page.Member)).ToArray(),
-                        Selected = int.Parse(element.Attribute("selected")?.Value ?? "0"),
+                        Selected = element.Selected,
                     };
                 }
 
-                var children = new List<(XElement Xml, GameObject Go)>();
-                foreach (var element in xml.Element("displayList")?.Elements() ?? Enumerable.Empty<XElement>())
+                var children = new List<(Schema.Display Xml, GameObject Go)>();
+                foreach (var element in xml.DisplayList)
                     children.Add((element, CreateChild(element, rt, component, controllers)));
 
                 foreach (var (element, go) in children)
-                    if (element.Name.LocalName == "group")
+                    if (element.Kind == Schema.DisplayKind.Group)
                         foreach (var (member, memberGo) in children)
-                            if (member.Attribute("group")?.Value == element.Attribute("id").Value)
+                            if (member.Group == element.Id)
                                 memberGo.transform.SetParent(go.transform, true);
 
-                if (xml.Attribute("mask") is { } mask)
+                if (xml.Mask is { } mask)
                 {
-                    var maskGo = children.First(child => child.Xml.Attribute("id").Value == mask.Value).Go;
+                    var maskGo = children.First(child => child.Xml.Id == mask).Go;
                     maskGo.AddComponent<Mask>().showMaskGraphic = false;
                     foreach (var (_, childGo) in children)
                         if (childGo != maskGo && childGo.transform.parent == rt)
                             childGo.transform.SetParent(maskGo.transform, true);
                 }
 
-                if (xml.Attribute("overflow")?.Value == "scroll")
+                if (xml.Overflow == Schema.Overflow.Scroll)
                 {
                     var view = BuildScrollView(root, xml, rt.sizeDelta);
                     foreach (var (_, childGo) in children)
@@ -467,16 +470,16 @@ namespace NanamiUI.Editor
                     SetGrips(view, ContentBounds(children));
                 }
 
-                var byId = new Dictionary<string, (XElement Xml, GameObject Go)>();
+                var byId = new Dictionary<string, (Schema.Display Xml, GameObject Go)>();
                 foreach (var (element, go) in children)
-                    byId.TryAdd(element.Attribute("id").Value, (element, go));
+                    byId.TryAdd(element.Id, (element, go));
                 foreach (var (element, go) in children)
-                    foreach (var relationXml in element.Elements("relation"))
-                        if (relationXml.Attribute("target").Value != "" && byId.TryGetValue(relationXml.Attribute("target").Value, out var relationTarget))
+                    foreach (var relationXml in element.Relations)
+                        if (relationXml.Target != "" && byId.TryGetValue(relationXml.Target, out var relationTarget))
                         {
                             var relation = go.AddComponent<Relation>();
                             relation.target = (RectTransform)relationTarget.Go.transform;
-                            relation.sidePairs = relationXml.Attribute("sidePair").Value.Split(',');
+                            relation.sidePairs = relationXml.SidePairs;
                             relation.Record();
                         }
 
@@ -490,11 +493,11 @@ namespace NanamiUI.Editor
                 {
                     if (controllers.TryGetValue("button", out var buttonData))
                         comp.GetType().GetField("controller").SetValue(comp, buttonData.Value);
-                    comp.GetType().GetField("titleText").SetValue(comp, children.FirstOrDefault(c => c.Xml.Attribute("name").Value == "title").Go?.GetComponent<Text>());
-                    comp.GetType().GetField("iconLoader").SetValue(comp, children.FirstOrDefault(c => c.Xml.Attribute("name").Value == "icon").Go?.GetComponent<Loader>());
-                    if (xml.Element("Button") is { } buttonEl)
+                    comp.GetType().GetField("titleText").SetValue(comp, children.FirstOrDefault(c => c.Xml.Name == "title").Go?.GetComponent<Text>());
+                    comp.GetType().GetField("iconLoader").SetValue(comp, children.FirstOrDefault(c => c.Xml.Name == "icon").Go?.GetComponent<Loader>());
+                    if (xml.Button is { } buttonEl)
                         ConfigureButton(root, buttonEl, component.PackageId);
-                    if (xml.Element("ComboBox") is { } comboEl) // 组件定义级：烘焙 dropdown 资源
+                    if (xml.ComboBox is { } comboEl) // 组件定义级：烘焙 dropdown 资源
                         ConfigureComboBox(root, comboEl, component.PackageId);
                 }
                 else if (comp is ProgressBar progressBar)
@@ -504,7 +507,7 @@ namespace NanamiUI.Editor
 
                 var byName = new Dictionary<string, GameObject>();
                 foreach (var (element, go) in children)
-                    byName.TryAdd(Field(element.Attribute("name").Value), go);
+                    byName.TryAdd(Field(element.Name), go);
 
                 foreach (var field in comp.GetType().GetFields())
                 {
@@ -525,103 +528,103 @@ namespace NanamiUI.Editor
             }
         }
 
-        private static GameObject CreateChild(XElement element, RectTransform parent, Resource owner,
+        private static GameObject CreateChild(Schema.Display element, RectTransform parent, Resource owner,
             Dictionary<string, ControllerData> controllers)
         {
-            var name = element.Attribute("name").Value;
-            var size = Pair(element, "size");
+            var name = element.Name;
+            var size = element.Size;
             GameObject go;
 
-            switch (element.Name.LocalName)
+            switch (element.Kind)
             {
-                case "image":
+                case Schema.DisplayKind.Image:
                 {
                     go = NewChild(name, parent, typeof(FlipImage));
                     var image = go.GetComponent<FlipImage>();
-                    var resource = Resolve(element.Attribute("src").Value, owner.PackageId);
-                    image.sprite = LoadSprite(element.Attribute("src").Value, owner.PackageId);
+                    var resource = Resolve(element.Source, owner.PackageId);
+                    image.sprite = LoadSprite(element.Source, owner.PackageId);
                     ConfigureImage(image, resource, element);
                     size ??= image.sprite.rect.size;
                     break;
                 }
-                case "graph" when element.Attribute("type") == null:
+                case Schema.DisplayKind.Graph when element.Type == Schema.ShapeType.None:
                     go = NewChild(name, parent);
                     break;
-                case "graph":
+                case Schema.DisplayKind.Graph:
                 {
                     go = NewChild(name, parent, typeof(Shape));
                     ConfigureShape(go.GetComponent<Shape>(), element);
                     break;
                 }
-                case "list":
+                case Schema.DisplayKind.List:
                 {
                     go = NewChild(name, parent);
                     BuildList(go, element, owner);
                     break;
                 }
-                case "text":
-                case "richtext":
-                case "inputtext":
+                case Schema.DisplayKind.Text:
+                case Schema.DisplayKind.RichText:
+                case Schema.DisplayKind.InputText:
                 {
                     go = NewChild(name, parent, typeof(Text));
                     var textComponent = go.GetComponent<Text>();
                     ConfigureText(textComponent, element, owner);
-                    if (element.Attribute("strokeColor") is { } stroke)
+                    if (element.StrokeColor is { } stroke)
                     {
                         var effect = go.AddComponent<TextStroke>();
-                        effect.color = ParseColor(stroke.Value);
-                        effect.width = float.Parse(element.Attribute("strokeSize")?.Value ?? "1", CultureInfo.InvariantCulture);
+                        effect.color = ParseColor(stroke);
+                        effect.width = element.StrokeSize;
                     }
-                    if (element.Attribute("shadowColor") is { } shadow)
+                    if (element.ShadowColor is { } shadow)
                     {
                         var effect = go.AddComponent<TextShadow>();
-                        effect.color = ParseColor(shadow.Value);
-                        effect.offset = Pair(element, "shadowOffset") ?? new Vector2(1, 1);
+                        effect.color = ParseColor(shadow);
+                        effect.offset = element.ShadowOffset ?? new Vector2(1, 1);
                     }
                     break;
                 }
-                case "loader":
+                case Schema.DisplayKind.Loader:
                 {
                     go = NewChild(name, parent, typeof(Loader));
                     var loader = go.GetComponent<Loader>();
-                    loader.fill = element.Attribute("fill")?.Value switch
+                    loader.fill = element.Fill switch
                     {
-                        "scale" => Loader.FillType.Scale,
-                        "scaleMatchHeight" => Loader.FillType.ScaleMatchHeight,
-                        "scaleMatchWidth" => Loader.FillType.ScaleMatchWidth,
-                        "scaleFree" => Loader.FillType.ScaleFree,
-                        "scaleNoBorder" => Loader.FillType.ScaleNoBorder,
+                        Schema.LoaderFill.Scale => Loader.FillType.Scale,
+                        Schema.LoaderFill.ScaleMatchHeight => Loader.FillType.ScaleMatchHeight,
+                        Schema.LoaderFill.ScaleMatchWidth => Loader.FillType.ScaleMatchWidth,
+                        Schema.LoaderFill.ScaleFree => Loader.FillType.ScaleFree,
+                        Schema.LoaderFill.ScaleNoBorder => Loader.FillType.ScaleNoBorder,
                         _ => Loader.FillType.None,
                     };
-                    loader.align = element.Attribute("align")?.Value switch { "center" => 1, "right" => 2, _ => 0 };
-                    loader.vAlign = element.Attribute("vAlign")?.Value switch { "middle" => 1, "bottom" => 2, _ => 0 };
-                    var url = element.Attribute("url")?.Value;
-                    if (url != null && TryResolve(url, owner.PackageId, out var content) && content.Type == "image")
+                    loader.align = element.Align switch { Schema.Align.Center => 1, Schema.Align.Right => 2, _ => 0 };
+                    loader.vAlign = element.VAlign switch { Schema.VAlign.Middle => 1, Schema.VAlign.Bottom => 2, _ => 0 };
+                    var url = element.Source;
+                    if (url != null && TryResolve(url, owner.PackageId, out var content) && content.Type == Schema.ResourceKind.Image)
                     {
                         loader.sprite = LoadSprite(url, owner.PackageId);
                         ConfigureImage(loader, content, element);
                     }
-                    else if (url != null && TryResolve(url, owner.PackageId, out content) && content.Type == "movieclip")
+                    else if (url != null && TryResolve(url, owner.PackageId, out content) && content.Type == Schema.ResourceKind.MovieClip)
                         ConfigureMovieClip(loader, content, element);
                     else
                         loader.enabled = false;
                     break;
                 }
-                case "component":
+                case Schema.DisplayKind.Component:
                 {
-                    var dep = Resolve(element.Attribute("src").Value, owner.PackageId);
+                    var dep = Resolve(element.Source, owner.PackageId);
                     go = (GameObject)PrefabUtility.InstantiatePrefab(LoadPrefab(dep), parent);
                     go.name = name;
                     size ??= ((RectTransform)go.transform).sizeDelta;
-                    if (element.Element("Button") is { } button)
+                    if (element.Button is { } button)
                         ConfigureButton(go, button, owner.PackageId);
-                    if (element.Element("Label") is { } label)
+                    if (element.Label is { } label)
                         ConfigureLabel(go, label, owner.PackageId);
-                    if (element.Element("ProgressBar") is { } progress)
+                    if (element.ProgressBar is { } progress)
                         ConfigureProgressBar(go, progress);
-                    if (element.Element("Slider") is { } slider)
+                    if (element.Slider is { } slider)
                         ConfigureSlider(go, slider);
-                    if (element.Element("ComboBox") is { } comboBox) // 实例级：烘焙 items + 默认标题
+                    if (element.ComboBox is { } comboBox) // 实例级：烘焙 items + 默认标题
                         ConfigureComboBox(go, comboBox, owner.PackageId);
                     break;
                 }
@@ -631,8 +634,8 @@ namespace NanamiUI.Editor
                     {
                         go = NewChild(name, parent, typeof(MovieClip));
                         var movieClip = go.GetComponent<MovieClip>();
-                        ConfigureMovieClip(movieClip, Resolve(element.Attribute("src").Value, owner.PackageId), element);
-                        size ??= MovieClips[Resolve(element.Attribute("src").Value, owner.PackageId)].Size;
+                        ConfigureMovieClip(movieClip, Resolve(element.Source, owner.PackageId), element);
+                        size ??= MovieClips[Resolve(element.Source, owner.PackageId)].Size;
                     }
                     else
                         go = NewChild(name, parent);
@@ -644,39 +647,36 @@ namespace NanamiUI.Editor
             if (go.GetComponent<Text>() is { } createdText)
                 createdText.RebuildImages(); // 依赖最终 rect 的排版，须在 SetRect 之后烘焙
             ApplyElement(go, element);
-            if (element.Attribute("visible")?.Value == "false")
+            if (!element.Visible)
                 go.SetActive(false);
 
             object display = null, display2 = null;
-            foreach (var gearXml in element.Elements())
+            foreach (var gearXml in element.Gears)
             {
-                var kind = gearXml.Name.LocalName;
-                if (kind is not ("gearDisplay" or "gearDisplay2" or "gearXY" or "gearColor" or "gearLook" or "gearSize" or "gearAni" or "gearFontSize"))
-                    continue;
-
-                var controller = controllers[gearXml.Attribute("controller").Value];
+                var kind = gearXml.Kind;
+                var controller = controllers[gearXml.Controller];
                 var gearType = (kind switch
                 {
-                    "gearDisplay" or "gearDisplay2" => typeof(GearDisplay<>),
-                    "gearXY" => typeof(GearXY<>),
-                    "gearColor" => typeof(GearColor<>),
-                    "gearLook" => typeof(GearLook<>),
-                    "gearAni" => typeof(GearAni<>),
-                    "gearFontSize" => typeof(GearFontSize<>),
+                    Schema.GearKind.Display or Schema.GearKind.Display2 => typeof(GearDisplay<>),
+                    Schema.GearKind.XY => typeof(GearXY<>),
+                    Schema.GearKind.Color => typeof(GearColor<>),
+                    Schema.GearKind.Look => typeof(GearLook<>),
+                    Schema.GearKind.Ani => typeof(GearAni<>),
+                    Schema.GearKind.FontSize => typeof(GearFontSize<>),
                     _ => typeof(GearSize<>),
                 }).MakeGenericType(controller.PageType);
                 var gear = Activator.CreateInstance(gearType);
                 gearType.GetField("target").SetValue(gear, go);
-                gearType.GetField("pages").SetValue(gear, PageValues(controller, gearXml.Attribute("pages")?.Value));
+                gearType.GetField("pages").SetValue(gear, PageValues(controller, gearXml.Pages));
                 // 缓动配置对所有 gear 通用（gearXY/gearSize/gearLook 在 Basics 用到 tween），默认 QuadOut/0.3/0。
-                gearType.GetField("tween").SetValue(gear, gearXml.Attribute("tween")?.Value == "true");
-                gearType.GetField("duration").SetValue(gear, float.Parse(gearXml.Attribute("duration")?.Value ?? "0.3", CultureInfo.InvariantCulture));
-                gearType.GetField("ease").SetValue(gear, ParseEase(gearXml.Attribute("ease")?.Value));
-                gearType.GetField("delay").SetValue(gear, float.Parse(gearXml.Attribute("delay")?.Value ?? "0", CultureInfo.InvariantCulture));
-                if (kind == "gearXY")
+                gearType.GetField("tween").SetValue(gear, gearXml.Tween);
+                gearType.GetField("duration").SetValue(gear, gearXml.Duration);
+                gearType.GetField("ease").SetValue(gear, ParseEase(gearXml.Ease));
+                gearType.GetField("delay").SetValue(gear, gearXml.Delay);
+                if (kind == Schema.GearKind.XY)
                 {
                     var rt = (RectTransform)go.transform;
-                    var origin = Pair(element, "xy") ?? Vector2.zero;
+                    var origin = element.Position ?? Vector2.zero;
                     Vector2 Convert(string pair)
                     {
                         var parts = pair.Split(',');
@@ -684,35 +684,35 @@ namespace NanamiUI.Editor
                             float.Parse(parts[0], CultureInfo.InvariantCulture) - origin.x,
                             origin.y - float.Parse(parts[1], CultureInfo.InvariantCulture));
                     }
-                    var defaultValue = gearXml.Attribute("default") is { } def ? Convert(def.Value) : rt.anchoredPosition;
-                    gearType.GetField("values").SetValue(gear, gearXml.Attribute("values").Value.Split('|').Select(value => value == "-" ? defaultValue : Convert(value)).ToArray());
+                    var defaultValue = gearXml.Default is { } def ? Convert(def) : rt.anchoredPosition;
+                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? defaultValue : Convert(value)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, defaultValue);
                 }
-                else if (kind == "gearColor")
+                else if (kind == Schema.GearKind.Color)
                 {
                     var graphic = go.GetComponent<Graphic>();
-                    var def = gearXml.Attribute("default") is { } value ? ParseColor(value.Value) : graphic.color;
-                    gearType.GetField("values").SetValue(gear, gearXml.Attribute("values").Value.Split('|').Select(value => value == "-" ? def : ParseColor(value)).ToArray());
+                    var def = gearXml.Default is { } value ? ParseColor(value) : graphic.color;
+                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : ParseColor(value)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
-                else if (kind == "gearLook")
+                else if (kind == Schema.GearKind.Look)
                     ConfigureGearLook(gearType, gear, gearXml);
-                else if (kind == "gearSize")
+                else if (kind == Schema.GearKind.Size)
                     ConfigureGearSize(gearType, gear, gearXml, (RectTransform)go.transform);
-                else if (kind == "gearAni")
+                else if (kind == Schema.GearKind.Ani)
                     ConfigureGearAni(gearType, gear, gearXml);
-                else if (kind == "gearFontSize")
+                else if (kind == Schema.GearKind.FontSize)
                 {
-                    var def = int.Parse(gearXml.Attribute("default")?.Value ?? go.GetComponent<Text>().fontSize.ToString());
-                    gearType.GetField("values").SetValue(gear, gearXml.Attribute("values").Value.Split('|').Select(value => value == "-" ? def : int.Parse(value)).ToArray());
+                    var def = gearXml.Default is { } value ? int.Parse(value) : go.GetComponent<Text>().fontSize;
+                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : int.Parse(value)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
-                else if (kind == "gearDisplay")
+                else if (kind == Schema.GearKind.Display)
                     display = gear;
-                else if (kind == "gearDisplay2")
+                else if (kind == Schema.GearKind.Display2)
                 {
                     display2 = gear;
-                    gearType.GetField("condition").SetValue(gear, int.Parse(gearXml.Attribute("condition")?.Value ?? "0"));
+                    gearType.GetField("condition").SetValue(gear, gearXml.Condition);
                 }
                 controller.Gears.Add(gear);
             }
@@ -748,89 +748,89 @@ namespace NanamiUI.Editor
             return values;
         }
 
-        private static void ConfigureImage(Image image, Resource resource, XElement element)
+        private static void ConfigureImage(Image image, Resource resource, Schema.Display element)
         {
             image.type = resource.Scale == "tile" ? Image.Type.Tiled : image.sprite.border == Vector4.zero ? Image.Type.Simple : Image.Type.Sliced;
-            image.color = ParseColor(element.Attribute("color")?.Value ?? "#ffffffff");
-            if (element.Attribute("fillMethod") is { } fillMethod)
+            image.color = ParseColor(element.Color ?? "#ffffffff");
+            if (element.FillMethod != Schema.ImageFillMethod.None)
             {
                 image.type = Image.Type.Filled;
-                image.fillMethod = fillMethod.Value switch
+                image.fillMethod = element.FillMethod switch
                 {
-                    "hz" => Image.FillMethod.Horizontal,
-                    "vt" => Image.FillMethod.Vertical,
-                    "radial90" => Image.FillMethod.Radial90,
-                    "radial180" => Image.FillMethod.Radial180,
+                    Schema.ImageFillMethod.Horizontal => Image.FillMethod.Horizontal,
+                    Schema.ImageFillMethod.Vertical => Image.FillMethod.Vertical,
+                    Schema.ImageFillMethod.Radial90 => Image.FillMethod.Radial90,
+                    Schema.ImageFillMethod.Radial180 => Image.FillMethod.Radial180,
                     _ => Image.FillMethod.Radial360,
                 };
                 if (image.fillMethod == Image.FillMethod.Radial360)
                     image.fillOrigin = (int)Image.Origin360.Top;
-                image.fillClockwise = element.Attribute("fillClockwise")?.Value != "false";
-                image.fillAmount = float.Parse(element.Attribute("fillAmount")?.Value ?? "100", CultureInfo.InvariantCulture) / 100;
+                image.fillClockwise = element.FillClockwise;
+                image.fillAmount = element.FillAmount / 100;
             }
-            if (image is FlipImage flip && element.Attribute("flip") is { } value)
+            if (image is FlipImage flip && element.Flip != Schema.Flip.None)
             {
-                flip.flipX = value.Value is "hz" or "both";
-                flip.flipY = value.Value is "vt" or "both";
+                flip.flipX = element.Flip is Schema.Flip.Horizontal or Schema.Flip.Both;
+                flip.flipY = element.Flip is Schema.Flip.Vertical or Schema.Flip.Both;
             }
         }
 
-        private static void ConfigureButton(GameObject go, XElement buttonXml, string packageId)
+        private static void ConfigureButton(GameObject go, Schema.Extension buttonXml, string packageId)
         {
             var button = ButtonComponent(go);
-            if (buttonXml.Attribute("title") is { } title)
-                button.GetType().GetProperty("Title").SetValue(button, title.Value);
-            if (buttonXml.Attribute("selectedTitle") is { } selectedTitle)
-                button.GetType().GetField("selectedTitle").SetValue(button, selectedTitle.Value);
-            if (buttonXml.Attribute("icon") is { } icon)
-                button.GetType().GetProperty("Icon").SetValue(button, LoadSprite(icon.Value, packageId));
-            if (buttonXml.Attribute("mode") is { } mode)
-                button.GetType().GetField("mode").SetValue(button, Enum.Parse(typeof(ButtonMode), mode.Value));
-            button.GetType().GetField("selected").SetValue(button, buttonXml.Attribute("checked")?.Value == "true");
+            if (buttonXml.Title is { } title)
+                button.GetType().GetProperty("Title").SetValue(button, title);
+            if (buttonXml.SelectedTitle is { } selectedTitle)
+                button.GetType().GetField("selectedTitle").SetValue(button, selectedTitle);
+            if (buttonXml.Icon is { } icon)
+                button.GetType().GetProperty("Icon").SetValue(button, LoadSprite(icon, packageId));
+            if (buttonXml.Mode is { } mode)
+                button.GetType().GetField("mode").SetValue(button, Enum.Parse(typeof(ButtonMode), mode));
+            button.GetType().GetField("selected").SetValue(button, buttonXml.Checked);
             button.GetType().GetMethod("RefreshState").Invoke(button, null);
         }
 
-        private static void ConfigureLabel(GameObject go, XElement labelXml, string packageId)
+        private static void ConfigureLabel(GameObject go, Schema.Extension labelXml, string packageId)
         {
-            if (labelXml.Attribute("title") is { } title && FindChild(go.transform, "title")?.GetComponent<Text>() is { } titleText)
-                titleText.text = title.Value;
-            if (labelXml.Attribute("titleColor") is { } titleColor && FindChild(go.transform, "title")?.GetComponent<Text>() is { } colorText)
-                colorText.color = ParseColor(titleColor.Value);
-            if (labelXml.Attribute("icon") is { } icon && FindChild(go.transform, "icon")?.GetComponent<Image>() is { } image)
+            if (labelXml.Title is { } title && FindChild(go.transform, "title")?.GetComponent<Text>() is { } titleText)
+                titleText.text = title;
+            if (labelXml.TitleColor is { } titleColor && FindChild(go.transform, "title")?.GetComponent<Text>() is { } colorText)
+                colorText.color = ParseColor(titleColor);
+            if (labelXml.Icon is { } icon && FindChild(go.transform, "icon")?.GetComponent<Image>() is { } image)
             {
-                image.sprite = LoadSprite(icon.Value, packageId);
+                image.sprite = LoadSprite(icon, packageId);
                 image.enabled = true;
             }
         }
 
-        private static void ConfigureShape(Shape shape, XElement element)
+        private static void ConfigureShape(Shape shape, Schema.Display element)
         {
-            shape.lineSize = float.Parse(element.Attribute("lineSize")?.Value ?? "1", CultureInfo.InvariantCulture);
-            shape.lineColor = ParseColor(element.Attribute("lineColor")?.Value ?? "#ff000000");
-            shape.color = ParseColor(element.Attribute("fillColor")?.Value ?? "#ffffffff");
-            if (element.Attribute("skew") is { } skew)
-                shape.skew = (Vector2)Pair(element, "skew");
-            switch (element.Attribute("type")?.Value)
+            shape.lineSize = element.LineSize;
+            shape.lineColor = ParseColor(element.LineColor);
+            shape.color = ParseColor(element.FillColor);
+            if (element.Skew != null)
+                shape.skew = (Vector2)element.Skew;
+            switch (element.Type)
             {
-                case "eclipse":
+                case Schema.ShapeType.Ellipse:
                     shape.kind = Shape.Kind.Ellipse;
                     break;
-                case "polygon":
+                case Schema.ShapeType.Polygon:
                     shape.kind = Shape.Kind.Polygon;
-                    var values = element.Attribute("points").Value.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                    var values = element.Points.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
                     shape.points = Enumerable.Range(0, values.Length / 2).Select(i => new Vector2(values[i * 2], values[i * 2 + 1])).ToArray();
                     break;
-                case "regular_polygon":
+                case Schema.ShapeType.RegularPolygon:
                     shape.kind = Shape.Kind.RegularPolygon;
-                    shape.sides = int.Parse(element.Attribute("sides").Value);
-                    shape.startAngle = float.Parse(element.Attribute("startAngle")?.Value ?? "0", CultureInfo.InvariantCulture);
-                    shape.distances = element.Attribute("distances")?.Value.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                    shape.sides = element.Sides;
+                    shape.startAngle = element.StartAngle;
+                    shape.distances = element.Distances?.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
                     break;
                 default:
-                    if (element.Attribute("corner") is { } corner)
+                    if (element.Corner is { } corner)
                     {
                         shape.kind = Shape.Kind.RoundedRect;
-                        var radii = corner.Value.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                        var radii = corner.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
                         shape.corners = Enumerable.Range(0, 4).Select(i => radii[Mathf.Min(i, radii.Length - 1)]).ToArray();
                     }
                     else
@@ -839,7 +839,7 @@ namespace NanamiUI.Editor
             }
         }
 
-        private static void ConfigureMovieClip(MovieClip movieClip, Resource resource, XElement element)
+        private static void ConfigureMovieClip(MovieClip movieClip, Resource resource, Schema.Display element)
         {
             var data = MovieClips[resource];
             var basePath = AssetPath(resource.File);
@@ -848,20 +848,20 @@ namespace NanamiUI.Editor
                 .ToArray();
             movieClip.interval = data.Interval;
             movieClip.addDelays = data.AddDelays;
-            movieClip.playing = element.Attribute("playing")?.Value != "false";
-            movieClip.frame = int.Parse(element.Attribute("frame")?.Value ?? "0");
+            movieClip.playing = element.Playing;
+            movieClip.frame = element.Frame;
             movieClip.sprite = movieClip.frames[movieClip.frame];
             movieClip.type = Image.Type.Simple;
-            movieClip.color = ParseColor(element.Attribute("color")?.Value ?? "#ffffffff");
+            movieClip.color = ParseColor(element.Color ?? "#ffffffff");
         }
 
-        private static void SetupProgressBar(ProgressBar progress, XElement xml, List<(XElement Xml, GameObject Go)> children, GameObject root)
+        private static void SetupProgressBar(ProgressBar progress, Schema.Component xml, List<(Schema.Display Xml, GameObject Go)> children, GameObject root)
         {
-            var ext = xml.Element("ProgressBar");
-            progress.titleType = ParseTitleType(ext.Attribute("titleType")?.Value);
-            progress.reverse = ext.Attribute("reverse")?.Value == "true";
+            var ext = xml.ProgressBar;
+            progress.titleType = ParseTitleType(ext.TitleType);
+            progress.reverse = ext.Reverse;
             progress.title = Child(children, "title")?.GetComponent<Text>();
-            var size = (Vector2)Pair(xml, "size");
+            var size = xml.Size;
             if (Child(children, "bar") is { } bar)
             {
                 progress.bar = (RectTransform)bar.transform;
@@ -880,12 +880,12 @@ namespace NanamiUI.Editor
             SyncRelations(root);
         }
 
-        private static void SetupSlider(Slider slider, XElement xml, List<(XElement Xml, GameObject Go)> children, GameObject root)
+        private static void SetupSlider(Slider slider, Schema.Component xml, List<(Schema.Display Xml, GameObject Go)> children, GameObject root)
         {
-            var ext = xml.Element("Slider");
-            slider.titleType = ParseTitleType(ext.Attribute("titleType")?.Value);
+            var ext = xml.Slider;
+            slider.titleType = ParseTitleType(ext.TitleType);
             slider.title = Child(children, "title")?.GetComponent<Text>();
-            var size = (Vector2)Pair(xml, "size");
+            var size = xml.Size;
             if (Child(children, "bar") is { } bar)
             {
                 slider.bar = (RectTransform)bar.transform;
@@ -910,36 +910,36 @@ namespace NanamiUI.Editor
             _ => ProgressTitleType.Percent,
         };
 
-        private static GameObject Child(List<(XElement Xml, GameObject Go)> children, string name) =>
-            children.FirstOrDefault(child => child.Xml.Attribute("name").Value == name).Go;
+        private static GameObject Child(List<(Schema.Display Xml, GameObject Go)> children, string name) =>
+            children.FirstOrDefault(child => child.Xml.Name == name).Go;
 
-        private static void ConfigureProgressBar(GameObject go, XElement xml)
+        private static void ConfigureProgressBar(GameObject go, Schema.Extension xml)
         {
             var progress = go.GetComponent<ProgressBar>();
-            progress.value = float.Parse(xml.Attribute("value")?.Value ?? "50", CultureInfo.InvariantCulture);
-            progress.max = float.Parse(xml.Attribute("max")?.Value ?? "100", CultureInfo.InvariantCulture);
+            progress.value = xml.Value;
+            progress.max = xml.Max;
             progress.Apply();
             SyncRelations(go);
         }
 
-        private static void ConfigureSlider(GameObject go, XElement xml)
+        private static void ConfigureSlider(GameObject go, Schema.Extension xml)
         {
             var slider = go.GetComponent<Slider>();
-            slider.value = float.Parse(xml.Attribute("value")?.Value ?? "50", CultureInfo.InvariantCulture);
-            slider.max = float.Parse(xml.Attribute("max")?.Value ?? "100", CultureInfo.InvariantCulture);
+            slider.value = xml.Value;
+            slider.max = xml.Max;
             slider.Apply();
             SyncRelations(go);
         }
 
-        private static void ConfigureComboBox(GameObject go, XElement xml, string packageId)
+        private static void ConfigureComboBox(GameObject go, Schema.Extension xml, string packageId)
         {
             var combo = go.GetComponents<UnityEngine.Component>().FirstOrDefault(c => IsButton(c.GetType()));
             if (combo == null)
                 return; // 无 button 控制器、退化为 Component 的 ComboBox（如 Dropdown）：无 items/dropdown 面，跳过
             var type = combo.GetType();
-            if (xml.Attribute("dropdown") is { } dropdown && TryResolve(dropdown.Value, packageId, out var dropRes))
+            if (xml.Dropdown is { } dropdown && TryResolve(dropdown, packageId, out var dropRes))
                 type.GetField("dropdownPrefab").SetValue(combo, LoadPrefab(dropRes));
-            var items = xml.Elements("item").Select(e => e.Attribute("title")?.Value ?? "").ToArray();
+            var items = xml.Items;
             if (items.Length > 0)
             {
                 type.GetField("items").SetValue(combo, items);
@@ -953,21 +953,21 @@ namespace NanamiUI.Editor
                 relation.Sync();
         }
 
-        private static void ApplyElement(GameObject go, XElement element)
+        private static void ApplyElement(GameObject go, Schema.Display element)
         {
             var rt = (RectTransform)go.transform;
-            if (element.Attribute("rotation") is { } rotation)
-                rt.localEulerAngles = new Vector3(0, 0, -float.Parse(rotation.Value, CultureInfo.InvariantCulture));
-            if (element.Attribute("alpha") is { } alpha)
+            if (element.Rotation is { } rotation)
+                rt.localEulerAngles = new Vector3(0, 0, -rotation);
+            if (element.Alpha is { } alpha)
                 foreach (var graphic in go.GetComponentsInChildren<Graphic>(true))
                 {
                     var color = graphic.color;
-                    color.a *= float.Parse(alpha.Value, CultureInfo.InvariantCulture);
+                    color.a *= alpha;
                     graphic.color = color;
                 }
-            if (element.Attribute("touchable")?.Value == "false")
+            if (!element.Touchable)
                 go.AddComponent<CanvasGroup>().blocksRaycasts = false;
-            if (element.Attribute("grayed")?.Value == "true")
+            if (element.Grayed)
             {
                 var button = go.GetComponents<UnityEngine.Component>().FirstOrDefault(component => IsButton(component.GetType()));
                 // FairyGUI 约定：存在名为 grayed 的控制器时，置灰只切换其页面 1，不套灰度材质。
@@ -990,7 +990,7 @@ namespace NanamiUI.Editor
             }
         }
 
-        private static void ConfigureGearLook(Type gearType, object gear, XElement xml)
+        private static void ConfigureGearLook(Type gearType, object gear, Schema.Gear xml)
         {
             (float Alpha, float Rotation, bool Grayed) Parse(string value, (float Alpha, float Rotation, bool Grayed) def)
             {
@@ -1000,8 +1000,8 @@ namespace NanamiUI.Editor
                 return (float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture), parts[2] == "1");
             }
 
-            var def = Parse(xml.Attribute("default")?.Value ?? "1,0,0", (1, 0, false));
-            var values = xml.Attribute("values").Value.Split('|').Select(value => Parse(value, def)).ToArray();
+            var def = Parse(xml.Default ?? "1,0,0", (1, 0, false));
+            var values = xml.Values.Split('|').Select(value => Parse(value, def)).ToArray();
             gearType.GetField("alphas").SetValue(gear, values.Select(value => value.Alpha).ToArray());
             gearType.GetField("defaultAlpha").SetValue(gear, def.Alpha);
             gearType.GetField("rotations").SetValue(gear, values.Select(value => value.Rotation).ToArray());
@@ -1010,7 +1010,7 @@ namespace NanamiUI.Editor
             gearType.GetField("defaultGrayed").SetValue(gear, def.Grayed);
         }
 
-        private static void ConfigureGearSize(Type gearType, object gear, XElement xml, RectTransform rt)
+        private static void ConfigureGearSize(Type gearType, object gear, Schema.Gear xml, RectTransform rt)
         {
             (Vector2 Size, Vector2 Scale) Parse(string value, (Vector2 Size, Vector2 Scale) def)
             {
@@ -1022,8 +1022,8 @@ namespace NanamiUI.Editor
             }
 
             var fallback = (Size: rt.sizeDelta, Scale: Vector2.one);
-            var def = xml.Attribute("default") is { } defaultValue ? Parse(defaultValue.Value, fallback) : fallback;
-            var values = xml.Attribute("values").Value.Split('|').Select(value => Parse(value, def)).ToArray();
+            var def = xml.Default is { } defaultValue ? Parse(defaultValue, fallback) : fallback;
+            var values = xml.Values.Split('|').Select(value => Parse(value, def)).ToArray();
             gearType.GetField("sizes").SetValue(gear, values.Select(value => value.Size).ToArray());
             gearType.GetField("defaultSize").SetValue(gear, def.Size);
             gearType.GetField("scales").SetValue(gear, values.Select(value => value.Scale).ToArray());
@@ -1039,16 +1039,23 @@ namespace NanamiUI.Editor
         }
 
         // 复刻 ScrollPane 静态布局：viewport 缩进 margin 与滚动条宽度，滚动条常显，grip 长度按显示比例。
-        private static ScrollView BuildScrollView(GameObject root, XElement element, Vector2 size)
+        private static ScrollView BuildScrollView(GameObject root, Schema.Component element, Vector2 size) =>
+            BuildScrollView(root, size, element.Margin, element.ScrollBarMargin, element.Scroll, element.ScrollBar, element.ScrollBarFlags, element.ClipSoftness);
+
+        private static ScrollView BuildScrollView(GameObject root, Schema.Display element, Vector2 size)
         {
-            var margin = ParseMargin(element.Attribute("margin")?.Value);
-            var barMargin = ParseMargin(element.Attribute("scrollBarMargin")?.Value);
-            var scroll = element.Attribute("scroll")?.Value ?? "vertical";
-            var hideBars = element.Attribute("scrollBar")?.Value == "hidden";
+            return BuildScrollView(root, size, element.Margin, element.ScrollBarMargin, element.Scroll, element.ScrollBar, element.ScrollBarFlags, element.ClipSoftness);
+        }
+
+        private static ScrollView BuildScrollView(GameObject root, Vector2 size, string marginValue, string scrollBarMarginValue, Schema.Scroll scroll, string scrollBar, int scrollBarFlags, string clipSoftness)
+        {
+            var margin = ParseMargin(marginValue);
+            var barMargin = ParseMargin(scrollBarMarginValue);
+            var hideBars = scrollBar == "hidden";
             // scrollBarFlags bit0 = displayOnLeft：竖直滚动条放左侧、内容从左内缩（FairyGUI ScrollPane._displayOnLeft）。
-            var displayOnLeft = (int.Parse(element.Attribute("scrollBarFlags")?.Value ?? "0") & 1) != 0;
-            var vtBar = !hideBars && scroll is "vertical" or "both" ? InstantiateScrollBar(Settings().scrollBars?.vertical, root.transform) : null;
-            var hzBar = !hideBars && scroll is "horizontal" or "both" ? InstantiateScrollBar(Settings().scrollBars?.horizontal, root.transform) : null;
+            var displayOnLeft = (scrollBarFlags & 1) != 0;
+            var vtBar = !hideBars && scroll is Schema.Scroll.Vertical or Schema.Scroll.Both ? InstantiateScrollBar(Settings().scrollBars?.vertical, root.transform) : null;
+            var hzBar = !hideBars && scroll is Schema.Scroll.Horizontal or Schema.Scroll.Both ? InstantiateScrollBar(Settings().scrollBars?.horizontal, root.transform) : null;
             var vtWidth = vtBar != null ? ((RectTransform)vtBar.transform).sizeDelta.x : 0;
             var hzHeight = hzBar != null ? ((RectTransform)hzBar.transform).sizeDelta.y : 0;
             var leftInset = displayOnLeft ? vtWidth : 0;
@@ -1064,9 +1071,9 @@ namespace NanamiUI.Editor
             viewportRt.offsetMin = new Vector2(margin.Left + leftInset, margin.Bottom + hzHeight);
             viewportRt.offsetMax = new Vector2(-(margin.Right + rightInset), -margin.Top);
             viewport.transform.SetSiblingIndex(0);
-            if (element.Attribute("clipSoftness") is { } softness)
+            if (clipSoftness is { } softness)
             {
-                var parts = softness.Value.Split(',');
+                var parts = softness.Split(',');
                 viewport.GetComponent<RectMask2D>().softness = new Vector2Int(int.Parse(parts[0]), int.Parse(parts[1]));
             }
 
@@ -1113,7 +1120,7 @@ namespace NanamiUI.Editor
             }
         }
 
-        private static Vector2 ContentBounds(List<(XElement Xml, GameObject Go)> children)
+        private static Vector2 ContentBounds(List<(Schema.Display Xml, GameObject Go)> children)
         {
             var bounds = Vector2.zero;
             foreach (var (_, go) in children)
@@ -1125,14 +1132,14 @@ namespace NanamiUI.Editor
             return bounds;
         }
 
-        private static void BuildList(GameObject go, XElement element, Resource owner)
+        private static void BuildList(GameObject go, Schema.Display element, Resource owner)
         {
-            var size = (Vector2)Pair(element, "size");
-            var prefab = LoadPrefab(Resolve(element.Attribute("defaultItem").Value, owner.PackageId));
+            var size = (Vector2)element.Size;
+            var prefab = LoadPrefab(Resolve(element.DefaultItem, owner.PackageId));
             var itemSize = ((RectTransform)prefab.transform).sizeDelta;
-            var lineGap = float.Parse(element.Attribute("lineGap")?.Value ?? "0", CultureInfo.InvariantCulture);
-            var colGap = float.Parse(element.Attribute("colGap")?.Value ?? "0", CultureInfo.InvariantCulture);
-            var layout = element.Attribute("layout")?.Value ?? "column";
+            var lineGap = element.LineGap;
+            var colGap = element.ColGap;
+            var layout = element.Layout;
 
             // 烘焙动态实例化描述：运行时（PopupMenu/ComboBox 下拉/Window1/Grid）据此从 defaultItem 建项。
             var source = go.AddComponent<ListSource>();
@@ -1142,14 +1149,14 @@ namespace NanamiUI.Editor
             source.colGap = colGap;
             source.layout = layout;
 
-            var view = element.Attribute("overflow")?.Value == "scroll"
+            var view = element.Overflow == Schema.Overflow.Scroll
                 ? BuildScrollView(go, element, size)
                 : new ScrollView { Viewport = (RectTransform)go.transform };
             var viewSize = view.Viewport == go.transform ? size : view.ViewportSize;
 
             var positions = new List<Vector2>();
             float x = 0, y = 0;
-            foreach (var _ in element.Elements("item"))
+            foreach (var _ in element.Items)
                 switch (layout)
                 {
                     case "row":
@@ -1182,7 +1189,7 @@ namespace NanamiUI.Editor
 
             var content = Vector2.zero;
             var index = 0;
-            foreach (var item in element.Elements("item"))
+            foreach (var item in element.Items)
             {
                 var position = positions[index++];
                 content = Vector2.Max(content, position + itemSize);
@@ -1218,47 +1225,47 @@ namespace NanamiUI.Editor
         }
 
         // 动效：XML 时间/时长单位是 24fps 帧；值里 "-" 表示保持当前（NaN）。
-        private static void BuildTransitions(GameObject root, XElement xml, Dictionary<string, (XElement Xml, GameObject Go)> byId, string packageId)
+        private static void BuildTransitions(GameObject root, Schema.Component xml, Dictionary<string, (Schema.Display Xml, GameObject Go)> byId, string packageId)
         {
-            foreach (var transitionXml in xml.Elements("transition"))
+            foreach (var transitionXml in xml.Transitions)
             {
                 var transition = root.AddComponent<Transition>();
-                transition.transitionName = transitionXml.Attribute("name").Value;
-                transition.autoPlay = transitionXml.Attribute("autoPlay")?.Value == "true";
-                transition.autoPlayTimes = int.Parse(transitionXml.Attribute("autoPlayRepeat")?.Value ?? "1");
-                transition.autoPlayDelay = float.Parse(transitionXml.Attribute("autoPlayDelay")?.Value ?? "0", CultureInfo.InvariantCulture);
+                transition.transitionName = transitionXml.Name;
+                transition.autoPlay = transitionXml.AutoPlay;
+                transition.autoPlayTimes = transitionXml.AutoPlayRepeat;
+                transition.autoPlayDelay = transitionXml.AutoPlayDelay;
 
                 var items = new List<TransitionItem>();
-                foreach (var itemXml in transitionXml.Elements("item"))
+                foreach (var itemXml in transitionXml.Items)
                 {
-                    var targetId = itemXml.Attribute("target")?.Value ?? "";
-                    (XElement Xml, GameObject Go) target = default;
+                    var targetId = itemXml.Target;
+                    (Schema.Display Xml, GameObject Go) target = default;
                     if (targetId != "" && !byId.TryGetValue(targetId, out target))
                         continue; // 编辑器遗留的失效目标
-                    var type = ParseTransitionType(itemXml.Attribute("type").Value);
+                    var type = ParseTransitionType(itemXml.Type);
                     if (type == null)
                         continue;
 
                     var item = new TransitionItem
                     {
-                        time = int.Parse(itemXml.Attribute("time").Value) / 24f,
+                        time = itemXml.Time / 24f,
                         target = target.Go != null ? (RectTransform)target.Go.transform : null,
                         type = type.Value,
-                        tween = itemXml.Attribute("tween")?.Value == "true",
-                        duration = int.Parse(itemXml.Attribute("duration")?.Value ?? "0") / 24f,
-                        ease = ParseEase(itemXml.Attribute("ease")?.Value),
-                        repeat = int.Parse(itemXml.Attribute("repeat")?.Value ?? "0"),
-                        yoyo = itemXml.Attribute("yoyo")?.Value == "true",
+                        tween = itemXml.Tween,
+                        duration = itemXml.Duration / 24f,
+                        ease = ParseEase(itemXml.Ease),
+                        repeat = itemXml.Repeat,
+                        yoyo = itemXml.Yoyo,
                     };
 
                     if (item.tween)
                     {
-                        item.start = ParseTransitionValues(itemXml.Attribute("startValue")?.Value, item.type);
-                        item.end = ParseTransitionValues(itemXml.Attribute("endValue")?.Value, item.type);
+                        item.start = ParseTransitionValues(itemXml.StartValue, item.type);
+                        item.end = ParseTransitionValues(itemXml.EndValue, item.type);
                     }
                     else
                     {
-                        var value = itemXml.Attribute("value")?.Value;
+                        var value = itemXml.Value;
                         switch (item.type)
                         {
                             case TransitionItemType.Sound:
@@ -1280,10 +1287,10 @@ namespace NanamiUI.Editor
                     if (item.type == TransitionItemType.XY)
                     {
                         var rt = target.Go != null ? (RectTransform)target.Go.transform : (RectTransform)root.transform;
-                        var designXY = target.Xml != null ? Pair(target.Xml, "xy") ?? Vector2.zero : Vector2.zero;
+                        var designXY = target.Xml != null ? target.Xml.Position ?? Vector2.zero : Vector2.zero;
                         item.positionOffset = rt.anchoredPosition - new Vector2(designXY.x, -designXY.y);
-                        if (itemXml.Attribute("path") is { } path)
-                            item.pathData = path.Value.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                        if (itemXml.Path is { } path)
+                            item.pathData = path.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
                     }
 
                     items.Add(item);
@@ -1356,7 +1363,7 @@ namespace NanamiUI.Editor
             return Sounds[resource] = AssetDatabase.LoadAssetAtPath<AudioClip>(target);
         }
 
-        private static void ConfigureGearAni(Type gearType, object gear, XElement xml)
+        private static void ConfigureGearAni(Type gearType, object gear, Schema.Gear xml)
         {
             (int Frame, bool Playing) Parse(string value, (int Frame, bool Playing) def)
             {
@@ -1366,8 +1373,8 @@ namespace NanamiUI.Editor
                 return (int.Parse(parts[0]), parts[1] == "p");
             }
 
-            var def = Parse(xml.Attribute("default")?.Value ?? "0,p", (0, true));
-            var values = xml.Attribute("values").Value.Split('|').Select(value => Parse(value, def)).ToArray();
+            var def = Parse(xml.Default ?? "0,p", (0, true));
+            var values = xml.Values.Split('|').Select(value => Parse(value, def)).ToArray();
             gearType.GetField("frames").SetValue(gear, values.Select(value => value.Frame).ToArray());
             gearType.GetField("defaultFrame").SetValue(gear, def.Frame);
             gearType.GetField("playings").SetValue(gear, values.Select(value => value.Playing).ToArray());
@@ -1395,17 +1402,17 @@ namespace NanamiUI.Editor
             return false;
         }
 
-        private static void SetRect(RectTransform rt, XElement element, Vector2 size, RectTransform parent)
+        private static void SetRect(RectTransform rt, Schema.Display element, Vector2 size, RectTransform parent)
         {
-            var xy = Pair(element, "xy") ?? Vector2.zero;
-            if (element.Attribute("anchor")?.Value == "true" && Pair(element, "pivot") is { } anchorPivot)
+            var xy = element.Position ?? Vector2.zero;
+            if (element.Anchor && element.Pivot is { } anchorPivot)
                 xy -= anchorPivot * size;
             Vector2 anchorMin = new(0, 1), anchorMax = new(0, 1);
-            foreach (var relation in element.Elements("relation"))
+            foreach (var relation in element.Relations)
             {
-                if (relation.Attribute("target")?.Value != "")
+                if (relation.Target != "")
                     continue;
-                foreach (var pair in relation.Attribute("sidePair").Value.Split(','))
+                foreach (var pair in relation.SidePairs)
                     switch (pair)
                     {
                         case "width-width":
@@ -1428,7 +1435,7 @@ namespace NanamiUI.Editor
             rt.anchorMax = anchorMax;
             rt.offsetMin = new Vector2(xy.x - anchorMin.x * pw, ph - xy.y - size.y - anchorMin.y * ph);
             rt.offsetMax = new Vector2(xy.x + size.x - anchorMax.x * pw, ph - xy.y - anchorMax.y * ph);
-            if (Pair(element, "pivot") is { } pivot)
+            if (element.Pivot is { } pivot)
             {
                 // pivot setter 保持 anchoredPosition，需要补偿位移以保持 rect 不动。
                 var newPivot = new Vector2(pivot.x, 1 - pivot.y);
@@ -1436,54 +1443,54 @@ namespace NanamiUI.Editor
                 rt.pivot = newPivot;
                 rt.anchoredPosition += new Vector2(delta.x * size.x, delta.y * size.y);
             }
-            if (Pair(element, "scale") is { } scale)
+            if (element.Scale is { } scale)
                 rt.localScale = new Vector3(scale.x, scale.y, 1);
         }
 
-        private static void ConfigureText(Text text, XElement element, Resource owner)
+        private static void ConfigureText(Text text, Schema.Display element, Resource owner)
         {
-            text.text = element.Attribute("text")?.Value ?? "";
-            text.fontSize = int.Parse(element.Attribute("fontSize")?.Value ?? Settings().fontSize.ToString());
-            text.leading = int.Parse(element.Attribute("leading")?.Value ?? "3");
-            text.color = ParseColor(element.Attribute("color")?.Value ?? Settings().textColor);
+            text.text = element.Text;
+            text.fontSize = element.FontSize ?? Settings().fontSize;
+            text.leading = element.Leading;
+            text.color = ParseColor(element.Color ?? Settings().textColor);
             text.supportRichText = false;
-            text.html = element.Name.LocalName == "richtext";
-            text.ubb = element.Attribute("ubb")?.Value == "true";
-            text.underlined = element.Attribute("underline")?.Value == "true";
-            if (text.text == "" && element.Attribute("prompt") is { } prompt)
+            text.html = element.Kind == Schema.DisplayKind.RichText;
+            text.ubb = element.Ubb;
+            text.underlined = element.Underline;
+            if (text.text == "" && element.Prompt is { } prompt)
             {
-                text.text = prompt.Value;
+                text.text = prompt;
                 text.ubb = true;
             }
             text.imageSprites = Regex.Matches(text.text, @"ui://\w+")
                 .Select(match => LoadSprite(match.Value, owner.PackageId))
                 .ToArray();
-            var bold = element.Attribute("bold")?.Value == "true";
-            var italic = element.Attribute("italic")?.Value == "true";
+            var bold = element.Bold;
+            var italic = element.Italic;
             text.fontStyle = bold && italic ? FontStyle.BoldAndItalic : bold ? FontStyle.Bold : italic ? FontStyle.Italic : FontStyle.Normal;
-            var autoSize = element.Attribute("autoSize")?.Value ?? "both";
-            text.horizontalOverflow = autoSize == "both" || element.Attribute("singleLine")?.Value == "true"
+            var autoSize = element.AutoSize;
+            text.horizontalOverflow = autoSize == "both" || element.SingleLine
                 ? HorizontalWrapMode.Overflow
                 : HorizontalWrapMode.Wrap;
             text.verticalOverflow = autoSize == "none" ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow;
-            text.alignment = (element.Attribute("vAlign")?.Value, element.Attribute("align")?.Value) switch
+            text.alignment = (element.VAlign, element.Align) switch
             {
-                ("middle", "center") => TextAnchor.MiddleCenter,
-                ("middle", "right") => TextAnchor.MiddleRight,
-                ("middle", _) => TextAnchor.MiddleLeft,
-                ("bottom", "center") => TextAnchor.LowerCenter,
-                ("bottom", "right") => TextAnchor.LowerRight,
-                ("bottom", _) => TextAnchor.LowerLeft,
-                (_, "center") => TextAnchor.UpperCenter,
-                (_, "right") => TextAnchor.UpperRight,
+                (Schema.VAlign.Middle, Schema.Align.Center) => TextAnchor.MiddleCenter,
+                (Schema.VAlign.Middle, Schema.Align.Right) => TextAnchor.MiddleRight,
+                (Schema.VAlign.Middle, _) => TextAnchor.MiddleLeft,
+                (Schema.VAlign.Bottom, Schema.Align.Center) => TextAnchor.LowerCenter,
+                (Schema.VAlign.Bottom, Schema.Align.Right) => TextAnchor.LowerRight,
+                (Schema.VAlign.Bottom, _) => TextAnchor.LowerLeft,
+                (_, Schema.Align.Center) => TextAnchor.UpperCenter,
+                (_, Schema.Align.Right) => TextAnchor.UpperRight,
                 _ => TextAnchor.UpperLeft,
             };
-            if (element.Attribute("font") is { } font)
+            if (element.Font is { } font)
             {
-                if (TryResolve(font.Value, owner.PackageId, out var fontResource) && fontResource.Type == "font")
+                if (TryResolve(font, owner.PackageId, out var fontResource) && fontResource.Type == Schema.ResourceKind.Font)
                     text.bitmapFont = ImportFont(fontResource);
                 else
-                    text.fontNames = font.Value;
+                    text.fontNames = font;
             }
         }
 
@@ -1609,14 +1616,10 @@ namespace NanamiUI.Editor
             return attrs;
         }
 
-        private static IEnumerable<XElement> DisplayList(string file) =>
-            XDocument.Load(file).Root.Element("displayList")?.Elements() ?? Enumerable.Empty<XElement>();
-
-        private static IEnumerable<(string Id, string Member)> PageMembers(XElement controller)
+        private static IEnumerable<(string Id, string Member)> PageMembers(Schema.Controller controller)
         {
-            var parts = controller.Attribute("pages").Value.Split(',');
-            for (var i = 0; i < parts.Length; i += 2)
-                yield return (parts[i], Identifier(parts[i + 1] == "" ? parts[i] : parts[i + 1]));
+            foreach (var (id, name) in controller.Pages)
+                yield return (id, Identifier(name == "" ? id : name));
         }
 
         private static GameObject NewChild(string name, RectTransform parent, params Type[] components)
@@ -1641,15 +1644,6 @@ namespace NanamiUI.Editor
 
         private static Type FindType(string fullName) =>
             TypeCache.GetTypesDerivedFrom<MonoBehaviour>().First(type => type.FullName == fullName);
-
-        private static Vector2? Pair(XElement element, string attribute)
-        {
-            var value = element.Attribute(attribute)?.Value;
-            if (value == null)
-                return null;
-            var parts = value.Split(',');
-            return new Vector2(float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture));
-        }
 
         private static Color ParseColor(string value)
         {
@@ -1681,7 +1675,7 @@ namespace NanamiUI.Editor
             $"{OutputRoot}/Assets/{Path.GetRelativePath($"{UiRoot}/assets", file).Replace('\\', '/')}";
 
         private static string SpritePath(Resource resource) =>
-            resource.Type == "movieclip" ? FramePath(AssetPath(resource.File), 0) : AssetPath(resource.File);
+            resource.Type == Schema.ResourceKind.MovieClip ? FramePath(AssetPath(resource.File), 0) : AssetPath(resource.File);
 
         private static string ScriptPath(string file) =>
             Path.ChangeExtension($"{OutputRoot}/Scripts/{Path.GetRelativePath($"{UiRoot}/assets", file).Replace('\\', '/')}", ".cs").Replace('\\', '/');
@@ -1731,3 +1725,4 @@ namespace NanamiUI.Editor
         }
     }
 }
+
