@@ -23,8 +23,18 @@ namespace NanamiUI
         public BitmapFont bitmapFont;
         public Sprite[] imageSprites;
 
+        [NonSerialized] private Action<string> _onClickLink;
+
         // 点富文本 <a href> 链接的回调（复刻 FairyGUI GRichTextField.onClickLink）。
-        [NonSerialized] public Action<string> onClickLink;
+        public Action<string> onClickLink
+        {
+            get => _onClickLink;
+            set
+            {
+                _onClickLink = value;
+                raycastTarget = value != null;
+            }
+        }
 
         private static readonly Dictionary<string, Font> Fonts = new();
 
@@ -81,6 +91,7 @@ namespace NanamiUI
 
         protected override void OnEnable()
         {
+            raycastTarget = _onClickLink != null;
             // 位图字体也需要挂一个动态字体占位：UI.Text.UpdateGeometry 在 font == null 时不生成网格。
             if (font == null)
             {

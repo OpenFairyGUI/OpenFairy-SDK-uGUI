@@ -73,6 +73,10 @@
 
 **已重烘焙**（`Tools/Migrate` 全量重跑，仍 39/39）：ComboBox items + dropdown 已烘焙成 `NanamiUI.ComboBox<T>`（不再硬编码）；`ListSource` 已烘焙（`GList.Fill` 动态建项）；Window1 列表填 6 项。**仍存的取舍**（AGENTS.md 详述）：popup 外点关闭用透明 blocker（新 Input System 不能读旧 Input）故表现为模态；ScrollPane 仅拖动无惯性；ComboBox 下拉不裁剪滚动、Dropdown 变体(n4/n5)不接；Grid 只设可见文本。
 
+### SDK 修复：Text 链接点击抢走按钮导航（2026-07-08）
+
+Text 链接点击支持让 `NanamiUI.Text` 实现了 `IPointerClickHandler`，但默认 `raycastTarget=true`。主页按钮的标题是子 Text，真实 Unity 输入会出现 pointerDown 命中父 Button、pointerClick 候选命中子 Text 的情况，导致 `Button.onClick` 不触发；旧 smoke test 直接 `onClick.Invoke()`，所以没抓到。修复：`Text` 默认 `raycastTarget=false`，`onClickLink` 改为属性，只有赋链接回调时才打开 raycast。新增 `MainNavigationTests.Real_pointer_clicks_open_demo_and_back_to_home` 走 `GraphicRaycaster` 真实命中验证主页进/退 Demo；`TextLinkTests` 仍通过，富文本链接不受影响。
+
 ## 截图输出约定
 
 每个页面会生成 `{Page}_fairygui.png`、`{Page}_nanami.png`、`{Page}_diff.png`；`&`、`/` 会替换为 `_`。
