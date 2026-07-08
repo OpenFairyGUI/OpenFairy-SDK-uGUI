@@ -29,6 +29,13 @@ namespace NanamiUI.Editor
             demo.demoNames = prefabs.Select(prefab => prefab.name["Demo_".Length..]).ToArray();
             demo.demoPrefabs = prefabs;
             demo.changeSprite = AssetDatabase.LoadAssetAtPath<Sprite>($"{Root}/images/change.png");
+            demo.windowAPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/WindowA.prefab");
+            demo.windowBPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/WindowB.prefab");
+            demo.popupMenuPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/popupmenu/PopupMenu.prefab");
+            demo.popupItemPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/popupmenu/PopupMenuItem.prefab");
+            demo.popupComPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/components/Component12.prefab");
+            demo.gridItem1Prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/components/GridItem.prefab");
+            demo.gridItem2Prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/components/GridItem2.prefab");
             PrefabUtility.SaveAsPrefabAsset(main, MainPath);
             PrefabUtility.UnloadPrefabContents(main);
         }

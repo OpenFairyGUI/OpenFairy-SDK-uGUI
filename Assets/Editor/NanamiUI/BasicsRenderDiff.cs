@@ -321,7 +321,7 @@ namespace NanamiUI.Editor
             var unitsPerPixel = StageCamera.DefaultCameraSize * 2 / size.y;
             stage.SetSize(size.x, size.y);
             stage.cachedTransform.localScale = new Vector3(unitsPerPixel, unitsPerPixel, unitsPerPixel);
-            GRoot.inst.ApplyContentScaleFactor();
+            FairyGUI.GRoot.inst.ApplyContentScaleFactor();
             stageCamera.unitsPerPixel = unitsPerPixel;
             _fairyCamera.orthographic = true;
             _fairyCamera.orthographicSize = StageCamera.DefaultCameraSize;
@@ -333,9 +333,9 @@ namespace NanamiUI.Editor
 
             if (_fairyView != null)
                 _fairyView.Dispose();
-            GRoot.inst.RemoveChildren(0, -1, true);
+            FairyGUI.GRoot.inst.RemoveChildren(0, -1, true);
             var view = UIPackage.CreateObject(page.Package, page.Component).asCom;
-            GRoot.inst.AddChild(view);
+            FairyGUI.GRoot.inst.AddChild(view);
             view.SetXY(0, 0);
             view.EnsureBoundsCorrect();
             if (view.GetTransition("t0") is { } transition)
@@ -605,7 +605,7 @@ namespace NanamiUI.Editor
                 if (UIPackage.GetByName(c.Package) == null)
                     UIPackage.AddPackage($"UI/{c.Package}");
                 var view = UIPackage.CreateObject(c.Package, c.Component).asCom;
-                GRoot.inst.AddChild(view);
+                FairyGUI.GRoot.inst.AddChild(view);
                 view.SetXY(0, 0);
                 view.EnsureBoundsCorrect();
                 var target = view.GetChild(c.Target);

@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace NanamiUI
@@ -9,7 +11,7 @@ namespace NanamiUI
     // 行高 = round(size*1.25)，基线 = round(size)，四周 2px gutter，对齐偏移取整，
     // 下划线取 "_" 字形中心 UV，行内图片基线 = 高度*0.8、占宽 = 宽度+2。
     // 支持 UBB（color/渐变/b/i/u/size/img）与 richtext 的 img/a 标签，以及位图字体。
-    public class Text : UnityEngine.UI.Text
+    public class Text : UnityEngine.UI.Text, IPointerClickHandler
     {
         public static string defaultFont = "Arial";
 
@@ -21,6 +23,9 @@ namespace NanamiUI
         public BitmapFont bitmapFont;
         public Sprite[] imageSprites;
 
+        // 点富文本 <a href> 链接的回调（复刻 FairyGUI GRichTextField.onClickLink）。
+        [NonSerialized] public Action<string> onClickLink;
+
         private static readonly Dictionary<string, Font> Fonts = new();
 
         private struct Run
@@ -30,6 +35,7 @@ namespace NanamiUI
             public int Size;
             public FontStyle Style;
             public bool Underline;
+            public string Href;
             public Color32 TL, BL, TR, BR;
         }
 
@@ -42,6 +48,34 @@ namespace NanamiUI
 
         private readonly List<Quad> _quads = new();
         private readonly List<(int Image, Vector2 Position)> _placements = new();
+        private readonly List<(Rect Rect, string Href)> _links = new(); // 排版坐标（左上 y-down），供点击命中
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (onClickLink == null || _links.Count == 0)
+                return;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(rectTransform, eventData.position, eventData.pressEventCamera, out var local);
+            var rect = rectTransform.rect;
+            var point = new Vector2(local.x - rect.xMin, rect.yMax - local.y); // 转 top-down 排版坐标
+            foreach (var (r, href) in _links)
+                if (r.Contains(point))
+                {
+                    onClickLink(href);
+                    return;
+                }
+        }
+
+        private static string ParseHref(string tag)
+        {
+            var idx = tag.IndexOf("href", StringComparison.Ordinal);
+            if (idx < 0)
+                return "";
+            var quote = tag.IndexOfAny(new[] { '\'', '"' }, idx);
+            if (quote < 0)
+                return "";
+            var end = tag.IndexOf(tag[quote], quote + 1);
+            return end > quote ? tag[(quote + 1)..end] : "";
+        }
 
         public override Texture mainTexture => bitmapFont != null ? bitmapFont.texture : base.mainTexture;
 
@@ -184,6 +218,7 @@ namespace NanamiUI
                         stack.Push(current);
                         SetColors(ref current, new[] { new Color32(0x3A, 0x67, 0xCC, 0xFF) });
                         current.Underline = true;
+                        current.Href = ParseHref(tag);
                     }
                     else if (tag.StartsWith("/a"))
                     {
@@ -275,6 +310,7 @@ namespace NanamiUI
         {
             _quads.Clear();
             _placements.Clear();
+            _links.Clear();
             var runs = Parse();
             if (bitmapFont == null)
             {
@@ -332,6 +368,8 @@ namespace NanamiUI
                         x += DrawChar(ch, segment.Run, x, baselineY, y);
                     if (segment.Run.Underline)
                         DrawUnderline(segment.Run, underlineStart, x, baselineY);
+                    if (segment.Run.Href != null && x > underlineStart)
+                        _links.Add((new Rect(underlineStart, y, x - underlineStart, height), segment.Run.Href));
                 }
                 y += height + lineSpacing;
             }

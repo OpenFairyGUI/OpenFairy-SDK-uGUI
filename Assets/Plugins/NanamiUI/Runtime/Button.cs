@@ -12,7 +12,14 @@ namespace NanamiUI
         Radio,
     }
 
-    public abstract class Button<T> : Component, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler where T : struct, Enum
+    // 非泛型按钮基类：让 GRoot/Window/PopupMenu 不必知道 T 就能挂 onClick / 设 Title（复刻 FairyGUI GButton 面）。
+    public abstract class ButtonBase : Component
+    {
+        public UnityEvent onClick = new();
+        public abstract string Title { get; set; }
+    }
+
+    public abstract class Button<T> : ButtonBase, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler where T : struct, Enum
     {
         public Controller<T> controller;
         public Text titleText;
@@ -21,13 +28,12 @@ namespace NanamiUI
         public bool selected;
         public bool grayed;
         public string selectedTitle;
-        public UnityEvent onClick = new();
 
         [SerializeField]
         private string _title;
         private bool _down, _over;
 
-        public string Title
+        public override string Title
         {
             get => _title;
             set

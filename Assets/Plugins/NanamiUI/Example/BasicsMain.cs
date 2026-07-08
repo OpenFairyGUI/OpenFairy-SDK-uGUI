@@ -12,6 +12,17 @@ namespace NanamiUI.Example
         public string[] demoNames;
         public GameObject[] demoPrefabs;
         public Sprite changeSprite; // Demo_Graph trapezoid 运行时贴图（change.png）
+        public GameObject windowAPrefab;
+        public GameObject windowBPrefab;
+        public GameObject popupMenuPrefab;
+        public GameObject popupItemPrefab;
+        public GameObject popupComPrefab;
+        public GameObject gridItem1Prefab;
+        public GameObject gridItem2Prefab;
+
+        private NanamiUI.Window _winA, _winB;
+        private NanamiUI.PopupMenu _pm;
+        private GameObject _popupCom;
 
         private static readonly (string Name, string Field)[] Buttons =
         {
@@ -47,6 +58,7 @@ namespace NanamiUI.Example
             _main = Array.Find(GetComponents<NanamiUI.Component>(), component => component.GetType().FullName == "UI.Basics.Main");
             _mainType = _main.GetType();
             _container = ((UnityEngine.Component)Get("m_container")).transform;
+            NanamiUI.GRoot.Create((RectTransform)_main.transform); // 顶层覆盖层：承载 window/popup
 
             Bind("m_btn_Back", Back);
             foreach (var (name, field) in Buttons)
@@ -87,6 +99,172 @@ namespace NanamiUI.Example
                 PlayDepth(go);
             else if (name == "Drag&Drop")
                 PlayDragDrop(go);
+            else if (name == "Window")
+                PlayWindow(go);
+            else if (name == "Popup")
+                PlayPopup(go);
+            else if (name == "ProgressBar")
+                StartCoroutine(PlayProgressBar(go));
+            else if (name == "Text")
+                PlayText(go);
+            else if (name == "List" || name == "Clip&Scroll")
+                AttachScrollPanes(go);
+            else if (name == "Grid")
+                PlayGrid(go);
+            else if (name == "ComboBox")
+                PlayComboBox(go);
+        }
+
+        // 复刻 FairyGUI ComboBox：点组合框弹下拉列表，选项设标题。items 未烘焙 → 用 demo 已知项（Item 1..N），复用 PopupMenu。
+        private void PlayComboBox(GameObject go)
+        {
+            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_ComboBox");
+            SetupCombo(Get(demo, "m_n1"), 8);
+            SetupCombo(Get(demo, "m_n6"), 7);
+        }
+
+        private void SetupCombo(object combo, int count)
+        {
+            var cb = (UnityEngine.Component)combo;
+            var title = (NanamiUI.Text)cb.GetType().GetField("m_title").GetValue(combo);
+            NanamiUI.PopupMenu menu = null;
+            cb.gameObject.AddComponent<Clickable>().onClick = () =>
+            {
+                if (menu == null)
+                {
+                    menu = new NanamiUI.PopupMenu(popupMenuPrefab, popupItemPrefab);
+                    for (var i = 1; i <= count; i++)
+                    {
+                        var label = "Item " + i;
+                        menu.AddItem(label, () => title.text = label);
+                    }
+                }
+                menu.Show((RectTransform)cb.transform, NanamiUI.PopupDirection.Down);
+            };
+        }
+
+        // 复刻 FairyGUI PlayGrid：把两个列表用平台名+随机数据填满，再挂滚动。
+        private void PlayGrid(GameObject go)
+        {
+            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Grid");
+            var names = System.Enum.GetNames(typeof(RuntimePlatform));
+            var colors = new[] { Color.yellow, Color.red, Color.white, Color.cyan };
+
+            FillList((RectTransform)((UnityEngine.Component)Get(demo, "m_list1")).transform, gridItem1Prefab, names.Length, (item, i) =>
+            {
+                var comp = ItemComp(item, "UI.Basics.GridItem");
+                SetText(comp, "m_t0", (i + 1).ToString());
+                SetText(comp, "m_t1", names[i]);
+                if (Get(comp, "m_t2") is NanamiUI.Text t2)
+                    t2.color = colors[UnityEngine.Random.Range(0, colors.Length)];
+            });
+            FillList((RectTransform)((UnityEngine.Component)Get(demo, "m_list2")).transform, gridItem2Prefab, names.Length, (item, i) =>
+            {
+                var comp = ItemComp(item, "UI.Basics.GridItem2");
+                SetText(comp, "m_t1", names[i]);
+                SetText(comp, "m_t3", UnityEngine.Random.Range(0, 10000).ToString());
+            });
+
+            AttachScrollPanes(go);
+        }
+
+        private void FillList(RectTransform list, GameObject itemPrefab, int count, System.Action<GameObject, int> setup)
+        {
+            var viewport = list.Find("viewport") as RectTransform ?? list;
+            for (var i = viewport.childCount - 1; i >= 0; i--)
+                DestroyImmediate(viewport.GetChild(i).gameObject);
+            var itemH = ((RectTransform)itemPrefab.transform).rect.height;
+            for (var i = 0; i < count; i++)
+            {
+                var item = Instantiate(itemPrefab, viewport, false);
+                var rt = (RectTransform)item.transform;
+                rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
+                rt.anchoredPosition = new Vector2(0, -i * itemH);
+                setup(item, i);
+            }
+        }
+
+        private static object ItemComp(GameObject item, string fullName) =>
+            Array.Find(item.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == fullName);
+
+        private static void SetText(object comp, string field, string value)
+        {
+            if (Get(comp, field) is NanamiUI.Text text)
+                text.text = value;
+        }
+
+        // 给 demo 里所有滚动结构（名为 "viewport" 的 RectMask2D）挂运行时拖动滚动。
+        private void AttachScrollPanes(GameObject go)
+        {
+            foreach (var mask in go.GetComponentsInChildren<RectMask2D>(true))
+                if (mask.name == "viewport")
+                    NanamiUI.ScrollPane.Attach((RectTransform)mask.transform.parent);
+        }
+
+        // 复刻 FairyGUI PlayProgressBar：每帧把每个进度条 value +1、越过 max 回 0（FairyGUI 用 0.001s Timer ≈ 每帧）。
+        private System.Collections.IEnumerator PlayProgressBar(GameObject go)
+        {
+            var bars = go.GetComponentsInChildren<NanamiUI.ProgressBar>();
+            while (go)
+            {
+                foreach (var bar in bars)
+                    if (bar)
+                    {
+                        bar.value = bar.value + 1 > bar.max ? 0 : bar.value + 1;
+                        bar.Apply();
+                    }
+                yield return null;
+            }
+        }
+
+        // 复刻 FairyGUI PlayText：点富文本链接改写其内容；点 n25 把 n22 文本拷到 n24。
+        private void PlayText(GameObject go)
+        {
+            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Text");
+            if (Get(demo, "m_n12") is NanamiUI.Text rich)
+                rich.onClickLink = href =>
+                    rich.text = $"[img]ui://Basics/pet[/img][color=#FF0000]You click the link[/color]：{href}";
+            var n25 = (UnityEngine.Component)Get(demo, "m_n25");
+            BindButton(n25, () =>
+            {
+                var n22 = (NanamiUI.Text)Get(demo, "m_n22");
+                var n24 = (NanamiUI.Text)Get(demo, "m_n24");
+                n24.text = n22.text;
+            });
+        }
+
+        // 复刻 FairyGUI PlayWindow：两个按钮各开一个单例 window（A 无动效居中，B 缩放进出 + 播 t1）。
+        private void PlayWindow(GameObject go)
+        {
+            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Window");
+            BindButton(Get(demo, "m_n0"), () => (_winA ??= new NanamiWindow1 { prefab = windowAPrefab }).Show());
+            BindButton(Get(demo, "m_n1"), () => (_winB ??= new NanamiWindow2 { prefab = windowBPrefab }).Show());
+        }
+
+        // 复刻 FairyGUI PlayPopup：n0 在按钮下方弹菜单；n1 居中弹一个组件。
+        private void PlayPopup(GameObject go)
+        {
+            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Popup");
+            if (_pm == null)
+            {
+                _pm = new NanamiUI.PopupMenu(popupMenuPrefab, popupItemPrefab);
+                for (var i = 1; i <= 4; i++)
+                {
+                    var n = i;
+                    _pm.AddItem("Item " + n, () => Debug.Log("click Item " + n));
+                }
+            }
+            var n0 = (UnityEngine.Component)Get(demo, "m_n0");
+            BindButton(n0, () => _pm.Show((RectTransform)n0.transform, NanamiUI.PopupDirection.Down));
+            BindButton(Get(demo, "m_n1"), () =>
+            {
+                if (_popupCom == null)
+                {
+                    _popupCom = Instantiate(popupComPrefab);
+                    NanamiUI.GRoot.inst.Center((RectTransform)_popupCom.transform);
+                }
+                NanamiUI.GRoot.inst.ShowPopup((RectTransform)_popupCom.transform);
+            });
         }
 
         // 复刻 FairyGUI BasicsMain.PlayDepth：固定物置 sortingOrder 100 + 可拖；两个按钮各建 order 0(红,靠后)/200(绿,靠前) 矩形。

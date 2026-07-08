@@ -58,12 +58,20 @@
 - **切换页面动效（gear tween）**：`Gear` 基类新增 `tween/duration/ease/delay`（默认 QuadOut/0.3s/0，复刻 FairyGUI `GearTweenConfig`），`Controller.page` setter 传 `Application.isPlaying` 作 animate 标志（烘焙=编辑态直接置位，运行时切页缓动，等价 FairyGUI `_constructing==0`）。`GearXY/GearSize/GearLook` 用 DOTween 驱动，切页时 kill 旧 tween、`current==end` 跳过。Main 的 container/btns（`Main.xml` gearXY tween=true）现在切页时滑入/滑出；已实测运行时 c1→1 时 container 由 (-1143) 缓动而非瞬移。Migrate 对所有 gear 读取 `tween/ease/duration/delay`。
 - **Graph 左下 line 颜色**：并非 SDK 渲染错误。经逐像素比对，红色圆头帽两侧完全一致 (202,55,55)，仅绿色段**长度**不同——因截图脚本对 NanamiUI 侧 `Canvas.ForceUpdateCanvases` 立即重建、却没强制重建 FairyGUI 侧网格，导致 FairyGUI 参照 `fillEnd` 滞后一个采样。已在 `DriveGraph` 补 `_fairyGraphLine.UpdateMesh()`，diff 中该 line 已干净。`Line.cs/GraphDemo.cs` 无需改动。
 
-## 尚未复刻的运行时交互（需额外运行时基建，未在本轮实现）
+## 运行时交互（2026-07-08 已全部复刻）
 
-截图脚本只驱动 t0 动效（+新增的 Graph），以下 `BasicsMain.Play*` 交互 NanamiUI 尚未复刻，多数需要 NanamiUI 目前没有的舞台/覆盖层/输入体系：
-- **ProgressBar**：连续跑条（`value` 循环）。`ProgressBar` 有 value/Apply，仅缺驱动；未做（快速循环值难与 FairyGUI Timer 逐样本对齐，像素价值低）。
-- **Grid**：按 `RuntimePlatform` 枚举随机填表（随机色/值，本就无法逐像素比对）。需 GList 运行时。
-- **Window / Popup / Drag&Drop / Depth / Text 链接点击**：需 `Window`/`PopupMenu`/`DragDropManager`/`sortingOrder`/draggable/onClickLink 等运行时组件 + 一个带 EventSystem 的 GRoot 覆盖层。属较大的后续工作。
+以下 `BasicsMain.Play*` 交互现已在 NanamiUI 复刻（PlayMode 39/39，含端到端 DemoSmokeTest）。详见 AGENTS.md 尾部与 [[nanamiui-demo-parity-roadmap]]。
+- **翻页动画**：Main 进/退 Demo 时旧页飞出再消失（gearDisplay+gearXY display-lock）。
+- **ProgressBar**：值循环（每帧 +1 回绕）。
+- **Grid**：`RuntimePlatform` 名 + 随机数据填两个列表（GList 填表 + ScrollPane 滚动）。
+- **Depth**：sortingOrder 兄弟序 + 可拖 + 运行时建矩形。
+- **Drag&Drop**：自由拖 / dragBounds 钳制 / DragDropManager agent + DropTarget。
+- **Window / Popup**：GRoot 覆盖层 + Window（含 Window2 缩放进出）+ PopupMenu。
+- **Text 链接点击**：`onClickLink` + UBB `<a href>` 命中；文本拷贝。
+- **List / Clip&Scroll / ComboBox 下拉**：ScrollPane 拖动滚动；ComboBox 弹下拉选项。
+- **MovieClip**：运行时自播（`Update` 推帧）。
+
+**已知取舍**（AGENTS.md 有详述）：popup 外点关闭用透明 blocker（新 Input System 下不能读旧 Input）故 popup 表现为模态；ComboBox 下拉项在胶水里硬编码（items 未烘焙，避开重跑 Migrate）；ScrollPane 仅拖动无惯性/虚拟化；Grid 只设可见文本；Window1 的 6 项列表留空。
 
 ## 截图输出约定
 
