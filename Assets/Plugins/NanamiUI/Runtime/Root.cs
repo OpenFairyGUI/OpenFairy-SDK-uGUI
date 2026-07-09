@@ -31,18 +31,21 @@ namespace NanamiUI
 
         public Vector2 Size => rect.rect.size;
 
-        // 测试 seam：把覆盖层建到 designRoot 所在画布上、与 designRoot 同坐标区（1136×640 设计尺寸），
-        // 自带高 sortingOrder 的 Canvas + GraphicRaycaster 渲染在页面之上并复用场景 EventSystem。
+        // 把覆盖层建到 designRoot 所在画布上、与 designRoot 同坐标区，自带高 sortingOrder 的
+        // Canvas + GraphicRaycaster 渲染在页面之上并复用场景 EventSystem。
+        // 传 canvas 根（如 ComboBox 自举）时覆盖层挂其下、铺满其 rect；传设计根节点（胶水/测试）时挂到其父、与其同区。
         public static Root Create(RectTransform designRoot)
         {
             if (_inst != null)
                 return _inst;
             var go = new GameObject("Root", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
             var rt = (RectTransform)go.transform;
-            rt.SetParent(designRoot.parent, false);
+            var isCanvas = designRoot.GetComponent<Canvas>() != null;
+            rt.SetParent(isCanvas ? designRoot : designRoot.parent, false);
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
             rt.sizeDelta = designRoot.rect.size;
-            rt.anchoredPosition = designRoot.anchoredPosition;
+            // canvas 根的 anchoredPosition 是屏幕派生值，覆盖层须归零贴其左上；设计根则与其同位。
+            rt.anchoredPosition = isCanvas ? Vector2.zero : designRoot.anchoredPosition;
             rt.localScale = Vector3.one;
             var canvas = go.GetComponent<Canvas>();
             canvas.overrideSorting = true;
@@ -202,6 +205,9 @@ namespace NanamiUI
             win.EnsureInited(rect);
             win.Root.SetParent(rect, false);
             win.Root.SetAsLastSibling();
+            // 复刻 GRoot.ShowWindow：已有模态层时，非模态窗插到模态层之下（不越过模态窗）。
+            if (!win.modal && _modalLayer != null && _modalLayer.activeSelf)
+                win.Root.SetSiblingIndex(_modalLayer.transform.GetSiblingIndex());
             win.Root.gameObject.SetActive(true);
             win.DoShow();
             RefreshModal();
@@ -224,16 +230,20 @@ namespace NanamiUI
 
         public bool HasModalWindow => TopModalWindow() != null;
 
+        // 按显示序（兄弟序）从上往下找最上层激活的模态窗（复刻 GRoot.AdjustModalLayer 的扫描方向）。
         private Window TopModalWindow()
         {
-            Window top = null;
-            foreach (var w in _windows)
-                if (w.modal && w.Root != null && w.Root.gameObject.activeSelf)
-                    top = w; // 列表按显示序，最后一个激活的模态窗即最上层
-            return top;
+            for (var i = rect.childCount - 1; i >= 0; i--)
+            {
+                var child = rect.GetChild(i);
+                foreach (var w in _windows)
+                    if (w.modal && w.Root == child && child.gameObject.activeSelf)
+                        return w;
+            }
+            return null;
         }
 
-        // 模态层铺在最上层模态窗之下、其余内容之上，拦截下层点击。
+        // 复刻 GRoot.AdjustModalLayer：模态层插到最上层模态窗之下，不改变窗口自身顺序；无模态窗则收起。
         private void RefreshModal()
         {
             var top = TopModalWindow();
@@ -254,8 +264,8 @@ namespace NanamiUI
             }
             _modalLayer.GetComponent<UnityEngine.UI.Image>().color = modalColor; // 可接收射线，拦截下层
             _modalLayer.SetActive(true);
-            _modalLayer.transform.SetAsLastSibling();
-            top.Root.SetAsLastSibling(); // 模态窗盖在模态层之上
+            _modalLayer.transform.SetAsLastSibling(); // 先移到末尾，再插到模态窗位（窗口序号不受移除影响）
+            _modalLayer.transform.SetSiblingIndex(top.Root.GetSiblingIndex());
         }
     }
 

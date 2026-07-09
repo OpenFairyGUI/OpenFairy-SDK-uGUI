@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.EventSystems;
 
 namespace NanamiUI
@@ -12,8 +11,9 @@ namespace NanamiUI
         public string[] items;
         public string[] values; // 可选：与 items 平行的值集（FairyGUI GComboBox.values），未烘焙时 value 回退到显示文本
         public int visibleItemCount = 10; // 下拉最多同屏项数，超出则裁剪并滚动（复刻 GComboBox.visibleItemCount）
+        public PopupDirection popupDirection = PopupDirection.Auto; // 复刻 GComboBox 默认 Auto：贴屏幕底时向上翻
         public GameObject dropdownPrefab;
-        public UnityEvent onChanged = new();
+        // onChanged 复用 ButtonBase 的事件（FairyGUI 中 GButton/GComboBox 的 "onChanged" 本就是同一事件通道）。
 
         [SerializeField]
         private int _selectedIndex;
@@ -34,17 +34,22 @@ namespace NanamiUI
             }
         }
 
-        // 当前显示文本 / 值（复刻 GComboBox.text / value）：程序化赋值只刷新显示，不发 onChanged。
+        // 复刻 GComboBox.text：标题直通，不反查索引、不发 onChanged。
         public string text
         {
-            get => items != null && _selectedIndex >= 0 && _selectedIndex < items.Length ? items[_selectedIndex] : "";
-            set => selectedIndex = items != null ? Array.IndexOf(items, value) : -1;
+            get => Title;
+            set => Title = value;
         }
 
+        // 复刻 GComboBox.value：设值按 values 反查，找不到回退首项；不发 onChanged。
         public string value
         {
             get => values != null && _selectedIndex >= 0 && _selectedIndex < values.Length ? values[_selectedIndex] : text;
-            set => selectedIndex = values != null && values.Length > 0 ? Array.IndexOf(values, value) : items != null ? Array.IndexOf(items, value) : -1;
+            set
+            {
+                var index = values != null ? Array.IndexOf(values, value) : -1;
+                selectedIndex = index >= 0 ? index : 0;
+            }
         }
 
         // 经 base Title 设标题（写 _title），使后续 RefreshState 不把标题回退到初始项。
@@ -55,7 +60,7 @@ namespace NanamiUI
 
         public override void OnPointerClick(PointerEventData eventData)
         {
-            if (grayed)
+            if (eventData.button != PointerEventData.InputButton.Left || grayed)
                 return;
             // 展开时点按钮外区域由 Root 的透明 blocker 收起（blocker 在按钮之上截获点击），故这里只管展开。
             RefreshState();
@@ -66,13 +71,15 @@ namespace NanamiUI
         {
             if (items == null || items.Length == 0 || dropdownPrefab == null)
                 return;
+            if (Root.inst == null) // 烘焙 prefab 无需业务胶水：首次弹下拉时自建覆盖层（复刻 GRoot.inst 惰性自建）
+                Root.Create((RectTransform)GetComponentInParent<Canvas>().rootCanvas.transform);
             if (_dropdown == null)
                 Build();
             if (_dropdownRt != null)
             {
                 if (Enum.TryParse<T>("down", out var down)) // 打开时按钮进 down 态（复刻 GComboBox）
                     controller.page = down;
-                Root.inst.ShowPopup(_dropdownRt, (RectTransform)transform, PopupDirection.Down, RefreshState); // 关闭（含外点）恢复态
+                Root.inst.ShowPopup(_dropdownRt, (RectTransform)transform, popupDirection, RefreshState); // 关闭（含外点）恢复态
             }
         }
 
@@ -104,11 +111,7 @@ namespace NanamiUI
             var h = visible * source.itemSize.y;
             list.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
             _dropdownRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h + 2);
-            if (_dropdown.transform.Find("n0") is RectTransform bg)
-            {
-                bg.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, _dropdownRt.rect.width);
-                bg.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h + 2);
-            }
+            // 背景等其余子件带容器 relation，已烘成拉伸锚点，随下拉根缩放自动跟随。
             // 项数超出可见数：viewport 已被裁到可见高，内容更高，挂 ScrollPane 支持拖动/滚轮滚动。
             if (items.Length > visible)
                 ScrollPane.Attach(list);

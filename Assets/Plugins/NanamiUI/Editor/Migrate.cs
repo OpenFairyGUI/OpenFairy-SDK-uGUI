@@ -492,7 +492,7 @@ namespace NanamiUI.Editor
                         if (childGo.transform.parent == rt)
                             childGo.transform.SetParent(view.Viewport, false);
                     SetGrips(view, ContentBounds(children));
-                    root.AddComponent<ScrollPaneHost>(); // 运行时自挂 ScrollPane，转换后无需胶水即可滚动
+                    AddScrollHost(root, view); // 运行时自挂 ScrollPane，转换后无需胶水即可滚动
                 }
 
                 var byId = new Dictionary<string, (Schema.Display Xml, GameObject Go)>();
@@ -510,21 +510,33 @@ namespace NanamiUI.Editor
 
                 BuildTransitions(root, xml, byId, component.PackageId);
 
-                foreach (var controller in controllers.Values)
-                    BuildController(controller);
-                SyncRelations(root);
-
-                // 按钮关联控制器（<Button controller=.. page=..>）：点击换 owner 上该控制器的页，实现 tab/radio 组（复刻 relatedController）。
+                // 按钮关联控制器（<Button controller=.. page=..>）：点击换 owner 上该控制器的页，实现 tab/radio 组
+                //（复刻 relatedController）；并给该控制器烘 GearButton，使换页（含程序化）反向同步按钮选中态
+                //（复刻 GButton.HandleControllerChanged）。须在 BuildController 之前，gear 才进控制器。
                 foreach (var (element, go) in children)
                     if (element.Button?.Controller is { } ctrlName && controllers.TryGetValue(ctrlName, out var ctrlData)
-                        && ButtonComponent(go) is ButtonBase relatedButton)
+                        && go.GetComponent<ButtonBase>() is { } relatedButton)
                     {
                         relatedButton.relatedOwner = comp;
                         relatedButton.relatedControllerField = ctrlData.FieldName;
                         relatedButton.relatedPage = Array.IndexOf(ctrlData.PageIds, element.Button.Page);
+                        if (relatedButton.relatedPage >= 0)
+                        {
+                            var gearType = typeof(GearButton<>).MakeGenericType(ctrlData.PageType);
+                            var gear = Activator.CreateInstance(gearType);
+                            gearType.GetField("target").SetValue(gear, go);
+                            var pages = Array.CreateInstance(ctrlData.PageType, 1);
+                            pages.SetValue(ctrlData.PageValues[relatedButton.relatedPage], 0);
+                            gearType.GetField("pages").SetValue(gear, pages);
+                            ctrlData.Gears.Add(gear);
+                        }
                     }
 
-                if (IsButton(comp.GetType()))
+                foreach (var controller in controllers.Values)
+                    BuildController(controller);
+                SyncRelations(root);
+
+                if (comp is ButtonBase buttonComp)
                 {
                     // FairyGUI 按钮整块可点，与内部图形无关。uGUI 需要一个覆盖全 rect 的 raycast 面：
                     // 加一张透明(alpha=0，不改渲染)、raycastTarget 的 Image 到按钮根，保证点按钮任意位置都命中
@@ -536,9 +548,9 @@ namespace NanamiUI.Editor
                         hit.raycastTarget = true;
                     }
                     if (controllers.TryGetValue("button", out var buttonData))
-                        comp.GetType().GetField("controller").SetValue(comp, buttonData.Value);
-                    comp.GetType().GetField("titleText").SetValue(comp, children.FirstOrDefault(c => c.Xml.Name == "title").Go?.GetComponent<TextField>());
-                    comp.GetType().GetField("iconLoader").SetValue(comp, children.FirstOrDefault(c => c.Xml.Name == "icon").Go?.GetComponent<Loader>());
+                        comp.GetType().GetField("controller").SetValue(comp, buttonData.Value); // Controller<T> 泛型字段，仅此保留反射
+                    buttonComp.titleText = Child(children, "title")?.GetComponent<TextField>();
+                    buttonComp.iconLoader = Child(children, "icon")?.GetComponent<Loader>();
                     if (xml.Button is { } buttonEl)
                         ConfigureButton(root, buttonEl, component.PackageId);
                     if (xml.ComboBox is { } comboEl) // 组件定义级：烘焙 dropdown 资源
@@ -860,19 +872,19 @@ namespace NanamiUI.Editor
 
         private static void ConfigureButton(GameObject go, Schema.Extension buttonXml, string packageId)
         {
-            var button = ButtonComponent(go);
+            var button = go.GetComponent<ButtonBase>();
             if (button == null)
                 return; // 非 button 项（plain component/label 作 list item）：无按钮面可配，跳过
             if (buttonXml.Title is { } title)
-                button.GetType().GetProperty("Title").SetValue(button, title);
+                button.Title = title;
             if (buttonXml.SelectedTitle is { } selectedTitle)
-                button.GetType().GetField("selectedTitle").SetValue(button, selectedTitle);
+                button.selectedTitle = selectedTitle;
             if (buttonXml.Icon is { } icon)
-                button.GetType().GetProperty("Icon").SetValue(button, LoadSprite(icon, packageId));
+                button.Icon = LoadSprite(icon, packageId);
             if (buttonXml.Mode is { } mode)
-                button.GetType().GetField("mode").SetValue(button, Enum.Parse(typeof(ButtonMode), mode));
-            button.GetType().GetField("selected").SetValue(button, buttonXml.Checked);
-            button.GetType().GetMethod("RefreshState").Invoke(button, null);
+                button.mode = (ButtonMode)Enum.Parse(typeof(ButtonMode), mode);
+            button.selected = buttonXml.Checked && button.mode != ButtonMode.Common; // 复刻 GButton.selected：Common 忽略选中态
+            button.RefreshState();
         }
 
         private static void ConfigureLabel(GameObject go, Schema.Extension labelXml, string packageId)
@@ -988,7 +1000,11 @@ namespace NanamiUI.Editor
                 slider.barStartY = -slider.barV.anchoredPosition.y;
             }
             if (Child(children, "grip") is { } grip)
+            {
                 slider.grip = (RectTransform)grip.transform;
+                // grip 常是独立 button 组件、会吞掉指针事件，拖动中继必须烘在 grip 层（复刻 GSlider 挂 _gripObject 的 touch 处理器）。
+                grip.AddComponent<SliderGrip>().slider = slider;
+            }
             slider.Apply();
             SyncRelations(root);
         }
@@ -1027,7 +1043,7 @@ namespace NanamiUI.Editor
 
         private static void ConfigureComboBox(GameObject go, Schema.Extension xml, string packageId)
         {
-            var combo = go.GetComponents<UnityEngine.Component>().FirstOrDefault(c => IsButton(c.GetType()));
+            var combo = go.GetComponent<ButtonBase>();
             if (combo == null)
                 return;
             var type = combo.GetType();
@@ -1069,9 +1085,9 @@ namespace NanamiUI.Editor
                 go.AddComponent<CanvasGroup>().blocksRaycasts = false;
             if (element.Grayed)
             {
-                var button = go.GetComponents<UnityEngine.Component>().FirstOrDefault(component => IsButton(component.GetType()));
+                var button = go.GetComponent<ButtonBase>();
                 // FairyGUI 约定：存在名为 grayed 的控制器时，置灰只切换其页面 1，不套灰度材质。
-                if (button?.GetType().GetField("m_grayed") is { } grayedController)
+                if (button != null && button.GetType().GetField("m_grayed") is { } grayedController)
                 {
                     var controller = grayedController.GetValue(button);
                     var pageProperty = controller.GetType().GetProperty("page");
@@ -1082,10 +1098,7 @@ namespace NanamiUI.Editor
                 {
                     go.AddComponent<Grayed>().shader = GrayscaleShader;
                     if (button != null)
-                    {
-                        button.GetType().GetField("grayed").SetValue(button, true);
-                        button.GetType().GetMethod("RefreshState").Invoke(button, null);
-                    }
+                        button.SetGrayed(true);
                 }
             }
         }
@@ -1307,9 +1320,26 @@ namespace NanamiUI.Editor
             }
             SetGrips(view, content);
             if (element.Overflow == Schema.Overflow.Scroll)
-                go.AddComponent<ScrollPaneHost>(); // 运行时自挂 ScrollPane
+                AddScrollHost(go, view); // 运行时自挂 ScrollPane
             if (element.SelectionMode != "none")
                 go.AddComponent<ListSelection>().selectionMode = element.SelectionMode; // 点项选中/发 onClickItem
+        }
+
+        // 滚动条轨道/grip 引用烘进 ScrollPaneHost（滚动条组件名任意，运行时不按名查找）；
+        // "bar"/"grip" 是 FairyGUI 滚动条子件的契约名，仅在烘焙期解析一次。
+        private static void AddScrollHost(GameObject go, ScrollView view)
+        {
+            var host = go.AddComponent<ScrollPaneHost>();
+            if (view.VtBar != null)
+            {
+                host.vtBar = (RectTransform)FindChild(view.VtBar.transform, "bar");
+                host.vtGrip = (RectTransform)FindChild(view.VtBar.transform, "grip");
+            }
+            if (view.HzBar != null)
+            {
+                host.hzBar = (RectTransform)FindChild(view.HzBar.transform, "bar");
+                host.hzGrip = (RectTransform)FindChild(view.HzBar.transform, "grip");
+            }
         }
 
         // 默认滚动条来自 Common.json 的 ui:// 引用；未配置则返回 null，viewport 退化为满宽。
@@ -1505,9 +1535,6 @@ namespace NanamiUI.Editor
             gearType.GetField("defaultPlaying").SetValue(gear, def.Playing);
         }
 
-        private static UnityEngine.Component ButtonComponent(GameObject go) =>
-            go.GetComponents<UnityEngine.Component>().FirstOrDefault(component => IsButton(component.GetType()));
-
         private static Transform FindChild(Transform parent, string name)
         {
             if (parent.name == name)
@@ -1516,14 +1543,6 @@ namespace NanamiUI.Editor
                 if (FindChild(child, name) is { } found)
                     return found;
             return null;
-        }
-
-        private static bool IsButton(Type type)
-        {
-            for (var t = type; t != null; t = t.BaseType)
-                if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Button<>))
-                    return true;
-            return false;
         }
 
         private static void SetRect(RectTransform rt, Schema.Display element, Vector2 size, RectTransform parent)
@@ -1682,6 +1701,9 @@ namespace NanamiUI.Editor
                 else
                     text.fontNames = font;
             }
+            // 运行时字体也烘定：通用工程无需业务胶水设 TextField.defaultFont 静态量。
+            if (text.bitmapFont == null && string.IsNullOrEmpty(text.fontNames))
+                text.fontNames = TextField.defaultFont;
         }
 
         // 解析 FairyGUI 编辑器工程里的 .fnt：标准 BMFont（atlas 坐标 + texture 属性指向图集）
@@ -1914,7 +1936,6 @@ namespace NanamiUI.Editor
             public int fontSize;
             public string textColor;
             public string font;
-            public string buttonClickSound;
             public ScrollBars scrollBars;
         }
 

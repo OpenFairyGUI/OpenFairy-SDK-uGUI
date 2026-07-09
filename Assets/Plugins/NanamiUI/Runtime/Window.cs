@@ -121,6 +121,8 @@ namespace NanamiUI
 
         public void OnBeginDrag(PointerEventData e)
         {
+            if (e.button != PointerEventData.InputButton.Left)
+                return;
             Root.inst.BringToFront(window);
             _start = Content.anchoredPosition;
             RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)Content.parent, e.position, e.pressEventCamera, out _startPointer);

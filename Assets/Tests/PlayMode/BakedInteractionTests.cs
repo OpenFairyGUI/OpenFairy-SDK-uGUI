@@ -168,11 +168,39 @@ namespace NanamiUI.Tests
             yield return null;
 
             var rt = (RectTransform)slider.transform;
-            var y = rt.rect.center.y;
-            // 真实连续拖动（OnDrag）从 30% 到 80%——这条路径此前无测试覆盖（InteractionDriver 只调 OnPointerDown）。
-            DragWorld(rt, new Vector2(rt.rect.xMin + rt.rect.width * 0.3f, y), new Vector2(rt.rect.xMin + rt.rect.width * 0.8f, y));
+            // 真实连续拖动（OnDrag）从 grip 起拖到 80% 处——轨道点按只跳一次不跟踪（复刻 GSlider），连续拖动必须按住 grip。
+            Assert.IsNotNull(slider.grip, "横向 Slider 应烘焙 grip");
+            var gripCenter = (Vector2)rt.InverseTransformPoint(slider.grip.TransformPoint(slider.grip.rect.center));
+            DragWorld(rt, gripCenter, new Vector2(rt.rect.xMin + rt.rect.width * 0.8f, rt.rect.center.y));
             yield return null;
-            Assert.Greater(slider.value, 40f, "连续拖到 80% 处应把 value 拖上去（OnDrag 生效）");
+            Assert.Greater(slider.value, 40f, "按住 grip 拖到 80% 处应把 value 拖上去（OnDrag 生效）");
+        }
+
+        [UnityTest]
+        public IEnumerator Baked_combobox_opens_dropdown_without_root_glue()
+        {
+            // 通用工程场景：只实例化转换产物、不跑任何 NanamiUI 胶水（无 Root.Create）。
+            // 点 ComboBox 应自建覆盖层并弹下拉（复刻 GRoot.inst 惰性自建），而不是 NullReferenceException。
+            var go = Load("Demo_ComboBox");
+            Assert.IsNotNull(go, "Demo_ComboBox prefab 应存在");
+            Assert.IsTrue(NanamiUI.Root.inst == null, "前置：无业务胶水时不应已有 Root");
+            // 经非泛型面找烘焙的 ComboBox（测试程序集访问不到生成的 UI.{包} 类型）。
+            ButtonBase combo = null;
+            foreach (var b in go.GetComponentsInChildren<ButtonBase>(true))
+            {
+                for (var t = b.GetType(); combo == null && t != null; t = t.BaseType)
+                    if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(ComboBox<>))
+                        combo = b;
+                if (combo != null)
+                    break;
+            }
+            Assert.IsNotNull(combo, "页面应有烘焙的 ComboBox");
+            yield return null;
+
+            ((IPointerClickHandler)combo).OnPointerClick(new PointerEventData(EventSystem.current));
+            yield return null;
+            Assert.IsTrue(NanamiUI.Root.inst != null, "点下拉应自建 Root 覆盖层");
+            Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, "下拉应作为 popup 打开");
         }
     }
 }

@@ -13,7 +13,6 @@ MonoBehaviour:
   m_Name: NanamiUISettings
   m_EditorClassIdentifier: Assembly-CSharp-firstpass::NanamiUI.NanamiUISettings
   defaultFont: Microsoft YaHei
-  buttonSound: 
   packages:
   - Basics
   - Transition

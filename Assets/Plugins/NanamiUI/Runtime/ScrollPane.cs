@@ -56,30 +56,21 @@ namespace NanamiUI
             pane._content = content;
             pane._viewSize = viewport.rect.size;
 
-            pane.FindBar(scrollRoot, "ScrollBar_VT", ref pane._vtBar, ref pane._vtGrip);
-            pane.FindBar(scrollRoot, "ScrollBar_HZ", ref pane._hzBar, ref pane._hzGrip);
-            if (pane._vtGrip != null)
-                ScrollBarGrip.Bind(pane._vtGrip, pane, false);
-            if (pane._hzGrip != null)
-                ScrollBarGrip.Bind(pane._hzGrip, pane, true);
+            // 滚动条轨道/grip 引用由 Migrate 烘在 ScrollPaneHost 上（滚动条组件名任意，不按名查找）；
+            // 无 host 的调用方（ComboBox 下拉手动 Attach、代码手搭结构）视作无滚动条。
+            if (scrollRoot.TryGetComponent(out ScrollPaneHost host))
+            {
+                pane._vtBar = host.vtBar;
+                pane._vtGrip = host.vtGrip;
+                pane._hzBar = host.hzBar;
+                pane._hzGrip = host.hzGrip;
+            }
+            ScrollBarGrip.Bind(pane._vtGrip, pane._vtBar, pane, false);
+            ScrollBarGrip.Bind(pane._hzGrip, pane._hzBar, pane, true);
             ScrollBarTrack.Bind(pane._vtBar, pane._vtGrip, pane, false);
             ScrollBarTrack.Bind(pane._hzBar, pane._hzGrip, pane, true);
             pane.RefreshContent();
             return pane;
-        }
-
-        private void FindBar(RectTransform root, string namePrefix, ref RectTransform bar, ref RectTransform grip)
-        {
-            for (var i = 0; i < root.childCount; i++)
-            {
-                var c = root.GetChild(i);
-                if (c.name.StartsWith(namePrefix))
-                {
-                    bar = c.Find("bar") as RectTransform;
-                    grip = c.Find("grip") as RectTransform;
-                    return;
-                }
-            }
         }
 
         // 内容边界（y-down）：用 Relation.TopLeft 计入各子物体的 pivot/anchor，故内容用非 (0,1) 轴心也测得准（对齐 Migrate.ContentBounds）。
@@ -127,6 +118,8 @@ namespace NanamiUI
 
         public void OnBeginDrag(PointerEventData e)
         {
+            if (e.button != PointerEventData.InputButton.Left)
+                return;
             RefreshContent(); // 内容可能在 Attach 之后被 List.Fill 填充，起拖时重算滚动范围
             _dragging = true;
             _velocity = Vector2.zero;
@@ -137,6 +130,8 @@ namespace NanamiUI
 
         public void OnDrag(PointerEventData e)
         {
+            if (!_dragging)
+                return;
             RectTransformUtility.ScreenPointToLocalPointInRectangle(_viewport, e.position, e.pressEventCamera, out var local);
             var pos = _startContent + (local - _startPointer);
             var max = MaxScroll;
@@ -296,30 +291,48 @@ namespace NanamiUI
         }
     }
 
-    // 挂在滚动条 grip 上：拖动 grip 沿轨道移动，按比例驱动 ScrollPane。
-    public sealed class ScrollBarGrip : UIBehaviour, IDragHandler
+    // 挂在滚动条 grip 上：保持按下点相对 grip 的偏移沿轨道拖动（复刻 GScrollBar._dragOffset，不吸附 grip 中心）。
+    public sealed class ScrollBarGrip : UIBehaviour, IPointerDownHandler, IDragHandler
     {
         private ScrollPane _pane;
         private RectTransform _bar;
         private bool _horizontal;
+        private Vector2 _dragOffset; // 按下点相对 grip 左上角（bar 本地系）
 
-        internal static void Bind(RectTransform grip, ScrollPane pane, bool horizontal)
+        internal static void Bind(RectTransform grip, RectTransform bar, ScrollPane pane, bool horizontal)
         {
-            if (grip.GetComponent<Graphic>() == null)
+            if (grip == null || bar == null || grip.GetComponent<Graphic>() == null)
                 return; // 无图形的 grip 收不到射线，不接拖动（烘焙的可见 grip 都带 Image）
             var g = grip.gameObject.GetComponent<ScrollBarGrip>() ?? grip.gameObject.AddComponent<ScrollBarGrip>();
             g._pane = pane;
-            g._bar = grip.parent.Find("bar") as RectTransform ?? (RectTransform)grip.parent;
+            g._bar = bar;
             g._horizontal = horizontal;
+        }
+
+        private Vector2 GripTopLeft()
+        {
+            var grip = (RectTransform)transform;
+            return _bar.InverseTransformPoint(grip.TransformPoint(new Vector2(grip.rect.xMin, grip.rect.yMax)));
+        }
+
+        public void OnPointerDown(PointerEventData e)
+        {
+            if (e.button != PointerEventData.InputButton.Left)
+                return;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(_bar, e.position, e.pressEventCamera, out var local);
+            _dragOffset = local - GripTopLeft();
         }
 
         public void OnDrag(PointerEventData e)
         {
+            if (e.button != PointerEventData.InputButton.Left)
+                return;
             var grip = (RectTransform)transform;
             RectTransformUtility.ScreenPointToLocalPointInRectangle(_bar, e.position, e.pressEventCamera, out var local);
+            var topLeft = local - _dragOffset; // grip 左上角目标位（bar 本地）
             var percent = _horizontal
-                ? (local.x - _bar.rect.xMin - grip.rect.width * 0.5f) / Mathf.Max(1, _bar.rect.width - grip.rect.width)
-                : (_bar.rect.yMax - local.y - grip.rect.height * 0.5f) / Mathf.Max(1, _bar.rect.height - grip.rect.height);
+                ? (topLeft.x - _bar.rect.xMin) / Mathf.Max(1, _bar.rect.width - grip.rect.width)
+                : (_bar.rect.yMax - topLeft.y) / Mathf.Max(1, _bar.rect.height - grip.rect.height);
             _pane.SetPercent(_horizontal, percent);
         }
     }
@@ -343,6 +356,8 @@ namespace NanamiUI
 
         public void OnPointerDown(PointerEventData e)
         {
+            if (e.button != PointerEventData.InputButton.Left)
+                return;
             if (RectTransformUtility.RectangleContainsScreenPoint(_grip, e.position, e.pressEventCamera))
                 return; // 点在 grip 上：交给 grip 拖动
             var bar = (RectTransform)transform;

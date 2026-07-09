@@ -1,10 +1,10 @@
 using System.IO;
 using System.Linq;
-using NanamiUI.Example;
+using NanamiUI.Editor;
 using UnityEditor;
 using UnityEngine;
 
-namespace NanamiUI.Editor
+namespace NanamiUI.Example
 {
     // Basics 示例自己的编辑器胶水（不属于通用导出器 Migrate）：把 BasicsMain 挂到 Main 预制体，
     // 并按 Demo_*.prefab 通用扫描填好各 Demo 引用。通过 [MigratePostProcess] 在每次导出后自动执行。

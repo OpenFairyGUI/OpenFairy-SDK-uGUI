@@ -288,8 +288,11 @@ namespace NanamiUI.Tests
             combo.value = "vc";
             Assert.AreEqual(2, combo.selectedIndex, "程序化设置 value 应按 values 反查 selectedIndex");
             Assert.AreEqual("C", combo.text, "设置 value 后应刷新显示文本");
-            combo.text = "A";
-            Assert.AreEqual(0, combo.selectedIndex, "程序化设置 text 应按 items 反查 selectedIndex");
+            combo.value = "no-such"; // 复刻 GComboBox.value：找不到回退首项
+            Assert.AreEqual(0, combo.selectedIndex, "value 无匹配应回退首项");
+            combo.text = "anything"; // 复刻 GComboBox.text：标题直通，不反查索引
+            Assert.AreEqual("anything", combo.text, "text 赋值应直设标题");
+            Assert.AreEqual(0, combo.selectedIndex, "text 赋值不应改变 selectedIndex");
             Assert.AreEqual(0, fired, "程序化设置 text/value 同样不应发 onChanged");
 
             Object.Destroy(comboRt.gameObject);
@@ -460,6 +463,7 @@ namespace NanamiUI.Tests
             var ownerRt = Child(_rig.CanvasRt, "owner", Vector2.zero, new Vector2(300, 100), false);
             var owner = ownerRt.gameObject.AddComponent<TestOwner>();
             var buttons = new TestButton[3];
+            var gears = new Gear<RadioPage>[3];
             for (var i = 0; i < 3; i++)
             {
                 var b = Child(ownerRt, "b" + i, new Vector2(i * 100, 0), new Vector2(90, 40), false).gameObject.AddComponent<TestButton>();
@@ -468,7 +472,10 @@ namespace NanamiUI.Tests
                 b.relatedControllerField = "m_ctrl";
                 b.relatedPage = i;
                 buttons[i] = b;
+                // 同 Migrate 烘焙：每个关联按钮一个 GearButton，换页时同步组内选中态。
+                gears[i] = new GearButton<RadioPage> { target = b.gameObject, pages = new[] { (RadioPage)i } };
             }
+            owner.m_ctrl = new Controller<RadioPage> { gears = gears };
             yield return null;
 
             buttons[1].OnPointerClick(new PointerEventData(EventSystem.current));
@@ -482,6 +489,11 @@ namespace NanamiUI.Tests
             Assert.AreEqual(RadioPage.over, owner.m_ctrl.page, "点第 2 个按钮应切到第 2 页（over）");
             Assert.IsFalse(buttons[1].selected, "换选后前一个应取消选中");
             Assert.IsTrue(buttons[2].selected, "新点的应选中");
+
+            // 复刻 GButton.HandleControllerChanged：程序化换页也同步按钮选中态（不限于点击）。
+            InteractionDriver.DriveControllerPage(ownerRt.gameObject, "ctrl", "up");
+            Assert.IsTrue(buttons[0].selected, "程序化切到第 0 页应选中对应按钮");
+            Assert.IsFalse(buttons[2].selected, "程序化换页后其它按钮应取消选中");
             Object.Destroy(ownerRt.gameObject);
         }
 
@@ -491,7 +503,10 @@ namespace NanamiUI.Tests
             var listRt = Child(_rig.CanvasRt, "list", Vector2.zero, new Vector2(200, 200), false);
             var buttons = new TestButton[3];
             for (var i = 0; i < 3; i++)
+            {
                 buttons[i] = Child(listRt, "item" + i, new Vector2(0, i * 40), new Vector2(200, 40), false).gameObject.AddComponent<TestButton>();
+                buttons[i].mode = ButtonMode.Radio; // 可选中列表项 = Radio/Check（GButton.selected 对 Common 忽略，FairyGUI 同）
+            }
             var sel = listRt.gameObject.AddComponent<ListSelection>();
             sel.selectionMode = "single";
             var clicked = -1;
@@ -619,7 +634,7 @@ namespace NanamiUI.Tests
         }
 
         [UnityTest]
-        public IEnumerator ListSelection_multiple_mode_toggles_each_item_once_per_click()
+        public IEnumerator ListSelection_multiple_singleclick_toggles_each_item_once_per_click()
         {
             var listRt = Child(_rig.CanvasRt, "list", Vector2.zero, new Vector2(200, 200), false);
             var buttons = new TestButton[2];
@@ -629,16 +644,41 @@ namespace NanamiUI.Tests
                 buttons[i].mode = ButtonMode.Check; // 勾选态项：验证不与 ListSelection 双翻
             }
             var sel = listRt.gameObject.AddComponent<ListSelection>();
-            sel.selectionMode = "multiple";
+            sel.selectionMode = "multiple_singleclick";
             yield return null; // Rebind：接线 + 置 changeStateOnClick=false
 
             var ped = new PointerEventData(EventSystem.current);
             buttons[0].OnPointerClick(ped);
-            Assert.IsTrue(buttons[0].selected, "多选：点一次应选中（本体自翻已禁，仅 ListSelection 翻一次）");
+            Assert.IsTrue(buttons[0].selected, "multiple_singleclick：点一次应选中（本体自翻已禁，仅 ListSelection 翻一次）");
             buttons[1].OnPointerClick(ped);
-            Assert.IsTrue(buttons[1].selected && buttons[0].selected, "多选：各项独立、互不取消");
+            Assert.IsTrue(buttons[1].selected && buttons[0].selected, "multiple_singleclick：各项独立、互不取消");
             buttons[0].OnPointerClick(ped);
-            Assert.IsFalse(buttons[0].selected, "多选：再点应取消（单次翻转，非双翻回原态）");
+            Assert.IsFalse(buttons[0].selected, "multiple_singleclick：再点应取消（单次翻转，非双翻回原态）");
+            Object.Destroy(listRt.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator ListSelection_multiple_plain_click_selects_exclusively()
+        {
+            // 复刻 GList.SetSelectionOnEvent：multiple 的无修饰键点击与 single 一致（排它选中），不是切换。
+            var listRt = Child(_rig.CanvasRt, "list", Vector2.zero, new Vector2(200, 200), false);
+            var buttons = new TestButton[2];
+            for (var i = 0; i < 2; i++)
+            {
+                buttons[i] = Child(listRt, "item" + i, new Vector2(0, i * 40), new Vector2(200, 40), false).gameObject.AddComponent<TestButton>();
+                buttons[i].mode = ButtonMode.Check;
+            }
+            var sel = listRt.gameObject.AddComponent<ListSelection>();
+            sel.selectionMode = "multiple";
+            yield return null;
+
+            var ped = new PointerEventData(EventSystem.current);
+            buttons[0].OnPointerClick(ped);
+            buttons[1].OnPointerClick(ped);
+            Assert.IsTrue(buttons[1].selected, "multiple 普通点击：新点的选中");
+            Assert.IsFalse(buttons[0].selected, "multiple 普通点击：其余取消（排它，同 FairyGUI）");
+            buttons[1].OnPointerClick(ped);
+            Assert.IsTrue(buttons[1].selected, "multiple 普通点击：再点已选中项保持选中，不切换");
             Object.Destroy(listRt.gameObject);
         }
     }

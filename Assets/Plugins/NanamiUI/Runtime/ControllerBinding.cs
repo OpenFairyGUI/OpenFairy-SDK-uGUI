@@ -22,5 +22,16 @@ namespace NanamiUI
             pageProp.SetValue(controller, target); // setter 内跑 gears
             fieldInfo.SetValue(owner, controller); // 写回 struct 持久化 _page
         }
+
+        // 当前页序号（-1 = 字段不存在），供 Check 按钮取消勾选时判断是否回对页。
+        public static int GetPage(Component owner, string field)
+        {
+            var fieldInfo = owner.GetType().GetField(field);
+            if (fieldInfo == null)
+                return -1;
+            var controller = fieldInfo.GetValue(owner);
+            var pageProp = controller.GetType().GetProperty("page");
+            return Array.IndexOf(Enum.GetValues(pageProp.PropertyType), pageProp.GetValue(controller));
+        }
     }
 }

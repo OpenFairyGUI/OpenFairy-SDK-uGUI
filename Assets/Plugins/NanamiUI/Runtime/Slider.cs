@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace NanamiUI
 {
-    public class Slider : Component, IPointerDownHandler, IDragHandler, IPointerUpHandler
+    public class Slider : Component, IPointerDownHandler
     {
         public float value = 50;
         public float max = 100;
@@ -23,12 +23,8 @@ namespace NanamiUI
         public float barStartX;
         public float barStartY;
         public UnityEvent onChanged = new();
-        public UnityEvent onGripTouchBegin = new(); // 复刻 GSlider.onGripTouchBegin/End
+        public UnityEvent onGripTouchBegin = new(); // 复刻 GSlider.onGripTouchBegin/End（由 grip 上的 SliderGrip 发）
         public UnityEvent onGripTouchEnd = new();
-
-        private bool _gripDrag;
-        private Vector2 _clickPoint;
-        private float _clickPercent;
 
         public void Apply()
         {
@@ -65,55 +61,42 @@ namespace NanamiUI
             return true;
         }
 
+        // 轨道点按（grip 的按下/拖动被 grip 上的 SliderGrip 接住，到不了这里）。
         public void OnPointerDown(PointerEventData eventData)
         {
-            RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)transform, eventData.position, eventData.pressEventCamera, out var point);
-            _gripDrag = grip != null && RectTransformUtility.RectangleContainsScreenPoint(grip, eventData.position, eventData.pressEventCamera);
-            if (_gripDrag)
-            {
-                _clickPoint = point;
-                _clickPercent = Mathf.Clamp01((value - min) / (max - min));
-                onGripTouchBegin.Invoke(); // 复刻 FairyGUI：仅按到 grip 才发，点轨道不发
-            }
-            else if (changeOnClick)
-                UpdateFromPoint(point);
+            if (eventData.button != PointerEventData.InputButton.Left || !changeOnClick)
+                return;
+            JumpFromClick(eventData); // 复刻 GSlider.__barTouchBegin：只跳一次，不跟踪拖动
         }
 
-        public void OnPointerUp(PointerEventData eventData)
-        {
-            if (_gripDrag)
-                onGripTouchEnd.Invoke();
-        }
-
-        public void OnDrag(PointerEventData eventData)
-        {
-            RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)transform, eventData.position, eventData.pressEventCamera, out var point);
-            if (_gripDrag)
-            {
-                var rect = ((RectTransform)transform).rect;
-                var deltaPercent = bar != null
-                    ? (point.x - _clickPoint.x) / (rect.width - barMaxWidthDelta)
-                    : (_clickPoint.y - point.y) / (rect.height - barMaxHeightDelta);
-                if (reverse)
-                    deltaPercent = -deltaPercent;
-                SetPercent(_clickPercent + deltaPercent);
-            }
-            else if (changeOnClick)
-                UpdateFromPoint(point);
-        }
-
-        private void UpdateFromPoint(Vector2 point)
+        // 一次跳值 = 当前值 + 点击点相对 grip 中心的偏移（复刻 __barTouchBegin）；无 grip 时按轨道绝对位置映射。
+        private void JumpFromClick(PointerEventData eventData)
         {
             var rect = ((RectTransform)transform).rect;
-            var percent = bar != null
-                ? (point.x - rect.xMin) / (rect.width - barMaxWidthDelta)
-                : (rect.yMax - point.y) / (rect.height - barMaxHeightDelta);
-            if (reverse)
-                percent = 1 - percent;
+            float percent;
+            if (grip != null)
+            {
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(grip, eventData.position, eventData.pressEventCamera, out var gp);
+                var delta = bar != null
+                    ? (gp.x - grip.rect.center.x) / (rect.width - barMaxWidthDelta)
+                    : (grip.rect.center.y - gp.y) / (rect.height - barMaxHeightDelta);
+                if (reverse)
+                    delta = -delta;
+                percent = Mathf.Clamp01((value - min) / (max - min)) + delta;
+            }
+            else
+            {
+                RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)transform, eventData.position, eventData.pressEventCamera, out var point);
+                percent = bar != null
+                    ? (point.x - rect.xMin) / (rect.width - barMaxWidthDelta)
+                    : (rect.yMax - point.y) / (rect.height - barMaxHeightDelta);
+                if (reverse)
+                    percent = 1 - percent;
+            }
             SetPercent(percent);
         }
 
-        private void SetPercent(float percent)
+        internal void SetPercent(float percent)
         {
             var newValue = min + (max - min) * Mathf.Clamp01(percent);
             if (wholeNumbers)

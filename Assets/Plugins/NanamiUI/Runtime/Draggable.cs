@@ -23,6 +23,8 @@ namespace NanamiUI
 
         public void OnBeginDrag(PointerEventData e)
         {
+            if (e.button != PointerEventData.InputButton.Left)
+                return;
             _prevented = onDragStart != null && onDragStart(e);
             if (_prevented)
                 return;
@@ -60,8 +62,9 @@ namespace NanamiUI
                 DragDropManager.inst.Drop(e);
                 return;
             }
-            if (dragging == this)
-                dragging = null;
+            if (dragging != this)
+                return;
+            dragging = null;
             onDragEnd?.Invoke();
         }
     }

@@ -54,12 +54,24 @@ namespace NanamiUI.TestSupport
             var rect = rt.rect;
             var percent = Mathf.Clamp01((value - slider.min) / (slider.max - slider.min));
 
-            // 反算出会经 OnDrag 得到 value 的指针局部点（复刻 Slider.OnDrag 的 percent 公式）。
-            Vector2 local = slider.bar != null
-                ? new Vector2(rect.xMin + percent * (rect.width - slider.barMaxWidthDelta), rect.center.y)
-                : new Vector2(rect.center.x, rect.yMax - percent * (rect.height - slider.barMaxHeightDelta));
-
-            var world = rt.TransformPoint(new Vector3(local.x, local.y, 0));
+            // 反算出会经轨道点击跳到 value 的指针位置（复刻 Slider.JumpFromClick 的公式）：
+            // 有 grip 时跳值 = 当前值 + 相对 grip 中心的偏移；无 grip 时按轨道绝对位置映射。
+            Vector3 world;
+            if (slider.grip != null)
+            {
+                var current = Mathf.Clamp01((slider.value - slider.min) / (slider.max - slider.min));
+                var track = slider.bar != null ? rect.width - slider.barMaxWidthDelta : rect.height - slider.barMaxHeightDelta;
+                var offset = (percent - current) * track * (slider.reverse ? -1 : 1);
+                var gripCenter = slider.grip.TransformPoint(slider.grip.rect.center);
+                world = gripCenter + rt.TransformVector(slider.bar != null ? new Vector3(offset, 0) : new Vector3(0, -offset));
+            }
+            else
+            {
+                Vector2 local = slider.bar != null
+                    ? new Vector2(rect.xMin + percent * (rect.width - slider.barMaxWidthDelta), rect.center.y)
+                    : new Vector2(rect.center.x, rect.yMax - percent * (rect.height - slider.barMaxHeightDelta));
+                world = rt.TransformPoint(new Vector3(local.x, local.y, 0));
+            }
             var screen = RectTransformUtility.WorldToScreenPoint(camera, world);
             // pressEventCamera 是只读、由 press 射线的 raycaster 推出。rig 画布上的 GraphicRaycaster.eventCamera
             // 即画布 worldCamera（= 我们的相机），塞进 pointerPressRaycast.module 即可让 OnDrag 反投影用对相机。

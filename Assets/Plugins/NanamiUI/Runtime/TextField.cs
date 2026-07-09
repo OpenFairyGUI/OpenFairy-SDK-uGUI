@@ -63,7 +63,7 @@ namespace NanamiUI
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            if (onClickLink == null || _links.Count == 0)
+            if (eventData.button != PointerEventData.InputButton.Left || onClickLink == null || _links.Count == 0)
                 return;
             RectTransformUtility.ScreenPointToLocalPointInRectangle(rectTransform, eventData.position, eventData.pressEventCamera, out var local);
             var rect = rectTransform.rect;
@@ -228,6 +228,11 @@ namespace NanamiUI
                     if (tag == "img")
                     {
                         var close = value.IndexOf("[/img]", end, System.StringComparison.Ordinal);
+                        if (close < 0) // 无闭合：按原文输出（复刻 UBBParser 对残缺标签的容错），不能让 i 倒退
+                        {
+                            buffer.Append(ch);
+                            continue;
+                        }
                         Flush();
                         runs.Add(new Run { Image = imageIndex++ });
                         i = close + 5;
@@ -243,6 +248,11 @@ namespace NanamiUI
                 else if (html && ch == '<')
                 {
                     var end = value.IndexOf('>', i);
+                    if (end < 0) // 无闭合：按原文输出（复刻 HtmlParser 对残缺标签的容错）
+                    {
+                        buffer.Append(ch);
+                        continue;
+                    }
                     var tag = value[(i + 1)..end].Trim();
                     if (tag.StartsWith("img"))
                     {

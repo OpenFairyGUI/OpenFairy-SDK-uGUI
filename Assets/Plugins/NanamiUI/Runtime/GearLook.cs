@@ -15,6 +15,19 @@ namespace NanamiUI
         public bool defaultGrayed;
 
         [NonSerialized] private Tweener _tweener;
+        [NonSerialized] private IDisplayGear _lockedDisplay;
+
+        // 杀 tween 并释放本 gear 持有的 display lock（DOTween.Kill 不触发 OnComplete，故显式释放，避免锁泄漏）。
+        private void KillTween()
+        {
+            _tweener?.Kill();
+            _tweener = null;
+            if (_lockedDisplay != null)
+            {
+                _lockedDisplay.ReleaseLock();
+                _lockedDisplay = null;
+            }
+        }
 
         // 组透明度按 CanvasGroup.alpha 乘算传播（复刻 FairyGUI 组 alpha），不覆盖各子物体 authored 的 color.a。
         private CanvasGroup Group()
@@ -35,7 +48,7 @@ namespace NanamiUI
 
         public override void Apply(T page)
         {
-            _tweener?.Kill();
+            KillTween();
             var index = Array.IndexOf(pages, page);
             Group().alpha = index >= 0 ? alphas[index] : defaultAlpha;
             ((RectTransform)target.transform).localEulerAngles = new Vector3(0, 0, -(index >= 0 ? rotations[index] : defaultRotation));
@@ -50,7 +63,7 @@ namespace NanamiUI
             var rt = (RectTransform)target.transform;
             var group = Group();
             ApplyGrayed(index >= 0 ? grayed[index] : defaultGrayed); // grayed 是离散态，直接切换
-            _tweener?.Kill();
+            KillTween();
             var startAlpha = group.alpha;
             var startRot = rt.localEulerAngles.z;
             if (!animate || !tween || (Mathf.Approximately(startAlpha, alpha) && Mathf.Approximately(Mathf.DeltaAngle(startRot, rotation), 0)))
@@ -59,11 +72,24 @@ namespace NanamiUI
                 rt.localEulerAngles = new Vector3(0, 0, rotation);
                 return;
             }
+            if (displayLock != null) // 有同 target 的 GearDisplay：tween 期间保持显示（复刻 GearLook AddDisplayLock）
+            {
+                displayLock.AddLock();
+                _lockedDisplay = displayLock;
+            }
             _tweener = DOTween.To(() => 0f, t =>
             {
                 group.alpha = Mathf.Lerp(startAlpha, alpha, t);
                 rt.localEulerAngles = new Vector3(0, 0, Mathf.LerpAngle(startRot, rotation, t));
-            }, 1f, duration).SetEase(ease).SetDelay(delay).SetLink(rt.gameObject, LinkBehaviour.KillOnDestroy).OnComplete(() => _tweener = null);
+            }, 1f, duration).SetEase(ease).SetDelay(delay).SetLink(rt.gameObject, LinkBehaviour.KillOnDestroy).OnComplete(() =>
+            {
+                _tweener = null;
+                if (_lockedDisplay != null)
+                {
+                    _lockedDisplay.ReleaseLock();
+                    _lockedDisplay = null;
+                }
+            });
         }
     }
 }
