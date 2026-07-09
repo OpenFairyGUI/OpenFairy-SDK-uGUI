@@ -1,7 +1,10 @@
 {
     "name": "NanamiUI.Runtime",
     "rootNamespace": "NanamiUI",
-    "references": [],
+    "references": [
+        "UniTask",
+        "ZLinq.Unity"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
