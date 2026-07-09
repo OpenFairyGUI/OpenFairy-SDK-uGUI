@@ -107,6 +107,7 @@ InitTestScene*.unity*
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
 
 /.idea/
+/.codegraph/
 .DS_Store
 /Packages/com.unity.ai.assistant
 
