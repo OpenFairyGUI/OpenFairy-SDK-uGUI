@@ -311,13 +311,9 @@ namespace NanamiUI
                     rt.GetComponent<Graphic>().color = new Color(value[0], value[1], value[2], value.Length > 3 ? value[3] : 1);
                     break;
                 case TransitionItemType.ColorFilter:
-                {
-                    var adjust = rt.GetComponent<ColorAdjust>();
-                    if (adjust == null)
-                        adjust = rt.gameObject.AddComponent<ColorAdjust>();
-                    adjust.Set(value[0], value[1], value[2], value[3]);
+                    // ColorAdjust 由 Migrate 烘焙在 ColorFilter 目标上。
+                    rt.GetComponent<ColorAdjust>().Set(value[0], value[1], value[2], value[3]);
                     break;
-                }
             }
         }
 

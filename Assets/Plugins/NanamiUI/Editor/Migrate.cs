@@ -763,7 +763,7 @@ namespace NanamiUI.Editor
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
                 else if (kind == Schema.GearKind.Look)
-                    ConfigureGearLook(gearType, gear, gearXml);
+                    ConfigureGearLook(gearType, gear, gearXml, go);
                 else if (kind == Schema.GearKind.Size)
                     ConfigureGearSize(gearType, gear, gearXml, (RectTransform)go.transform);
                 else if (kind == Schema.GearKind.Ani)
@@ -1080,7 +1080,7 @@ namespace NanamiUI.Editor
                 }
                 else
                 {
-                    go.AddComponent<Grayed>();
+                    go.AddComponent<Grayed>().shader = GrayscaleShader;
                     if (button != null)
                     {
                         button.GetType().GetField("grayed").SetValue(button, true);
@@ -1090,7 +1090,7 @@ namespace NanamiUI.Editor
             }
         }
 
-        private static void ConfigureGearLook(Type gearType, object gear, Schema.Gear xml)
+        private static void ConfigureGearLook(Type gearType, object gear, Schema.Gear xml, GameObject go)
         {
             (float Alpha, float Rotation, bool Grayed) Parse(string value, (float Alpha, float Rotation, bool Grayed) def)
             {
@@ -1108,6 +1108,14 @@ namespace NanamiUI.Editor
             gearType.GetField("defaultRotation").SetValue(gear, def.Rotation);
             gearType.GetField("grayed").SetValue(gear, values.Select(value => value.Grayed).ToArray());
             gearType.GetField("defaultGrayed").SetValue(gear, def.Grayed);
+            // 会用到置灰的 target 烘一个 disabled 的 Grayed，初始页的开关由 BuildController 应用 gear 时切换；
+            // element 自带 grayed 时 ApplyElement 已加（enabled）。
+            if ((def.Grayed || values.Any(value => value.Grayed)) && !go.TryGetComponent(out Grayed _))
+            {
+                var effect = go.AddComponent<Grayed>();
+                effect.shader = GrayscaleShader;
+                effect.enabled = false;
+            }
         }
 
         private static void ConfigureGearSize(Type gearType, object gear, Schema.Gear xml, RectTransform rt)
@@ -1395,6 +1403,15 @@ namespace NanamiUI.Editor
                         item.positionOffset = rt.anchoredPosition - new Vector2(designXY.x, -designXY.y);
                         if (itemXml.Path is { } path)
                             item.pathData = path.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                    }
+                    else if (item.type == TransitionItemType.ColorFilter)
+                    {
+                        // ColorFilter 目标烘一个 disabled 的 ColorAdjust，运行时 Transition 直接 Set。
+                        var filterGo = target.Go != null ? target.Go : root;
+                        if (!filterGo.TryGetComponent(out ColorAdjust adjust))
+                            adjust = filterGo.AddComponent<ColorAdjust>();
+                        adjust.shader = ColorMatrixShader;
+                        adjust.enabled = false;
                     }
 
                     items.Add(item);
@@ -1825,6 +1842,10 @@ namespace NanamiUI.Editor
 
         private static Type FindType(string fullName) =>
             TypeCache.GetTypesDerivedFrom<MonoBehaviour>().First(type => type.FullName == fullName);
+
+        // 编辑器期查找、序列化进 prefab；运行时组件不做 Shader.Find。
+        private static Shader GrayscaleShader => Shader.Find("NanamiUI/UI Grayscale");
+        private static Shader ColorMatrixShader => Shader.Find("NanamiUI/UI ColorMatrix");
 
         private static Color ParseColor(string value)
         {

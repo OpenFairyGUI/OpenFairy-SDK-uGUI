@@ -15,6 +15,7 @@ namespace NanamiUI
         public float contrast;
         public float saturation;
         public float hue;
+        public Shader shader; // Migrate 烘焙
 
         private Material _material;
         private readonly float[] _matrix = new float[20];
@@ -37,9 +38,11 @@ namespace NanamiUI
 
         private void Apply()
         {
+            if (shader == null)
+                return; // Migrate AddComponent 时 OnEnable 先于字段注入
             if (_material == null)
             {
-                _material = new Material(Shader.Find("NanamiUI/UI ColorMatrix"));
+                _material = new Material(shader);
                 GetComponent<Graphic>().material = _material;
             }
 

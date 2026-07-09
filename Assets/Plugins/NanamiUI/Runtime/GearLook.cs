@@ -25,13 +25,11 @@ namespace NanamiUI
 
         private void ApplyGrayed(bool isGrayed)
         {
-            var effect = target.GetComponent<Grayed>();
-            if (isGrayed && effect == null)
-                target.AddComponent<Grayed>();
-            else if (!isGrayed && effect != null)
-                UnityEngine.Object.Destroy(effect); // Grayed.OnDisable 还原原材质
+            // Grayed 由 Migrate 烘焙在 target 上，只切 enabled（OnDisable 还原原材质）。
+            if (target.TryGetComponent(out Grayed effect))
+                effect.enabled = isGrayed;
             // 传播到按钮：置 grayed → 进 disabled 页并拦截点击（复刻 GButton.HandleGrayedChanged），否则灰显却仍可点。
-            if (target.GetComponent<ButtonBase>() is { } button)
+            if (target.TryGetComponent(out ButtonBase button))
                 button.SetGrayed(isGrayed);
         }
 
