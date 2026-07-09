@@ -10,11 +10,12 @@
   - `Tools/NanamiUI/Migrate`
   - `Tools/NanamiUI/Generate Golden References`
   - `Tools/NanamiUI/Run PlayMode Tests`
-- 最近一次验证：2026-07-08 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `70/70`。
+- 最近一次验证：2026-07-09 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `97/97`（含修 ComboBox Dropdown 变体点击无反应 + 枚举式交互扫）。
 - 本轮发布整改：修 `ComboBox.selectedIndex` 程序化赋值不刷新/不发事件的 bug（改属性 + 加 `values/text/value`）+ 下拉按 `visibleItemCount` 裁剪滚动；`ScrollPane` 补滚轮/滚动条 grip 拖动/惯性回弹/`onScroll`/`ScrollToView`；`ProgressBar.TweenValue` 加 ease、`Slider` 加 grip touch 事件；修 `MovieClip.SetFrame` 越界不钳导致自播 Update 越界的 bug；`Window.modal` + `Root` 模态层；`PopupMenu.AddItem` 返回项按钮 + `ClearItems`；`InputText` 加 `password`/`maxLength`/`editable`/`onSubmit`。转换器健壮性整改（对非 demo 的真实工程）：包名/空名 sanitize 进命名空间、非 button list item、陈旧 gear 页 id、`Image`/`RectTransform` 字段全限定、内嵌 `ui://` 容错。
 - 真跑才暴露的三个 bug（已修 + 新增真射线交互测试 `InteractionRuntimeTests`）：① MovieClip 页空白（`<jta>` movieclip 标签被丢弃，现已识别）；② Popup/Window 按钮点不动（button 根加透明 raycast 面，整块可点）；③ Text 输入框不工作（真因是 `NanamiUI.Text` 作 InputField 面时 `OnEnable` 清 raycastTarget + 自绘不填 generator；改用原生 InputField 结构：透明 Image 作 targetGraphic + 普通 UI.Text 作 textComponent，placeholder 仍 NanamiUI.Text。`activeInputHandler` 保持 `1`）。详见 `AGENTS.md`。
 - `InteractionRuntimeTests` 覆盖真射线交互：MovieClip 自播、Window 开关、Popup 开/点项收起、ComboBox 开下拉、Slider 可点跳值、InputText 可编辑读写。
-- 当前 `Run PlayMode Tests` `79/79`。范围与取舍详见 `AGENTS.md`「发布范围与取舍」。
+- 2026-07-09 交互烘焙完整化：让**转换产物在无 demo 胶水下也具备完整交互**（通用 SDK 发布前提）。补齐按钮关联控制器(tab/单选组)、`overflow=scroll` 自挂 ScrollPane、Slider `min/reverse/wholeNumbers/changeOnClick`、列表选择 + `onClickItem`、ComboBox onChanged 语义、输入框 `SetTextWithoutNotify`/只读/回车提交、Window frame 拖动、右键指针弹菜单、GearLook 置灰传按钮、Depth 前移越位修正。新增 `BakedInteractionTests`（直接实例化 prefab、无胶水、真射线驱动）证明通用工程已具交互。详见 `AGENTS.md`「交互烘焙完整化」。
+- 当前 `Run PlayMode Tests` `97/97`。范围与取舍详见 `AGENTS.md`「发布范围与取舍」。
 
 ## 标准验证流程
 
@@ -104,6 +105,7 @@
 - 轨迹行为：`PageTransitionTests` 覆盖翻页 display lock 动效轨迹。
 - Main 导航：`MainNavigationTests` 覆盖 Main 初始页、20 个入口页真实 pointer 进入、子页面返回 Main，以及进出动效中态和终态。
 - Demo smoke：覆盖 ComboBox、Depth/DragDrop、Grid、List、Popup、ProgressBar、Text、Window 等运行 demo 胶水。
-- 专项测试：`DragDepthTests`、`TextLinkTests`、`WindowPopupTests`、`MainNavigationTests`。
+- 专项测试：`DragDepthTests`、`TextLinkTests`、`WindowPopupTests`、`MainNavigationTests`、`NewFeatureTests`。
+- 通用工程交互（无 demo 胶水）：`BakedInteractionTests` 直接实例化转换 prefab，真射线驱动，覆盖 tab 换页、单选组互斥、`overflow=scroll` 自挂滚动、输入框结构、Slider 连续拖动。
 
-当前 PlayMode 测试结果为 `60/60` 通过。
+当前 PlayMode 测试结果为 `97/97` 通过。

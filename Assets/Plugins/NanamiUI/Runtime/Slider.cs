@@ -12,6 +12,7 @@ namespace NanamiUI
         public float min;
         public bool wholeNumbers;
         public bool changeOnClick = true; // FairyGUI GSlider 默认 true：点 bar 直接跳值；点 grip 则相对拖动、不跳
+        public bool reverse;              // 复刻 GSlider._reverse：填充方向反向、拖动增量反号
         public ProgressTitleType titleType;
         public TextField title;
         public RectTransform bar;
@@ -19,6 +20,8 @@ namespace NanamiUI
         public RectTransform grip;
         public float barMaxWidthDelta;
         public float barMaxHeightDelta;
+        public float barStartX;
+        public float barStartY;
         public UnityEvent onChanged = new();
         public UnityEvent onGripTouchBegin = new(); // 复刻 GSlider.onGripTouchBegin/End
         public UnityEvent onGripTouchEnd = new();
@@ -34,10 +37,32 @@ namespace NanamiUI
                 title.text = ProgressTitle.Format(titleType, value, min, max);
 
             var rect = ((RectTransform)transform).rect;
-            if (bar != null)
-                bar.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, Mathf.RoundToInt((rect.width - barMaxWidthDelta) * percent));
-            if (barV != null)
-                barV.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, Mathf.RoundToInt((rect.height - barMaxHeightDelta) * percent));
+            if (bar != null && !SetFillAmount(bar, percent))
+            {
+                var fullWidth = rect.width - barMaxWidthDelta;
+                var w = Mathf.RoundToInt(fullWidth * percent);
+                bar.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, w);
+                if (reverse)
+                    bar.anchoredPosition = new Vector2(barStartX + (fullWidth - w), bar.anchoredPosition.y);
+            }
+            if (barV != null && !SetFillAmount(barV, percent))
+            {
+                var fullHeight = rect.height - barMaxHeightDelta;
+                var h = Mathf.RoundToInt(fullHeight * percent);
+                barV.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
+                if (reverse)
+                    barV.anchoredPosition = new Vector2(barV.anchoredPosition.x, -(barStartY + (fullHeight - h)));
+            }
+        }
+
+        // 复刻 GSlider.SetFillAmount：bar 是 Filled Image 时用 fillAmount 而非缩尺寸。
+        private bool SetFillAmount(RectTransform barRt, float percent)
+        {
+            var image = barRt.GetComponent<UnityEngine.UI.Image>();
+            if (image == null || image.type != UnityEngine.UI.Image.Type.Filled)
+                return false;
+            image.fillAmount = reverse ? 1 - percent : percent;
+            return true;
         }
 
         public void OnPointerDown(PointerEventData eventData)
@@ -69,6 +94,8 @@ namespace NanamiUI
                 var deltaPercent = bar != null
                     ? (point.x - _clickPoint.x) / (rect.width - barMaxWidthDelta)
                     : (_clickPoint.y - point.y) / (rect.height - barMaxHeightDelta);
+                if (reverse)
+                    deltaPercent = -deltaPercent;
                 SetPercent(_clickPercent + deltaPercent);
             }
             else if (changeOnClick)
@@ -81,6 +108,8 @@ namespace NanamiUI
             var percent = bar != null
                 ? (point.x - rect.xMin) / (rect.width - barMaxWidthDelta)
                 : (rect.yMax - point.y) / (rect.height - barMaxHeightDelta);
+            if (reverse)
+                percent = 1 - percent;
             SetPercent(percent);
         }
 

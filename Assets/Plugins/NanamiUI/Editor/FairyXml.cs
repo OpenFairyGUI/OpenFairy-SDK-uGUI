@@ -436,6 +436,7 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("lineGap")] public float LineGap;
         [XmlAttribute("colGap")] public float ColGap;
         [XmlAttribute("layout")] public string Layout = "column";
+        [XmlAttribute("selectionMode")] public string SelectionMode = "single"; // FairyGUI 列表默认单选
         [XmlAttribute("text")] public string Text = "";
         [XmlAttribute("fontSize")] public int? FontSize;
         [XmlAttribute("leading")] public int Leading = 3;
@@ -505,10 +506,16 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("mode")] public string Mode;
         [XmlAttribute("checked")] public bool Checked;
         [XmlAttribute("titleColor")] public string TitleColor;
+        // 按钮关联控制器（FairyGUI relatedController/relatedPageId）：点击换该控制器的页，实现 tab/radio 组。
+        [XmlAttribute("controller")] public string Controller;
+        [XmlAttribute("page")] public string Page;
         [XmlAttribute("value")] public float Value = 50;
         [XmlAttribute("max")] public float Max = 100;
+        [XmlAttribute("min")] public float Min;
         [XmlAttribute("titleType")] public string TitleType;
         [XmlAttribute("reverse")] public bool Reverse;
+        [XmlAttribute("wholeNumbers")] public bool WholeNumbers;
+        [XmlAttribute("changeOnClick")] public bool ChangeOnClick = true;
         [XmlAttribute("dropdown")] public string Dropdown;
         [XmlAttribute("visibleItemCount")] public int VisibleItemCount = 10;
         [XmlElement("item")] public Extension[] ItemNodes = Array.Empty<Extension>();

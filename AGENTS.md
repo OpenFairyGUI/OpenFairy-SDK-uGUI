@@ -59,6 +59,7 @@ NanamiUI 是基于 uGUI 的 FairyGUI Runtime SDK。目标是让用户继续用 F
 **静态化**
 - 静态结构优于动态解析；不要滥用 `string`。只有真实文本内容才用 `string`，有限选项用 enum，结构化值用 struct/class 字段等能保持静态引用和编译期检查的表达方式。
 - 能通过明确的正向函数调用完成的流程，不引入 `Action` 回调等动态分发方式。
+- 能在烘焙 prefab 阶段生成并序列化保存的数据，不放到运行时生成。
 
 ## 标准工具入口
 
@@ -137,20 +138,6 @@ AI 操作流程：
 - 响应式/容器关联（relation to container）：已在 `Migrate.SetRect` 里映射成 uGUI 锚点（`anchorMin/Max` + 拉伸/居中/贴边），容器改尺寸时子物体自动重排。只有小数百分比锚点（FairyGUI `usePercent` 的分数位）未映射，各 demo 未用到。
 - `GGroup` 布局：子物体在烘焙期已绝对定位，组内相对布局在编辑器就解算完。组级 alpha/显隐用 `GearLook`/`GearDisplay` 逐 target 传播（`CanvasGroup`），不单造 runtime group。
 
-**FairyGUI 动态 runtime API：本版不实现（如需再评估）**
-- FairyGUI `GList` 的 selection / 虚拟化 / `AddItemFromPool` / `numItems`+`itemRenderer` 等：本版列表是 `List.Fill` 烘焙静态填充，够 demo 用。真要做动态列表再单开。
-- `GTree`/`TreeView`、`GObject.tooltips` 顶层浮层、`BlurFilter`、`TypingEffect` 逐字动画：无 demo 覆盖，未做。
-- Controller actions（`ChangePageAction`/`PlayTransitionAction`）与 Button `relatedController`（点按钮翻别的 controller 页，如 tab 栏）：**故意暂缓**。当前 controller 是「组件类里内嵌 enum + `Controller<该 enum>`」的静态强类型设计，跨组件按名翻页需要一个非泛型 controller 面或反射，和静态化原则冲突；若将来要做，应先设计非泛型 controller 面，别用字符串反射硬接。
-
-**本轮发布整改新增（已过 70/70）**
-- `ComboBox.selectedIndex` 改为属性：程序化赋值也刷新标题并发 `onChanged`；新增 `values[]`/`text`/`value`。下拉按 `visibleItemCount` 裁剪：项数超出时把 `list` 裁到可见高并 `ScrollPane.Attach` 支持滚动，未超出时撑开显示全部（短下拉与旧行为一致，golden 不受影响）。
-- `ScrollPane` 补全交互：鼠标滚轮（`IScrollHandler`）、滚动条 grip 拖动（`ScrollBarGrip`）、松手惯性衰减 + 越界橡皮筋回弹、`onScroll` 事件、`ScrollToView`。静态终态不受影响（无交互时内容静置在界内，`Update` 早退）。
-- `ProgressBar.TweenValue` 加 `Ease` 参数；`Slider` 加 `onGripTouchBegin/End`（仅按 grip 才发，点轨道不发）。
-- `MovieClip.SetFrame` 越界钳进有效帧范围，避免被 `ProgressBar` 等驱动到 100 帧时自播 `Update` 越界索引 `addDelays[frame]`。
-- `Window.modal` + `Root` 模态层：模态窗打开时铺半透明 `ModalLayer`（`modalColor`，可接收射线拦截下层），铺在最上层模态窗之下、其余内容之上；`Root.HasModalWindow` 查询。
-- `PopupMenu.AddItem` 改为返回项 `ButtonBase`（调用方直接设 grayed/勾选/Icon，不再逐个包 SetItemXxx）；加 `ClearItems`。
-- `InputText` 加 `password`/`maxLength`/`editable`/`onSubmit`，并由 Migrate 从 FairyGUI `password`/`maxLength` 属性烘焙。
-
 **转换器健壮性整改（对非 demo 的真实 FairyGUI 工程）**
 - 包名/空名进 C# 标识符前统一过 `Identifier`：`namespace UI.{包}`、跨包组件类型、`FindType` 三处都 sanitize，避免带空格/连字符/数字开头的包名（如 `My UI`/`2048`）生成不可编译代码。
 - list 的 `<item>` 不再假定是 button：`ConfigureButton` 找不到按钮面时跳过，支持 defaultItem 为普通 component/label 的列表。
@@ -161,19 +148,42 @@ AI 操作流程：
 **已知 codegen 约束（无法自动消解，命名时避免）**
 同一包内两个组件/控制器名若仅差标点或大小写折叠后相同（`Panel-A` 与 `Panel A`、`2p` 与 `_2p`），会折叠成同一 C# 标识符 → 重复类/枚举编译冲突。这是静态强类型 codegen 的固有边界；FairyGUI 工程里避免用仅靠标点区分的同名组件/控制器。
 
-**真跑才暴露的三个 bug + 测试教训（重要）**
-之前的 smoke 测试直接 `Invoke onClick` / 直接写 `.text`，绕过了真实输入路径，所以三个只在真跑时出现的问题一直没被发现。已补 `InteractionRuntimeTests`：经真实 `GraphicRaycaster` 命中 + `ExecuteEvents` 派发点击、要求命中落在目标子树内（能抓到"被背景穿透/遮挡"），并断言 MovieClip 真的在推进帧。改交互/转换后必须让这类真射线测试过。
-1. **MovieClip 渲染空白**：FairyGUI 编辑器工程里 movieclip 实例的显示标签用资源扩展名 `<jta>`（`.jta` 文件），不是 `<movieclip>`。反序列化的 `displayList` 没列 `jta` → 这些元素被整个丢弃，MovieClip 页几乎空白。修复：`FairyXml` 的 displayList 加 `[XmlArrayItem("jta")]`，并在 `Finish` 里把 `jta` 归一到 `movieclip` 类型。（同一 movieclip 在别的页用 `<movieclip>`、在 Demo_MovieClip 用 `<jta>`，两者都要认。）
-2. **Popup/Window 按钮点不动**：FairyGUI 按钮整块可点、与内部图形无关；但 uGUI 只有 raycastTarget 图形盖住的地方才收点击。用 Shape 描边画的按钮（如 Button1）中心没有 raycast 面，点击穿过按钮打到背景 graph（Main 的 n26 灰底），`hits=1` 只命中背景。修复：Migrate 给所有 button 组件根加一张透明(alpha=0，不改渲染)、raycastTarget 的 `Image` 铺满 rect，保证整块可点。静态 golden 不受影响（透明不渲染）。
-3. **Text 输入框不工作（点不动/不能编辑）**：根因**不是** Input System（uGUI `InputField` 在 `activeInputHandler=1` 新 Input System 下正常工作，保持 `1`；之前误判成要改 Both，已撤销）。真因是 **`NanamiUI.Text` 不该坐在 `InputField` 下面**：① `Text.OnEnable` 会执行 `raycastTarget = _onClickLink != null`，输入框的 `_onClickLink` 为 null → 运行时把烘焙的 `raycastTarget` 覆盖成 false → 它是 InputField 唯一的 targetGraphic → `GraphicRaycaster` 跳过 → 永远无法聚焦；② 它自绘 `OnPopulateMesh`（`vh.Clear()` + 自画 quad）不填 `cachedTextGenerator` → InputField 光标/选区定位失效，且空文本时无网格 → 该图形 `depth==-1` 连射线面都没有。修复：`Migrate.ConfigureInput` 改用原生结构——根上加一张透明常驻 `Image` 作 `targetGraphic`（稳定射线面），加一个普通 `UnityEngine.UI.Text` 子物体作 `textComponent`（原生渲染 + 填 generator，`LegacyRuntime.ttf` 内置可序列化字体）；prompt 仍用 `NanamiUI.Text`（非命中面、复刻 UBB 斜体灰）。输入框不追求字体排版一致（项目允许）；空文本静置显示的是 placeholder，故静态 Text golden 不受影响。真射线聚焦测试见 `InteractionRuntimeTests.TextInput_field_is_editable_and_readable`。
-   - 坑：`Migrate` 里 `Resources` 是本类的资源字典字段，要用内置 `UnityEngine.Resources.GetBuiltinResource<Font>(...)` 必须全限定，否则撞名编译错。
-
 **踩坑：别给烘焙的 scrollbar grip AddComponent 一个 `Graphic`**
 给已有 CanvasRenderer 的 grip 再加 `Graphic` 子类（当时想做无图形 grip 的射线面）会破坏 grip 的 CanvasRenderer 状态，`MainNavigation` 里 Main 页含滚动列表 → 整页场景污染 → 14 个导航 case 连锁失败。结论：`ScrollBarGrip.Bind` 只接**已带 `Graphic`** 的 grip（烘焙的可见 grip 都带 Image），绝不 AddComponent。改 runtime 交互后必跑 `Run PlayMode Tests`。
+
+**踩坑：烘焙进 prefab 的 MonoBehaviour 必须独立成同名文件**
+Unity 无法把"定义在别的 .cs 文件里的次要 MonoBehaviour 类"序列化进 prefab（`SaveAsPrefabAsset` 报 missing script）。所以 `ScrollPaneHost`/`InputSubmit`/`ListSelection` 这些 **Migrate 期 AddComponent 并存进 prefab** 的类，每个都单独一个同名文件。只在**运行时** AddComponent、从不入 prefab 的类（`ScrollBarGrip`/`ScrollBarTrack`/`WindowDragArea`/`PopupBlocker`）可与主类同文件。
+
+**交互烘焙完整化（2026-07-09，让转换产物在无 demo 胶水下也具备完整交互）**
+核心原则修正：FairyGUI 在**编辑器里就烘焙进资产**的交互，必须由 Migrate 烘出来，不能只写在 Example 胶水里，否则通用工程拿到的 prefab 是"能显示不能交互"。本轮补齐：
+- **按钮关联控制器（tab/radio 组）**：`<Button controller=".." page="..">` 现解析进 `Schema.Extension` 并烘成 `ButtonBase.relatedOwner/relatedControllerField/relatedPage`。点击时 `ApplyRelatedController` 经 `ControllerBinding`（反射设 `Controller<T>` 结构的 page，与 InteractionDriver/Migrate 同一条反射路径）换页 + 按"共享同一关联控制器"同步整组 `selected`（组员不必是直接兄弟）。这才是 FairyGUI 标准 tab/单选机制；旧的"同父兄弟扫描"仅作**无关联控制器**时的回退。Example `SetupButtonDemo` 已删除（烘焙替代）。
+- **`overflow=scroll` 自挂 ScrollPane**：Migrate 给滚动根挂 `ScrollPaneHost`，运行时 `Start` 自挂 `ScrollPane`（幂等）。通用工程的滚动组件无需业务代码即可拖动/滚轮/滚动条。`ScrollPane.ContentBounds` 改用 `Relation.TopLeft`，内容用非 (0,1) 轴心也测得准；grip 长度按 view/content 比例实时缩放；补轨道点按翻页。
+- **Slider `min/reverse/wholeNumbers/changeOnClick`**：`Schema.Extension` 补这四个属性并烘进 `Slider`；runtime 补 reverse 填充/拖动反号 + Filled-Image bar。
+- **列表选择**：`<list selectionMode>` 默认 single，烘 `ListSelection`（点项按 single/multiple 置选中 + 发 `onClickItem`）。ComboBox 下拉/PopupMenu 自管点击，`Build`/ctor 里移除列表自带的 `ListSelection`/`ScrollPaneHost`。
+- **ComboBox onChanged 语义修正**：程序化赋值 `selectedIndex` **不发** onChanged（只刷标题，复刻 GComboBox）；点下拉项**总是**发（含重选当前项）。
+- **输入框**：`text` 用 `SetTextWithoutNotify`（程序化赋值不自触发 onChanged）；`editable=false` 映射 `readOnly`（只读但可聚焦，非禁用）；`onSubmit` 经 `InputSubmit`（ISubmitHandler，仅回车、仅单行）不再等同 onEndEdit（避免失焦误提交）。
+- **Window frame 拖动**：`OnInit` 找 `dragArea` 挂 `WindowDragArea`，拖动移动整窗 + 提到最前（`Root.BringToFront`）。
+- **Popup 指针定位**：`Root.ShowPopupAt` + `PopupMenu.ShowAtPointer` 支持右键在指针处弹出。
+- **GearLook 置灰传按钮**：`ApplyGrayed` 同时置 `ButtonBase.grayed`，灰显的按钮进 disabled 页且拦截点击。
+- **Depth `SetSortingOrder` 前移越位修正**：目标位 = 应排它前面的其它子物体数（`order<=` 计入），修 Unity 移除再插入的 off-by-one。
+- 新增测试：`BakedInteractionTests`（直接实例化 prefab、无胶水、真射线驱动，证明通用工程已具交互）+ `NewFeatureTests` 补 6 个（关联控制器/ListSelection/ScrollPaneHost 真拖/GearLook 置灰/Depth 前移/Slider reverse）。当前 `90/90` 通过。
+
+**本轮明确不做 / 记为边界（避免再纠结）**
+- 输入框 `restrict`/`keyboardType`/focus-blur 事件/Tab 导航、`selectedIcon`、按钮点击音、ComboBox `selectionController`/项图标、PopupMenu 的 `AddItemAt`/`RemoveItem`/可勾选项/子菜单、List 虚拟化/分页吸附/方向键导航/`align`/`autoResizeItem`：均超出"复刻可见交互"的发布范围，用到再补。
+- `Draggable.dragBounds` 用 **parent-local**（非 FairyGUI 的 GRoot-local）；draggable/dragBounds/sortingOrder 本就是 FairyGUI 的**运行时 API**（app 代码设，非编辑器烘焙），故由业务代码按本 SDK 语义设，不烘焙。
+- `ScrollPane` 惯性/回弹常数取近似值（视觉接近，非逐帧复刻 FairyGUI）；`ScrollToView` 仅竖直。
+- UBB 裸 `[url]body[/url]`（无 `=`）暂不取 body 作 href；用 `[url=..]` 或 `<a href=..>`。
+- `TextInput.onSubmit` 经 `InputSubmit`（ISubmitHandler，仅回车不失焦）——比旧的 onEndEdit 别名安全（不误触发失焦提交），但若输入模块不向聚焦的 InputField 派发 submit 动作则可能不触发，属**尽力而为**；宁可偶不触发，不选失焦误触发。
+
+**本轮改动经独立对抗式复审（4 路 agent 读 diff+源）确认后逐条修复**：slider 实例级不再覆盖定义级 reverse/wholeNumbers/changeOnClick；Check+关联控制器取消勾选回对页（复刻 oppositePageId，修 Demo_Controller 复选框只能开不能关）；Common tab 不置 selected（激活态靠 gears，否则卡按下页）；`ListSelection` 给项置 `changeStateOnClick=false`（否则多选态 Check 项与选择逻辑双翻永远选不上）；`ScrollPane.Attach` 不再按名复用 "content"（元素恰名 content 会劫持容器）；透明射线面改保留名 `__scrollHit`；轨道点按方向比较换到 bar 本地坐标；`ControllerBinding` 同页早返回不重跑 gears；`PopupMenu.ShowAtPointer` 默认 `Auto`（贴底上翻）。
+
+**测试必须"枚举式"而非"抽查代表"（2026-07-09 教训，用户点名）**：抽查一个 ComboBox(n1) 通过就断言"ComboBox 可用"是系统性盲区——同页的 Dropdown 变体(n4/n5) 静默退化成 Component、点了没反应却测不出来。修法是加**枚举式两层网**：① 结构层 `ConverterCompletenessTests` 扫每个组件源 XML，凡 `extention` 声明了交互面就断言烘焙 prefab 挂了对应可交互运行时类型（不退化成 Component）；② 行为层 `InteractionRuntimeTests.Every_combobox_on_the_page_opens_a_dropdown` + `PageInteractionReachabilityTests` 逐个真实点击页内**每个** active 交互元素、断言各自都命中自身并解析到 handler（下拉须解析到下拉自身，不被内部 button 面抢走）。**新增交互能力后，测试也要按"页内每个同类元素都扫一遍"写，不许只驱动一个代表。**
 
 ## 当前已知边界
 
 - Popup/ComboBox 外点关闭使用透明 blocker，表现为模态；这是为了避开新 Input System 下旧 `UnityEngine.Input` 的异常。
-- `ScrollPane` 拖动/滚轮/滚动条 grip 拖动/惯性回弹已支持；仍无虚拟化、无分页吸附、无下拉刷新。
-- ComboBox 下拉已按 `visibleItemCount` 裁剪滚动；无 button 控制器的 Dropdown 变体不接下拉。
+- `ScrollPane` 拖动/滚轮/滚动条 grip 拖动/轨道点按翻页/惯性回弹已支持，且 `overflow=scroll` 组件由 `ScrollPaneHost` 自动挂载（无需胶水）；仍无虚拟化、无分页吸附、无下拉刷新。
+- 按钮关联控制器（tab/单选组）、列表单/多选（`ListSelection` + `onClickItem`）、Slider `min/reverse/wholeNumbers/changeOnClick`、Window frame 拖动、右键指针处弹菜单均已烘焙，通用工程开箱即用。
+- ComboBox 下拉已按 `visibleItemCount` 裁剪滚动。**无 button 控制器的 Dropdown 变体现也接下拉**（2026-07-09 修）：codegen 无 "button" 控制器时补占位 `enum button` 让其仍是 `ComboBox<button>`（占位 enum 与 "button" 子节点的 `m_button` 字段不同名不冲突），不再退化成 Component；且给每个 ComboBox 烘一张盖满全 rect 的透明 `comboHit` 射线面作最后子物体——否则内部独立 button 子组件（Dropdown 的面）会按 uGUI"点击只到最深 handler、不冒泡"抢走点击、下拉打不开。
 - Grid demo 主要填可见文本，star/cb/mc 细节从简。
+- 其余未做项见「发布范围与取舍」末尾"本轮明确不做 / 记为边界"。

@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace NanamiUI
 {
@@ -60,6 +62,33 @@ namespace NanamiUI
                 }
         }
 
+        // 找到 frame 下的 dragArea 并让拖它移动整个窗口（复刻 Window.dragArea + StartDrag）。dragArea 常是空 graph，补透明射线面。
+        protected void BindDragArea()
+        {
+            var area = FindDeep(contentPane, "dragArea");
+            if (area == null)
+                return;
+            if (area.GetComponent<Graphic>() == null)
+            {
+                var image = area.gameObject.AddComponent<UnityEngine.UI.Image>();
+                image.color = new Color(0, 0, 0, 0);
+                image.raycastTarget = true;
+            }
+            area.gameObject.AddComponent<WindowDragArea>().window = this;
+        }
+
+        private static RectTransform FindDeep(Transform root, string name)
+        {
+            foreach (Transform child in root)
+            {
+                if (child.name == name)
+                    return (RectTransform)child;
+                if (FindDeep(child, name) is { } found)
+                    return found;
+            }
+            return null;
+        }
+
         // 改 pivot 但保持视觉位置不变（复刻 RectTransform pivot setter 的补偿），用于缩放动效绕中心。
         protected static void SetPivotKeepPosition(RectTransform rt, Vector2 pivot)
         {
@@ -69,10 +98,38 @@ namespace NanamiUI
             rt.anchoredPosition += new Vector2(delta.x * size.x, delta.y * size.y);
         }
 
-        protected virtual void OnInit() => BindCloseButton();
+        protected virtual void OnInit()
+        {
+            BindCloseButton();
+            BindDragArea();
+        }
+
         protected virtual void OnShown() { }
         protected virtual void OnHide() { }
         protected virtual void DoShowAnimation() => OnShown();
         protected virtual void DoHideAnimation() => HideImmediately();
+    }
+
+    // 挂在窗口 frame 的 dragArea 上：拖动移动整个窗口 contentPane，并把窗口提到最前（复刻 Window.__dragStart→StartDrag）。
+    public sealed class WindowDragArea : UIBehaviour, IBeginDragHandler, IDragHandler
+    {
+        [System.NonSerialized] public Window window;
+
+        private Vector2 _start;
+        private Vector2 _startPointer;
+        private RectTransform Content => window.Root;
+
+        public void OnBeginDrag(PointerEventData e)
+        {
+            Root.inst.BringToFront(window);
+            _start = Content.anchoredPosition;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)Content.parent, e.position, e.pressEventCamera, out _startPointer);
+        }
+
+        public void OnDrag(PointerEventData e)
+        {
+            RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)Content.parent, e.position, e.pressEventCamera, out var p);
+            Content.anchoredPosition = _start + (p - _startPointer);
+        }
     }
 }

@@ -21,7 +21,7 @@ namespace NanamiUI
         [NonSerialized] private GameObject _dropdown;
         [NonSerialized] private RectTransform _dropdownRt;
 
-        // 复刻 GComboBox.selectedIndex：程序化赋值也刷新标题并发 onChanged。
+        // 复刻 GComboBox.selectedIndex 的 setter：只刷新标题/图标，不发 onChanged（onChanged 仅由用户点选下拉项触发）。
         public int selectedIndex
         {
             get => _selectedIndex;
@@ -31,7 +31,6 @@ namespace NanamiUI
                     return;
                 _selectedIndex = value;
                 Apply();
-                onChanged.Invoke();
             }
         }
 
@@ -39,10 +38,11 @@ namespace NanamiUI
         public string text => items != null && _selectedIndex >= 0 && _selectedIndex < items.Length ? items[_selectedIndex] : "";
         public string value => values != null && _selectedIndex >= 0 && _selectedIndex < values.Length ? values[_selectedIndex] : text;
 
+        // 经 base Title 设标题（写 _title），使后续 RefreshState 不把标题回退到初始项。
         private void Apply()
         {
-            if (titleText != null && _selectedIndex >= 0 && items != null && _selectedIndex < items.Length)
-                titleText.text = items[_selectedIndex];
+            if (items != null && _selectedIndex >= 0 && _selectedIndex < items.Length)
+                Title = items[_selectedIndex];
         }
 
         public override void OnPointerClick(PointerEventData eventData)
@@ -78,6 +78,11 @@ namespace NanamiUI
             }
             _dropdown = dropdown;
             _dropdownRt = (RectTransform)_dropdown.transform;
+            // 下拉项点击 + 滚动由 ComboBox 自管，去掉列表自带的选择/自挂滚动接线（否则未超可见数也会挂 ScrollPane）。
+            if (list.GetComponent<ListSelection>() is { } listSelection)
+                Destroy(listSelection);
+            if (list.GetComponent<ScrollPaneHost>() is { } host)
+                Destroy(host);
             var source = list.GetComponent<ListSource>();
             List.Fill(list, items.Length, (itemGo, i) =>
             {
@@ -104,7 +109,10 @@ namespace NanamiUI
         private void Select(int index)
         {
             Root.inst.HidePopup(_dropdownRt);
-            selectedIndex = index; // 属性内部刷新标题并发 onChanged
+            // 复刻 GComboBox.__clickItem：即使点的是当前项也刷新并发 onChanged（绕过 setter 的同值早返回）。
+            _selectedIndex = index;
+            Apply();
+            onChanged.Invoke();
         }
     }
 }

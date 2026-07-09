@@ -95,6 +95,22 @@ namespace NanamiUI
             popup.anchoredPosition = new Vector2(pos.x, -pos.y);
         }
 
+        // 在指定设计坐标（y-down、左上原点）弹出：先把 popup 摆到该点，再走通用定位（含屏内翻转），
+        // 复刻 FairyGUI target==null 时用 touchPosition 定位——供右键上下文菜单在指针处弹出。
+        public void ShowPopupAt(RectTransform popup, Vector2 designPos, PopupDirection dir = PopupDirection.Down)
+        {
+            popup.anchorMin = popup.anchorMax = popup.pivot = new Vector2(0, 1);
+            popup.anchoredPosition = new Vector2(designPos.x, -designPos.y);
+            ShowPopup(popup, null, dir);
+        }
+
+        // 屏幕点 → Root 设计坐标（y-down）。用于把指针位置传给 ShowPopupAt。
+        public Vector2 ScreenToDesign(Vector2 screen, Camera camera)
+        {
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(rect, screen, camera, out var local);
+            return new Vector2(local.x, -local.y);
+        }
+
         public void TogglePopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
         {
             if (_popups.Contains(popup))

@@ -6,14 +6,16 @@ using UnityEngine.UI;
 namespace NanamiUI
 {
     // 运行时滚动（复刻 FairyGUI ScrollPane 的交互部分）：把 viewport（RectMask2D）里的内容包进一个 content 容器，
-    // 拖动/滚轮/拖动滚动条时在内容边界内平移 content，越界时橡皮筋回弹，松手带惯性衰减。
-    // 自配置：Attach 扫描已烘焙的 viewport 结构。静态终态不受影响（无交互时内容静置在边界内）。
+    // 拖动/滚轮/拖动滚动条/点轨道翻页时在内容边界内平移 content，越界时橡皮筋回弹，松手带惯性衰减。
+    // Migrate 给 overflow=scroll 的根挂 ScrollPaneHost，运行时自挂本组件——转换后的滚动组件无需业务胶水即可滚动。
     public sealed class ScrollPane : UIBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IScrollHandler
     {
         private const float Deceleration = 0.967f;   // 每 60fps 帧的速度衰减（同 FairyGUI）
         private const float SpringBack = 0.0333f;     // 越界回弹时间常数
         private const float WheelStep = 40f;          // 单档滚轮位移
         private const float BounceMargin = 0.25f;     // 越界拖动阻尼
+        private const float MinGrip = 20f;            // grip 最短像素长（避免内容极长时 grip 消失）
+        internal const string HitName = "__scrollHit"; // 透明射线面保留名（FairyGUI 不产出双下划线名，不会撞名）
 
         public bool bounceEffect = true;
         public bool mouseWheelEnabled = true;
@@ -28,15 +30,19 @@ namespace NanamiUI
         private Vector2 _lastPos;
         private bool _dragging;
 
-        // 给已烘焙的滚动根（有名为 "viewport" 的 RectMask2D 子节点）挂上运行时滚动。返回 null 表示不是滚动结构。
+        // 给已烘焙的滚动根（有名为 "viewport" 的 RectMask2D 子节点）挂上运行时滚动。已挂则直接返回（幂等）。返回 null 表示不是滚动结构。
         public static ScrollPane Attach(RectTransform scrollRoot)
         {
+            if (scrollRoot.GetComponent<ScrollPane>() is { } existing)
+                return existing;
             var viewportTf = scrollRoot.Find("viewport");
             if (viewportTf == null || viewportTf.GetComponent<RectMask2D>() == null)
                 return null;
             var viewport = (RectTransform)viewportTf;
 
             // 把 viewport 的现有子节点包进 content 容器（原点与 viewport 一致，故 anchoredPosition 不变）。
+            // 无 ScrollPane 时（上面的早返回已挡住重入）content 必不存在，直接新建——不按名复用，避免 FairyGUI 元素恰名为
+            // "content" 时被误当容器、其余子物体没被移进去。
             var content = new GameObject("content", typeof(RectTransform)).GetComponent<RectTransform>();
             content.SetParent(viewport, false);
             content.anchorMin = content.anchorMax = content.pivot = new Vector2(0, 1);
@@ -52,8 +58,8 @@ namespace NanamiUI
             pane._contentSize = ContentBounds(content);
             content.sizeDelta = pane._contentSize;
 
-            // 透明射线面覆盖 viewport，令空白处也能起拖。
-            var blocker = new GameObject("scrollHit", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
+            // 透明射线面覆盖内容，令空白处也能起拖。用保留名 "__scrollHit"（含 FairyGUI 不产出的双下划线），避免与真实元素撞名被当作内容漏测。
+            var blocker = new GameObject(HitName, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
             var brt = (RectTransform)blocker.transform;
             brt.SetParent(content, false);
             brt.anchorMin = brt.anchorMax = brt.pivot = new Vector2(0, 1);
@@ -68,6 +74,8 @@ namespace NanamiUI
                 ScrollBarGrip.Bind(pane._vtGrip, pane, false);
             if (pane._hzGrip != null)
                 ScrollBarGrip.Bind(pane._hzGrip, pane, true);
+            ScrollBarTrack.Bind(pane._vtBar, pane._vtGrip, pane, false);
+            ScrollBarTrack.Bind(pane._hzBar, pane._hzGrip, pane, true);
             return pane;
         }
 
@@ -85,15 +93,17 @@ namespace NanamiUI
             }
         }
 
+        // 内容边界（y-down）：用 Relation.TopLeft 计入各子物体的 pivot/anchor，故内容用非 (0,1) 轴心也测得准（对齐 Migrate.ContentBounds）。
         private static Vector2 ContentBounds(RectTransform content)
         {
             var bounds = Vector2.zero;
             for (var i = 0; i < content.childCount; i++)
             {
                 var rt = (RectTransform)content.GetChild(i);
-                var right = rt.anchoredPosition.x + rt.rect.width;
-                var bottom = -rt.anchoredPosition.y + rt.rect.height;
-                bounds = Vector2.Max(bounds, new Vector2(right, bottom));
+                if (rt.name == HitName)
+                    continue;
+                var topLeft = Relation.TopLeft(rt);
+                bounds = Vector2.Max(bounds, new Vector2(topLeft.x + rt.rect.width, rt.rect.height - topLeft.y));
             }
             return bounds;
         }
@@ -167,6 +177,22 @@ namespace NanamiUI
             onScroll.Invoke();
         }
 
+        // 点滚动条轨道空白处翻一页（复刻 GScrollBar 轨道点按 ScrollUp/Down(4)）：往点击一侧移动一个 view 高/宽。
+        internal void PageScroll(bool horizontal, bool forward)
+        {
+            _contentSize = ContentBounds(_content);
+            var max = MaxScroll;
+            var pos = _content.anchoredPosition;
+            if (horizontal)
+                pos.x = Mathf.Clamp(pos.x + (forward ? -_viewSize.x : _viewSize.x), -max.x, 0);
+            else
+                pos.y = Mathf.Clamp(pos.y + (forward ? _viewSize.y : -_viewSize.y), 0, max.y);
+            _content.anchoredPosition = pos;
+            _velocity = Vector2.zero;
+            UpdateGrips();
+            onScroll.Invoke();
+        }
+
         // 把子节点滚到可见区（复刻 ScrollPane.ScrollToView 的简版）。
         public void ScrollToView(RectTransform target)
         {
@@ -224,19 +250,35 @@ namespace NanamiUI
             return v;
         }
 
+        // grip 长度按 view/content 比例随内容实时缩放（复刻 GScrollBar.SetDisplayPerc），位置按滚动比例。
         private void UpdateGrips()
         {
-            if (_vtGrip != null && _vtBar != null && _contentSize.y > _viewSize.y)
+            UpdateGrip(_vtBar, _vtGrip, false);
+            UpdateGrip(_hzBar, _hzGrip, true);
+        }
+
+        private void UpdateGrip(RectTransform bar, RectTransform grip, bool horizontal)
+        {
+            if (grip == null || bar == null)
+                return;
+            var barLen = horizontal ? bar.rect.width : bar.rect.height;
+            var view = horizontal ? _viewSize.x : _viewSize.y;
+            var content = horizontal ? _contentSize.x : _contentSize.y;
+            if (content <= view)
+                return; // 不可滚动：保留烘焙的 grip（本工程滚动条常显）
+            var gripLen = Mathf.Max(MinGrip, Mathf.FloorToInt(Mathf.Min(1, view / Mathf.Max(content, 1)) * barLen));
+            var percent = horizontal
+                ? Mathf.Clamp01(-_content.anchoredPosition.x / (content - view))
+                : Mathf.Clamp01(_content.anchoredPosition.y / (content - view));
+            if (horizontal)
             {
-                var percent = Mathf.Clamp01(_content.anchoredPosition.y / (_contentSize.y - _viewSize.y));
-                var travel = _vtBar.rect.height - _vtGrip.rect.height;
-                _vtGrip.anchoredPosition = new Vector2(_vtGrip.anchoredPosition.x, Relation.TopLeft(_vtBar).y - percent * travel);
+                grip.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, gripLen);
+                grip.anchoredPosition = new Vector2(Relation.TopLeft(bar).x + percent * (barLen - gripLen), grip.anchoredPosition.y);
             }
-            if (_hzGrip != null && _hzBar != null && _contentSize.x > _viewSize.x)
+            else
             {
-                var percent = Mathf.Clamp01(-_content.anchoredPosition.x / (_contentSize.x - _viewSize.x));
-                var travel = _hzBar.rect.width - _hzGrip.rect.width;
-                _hzGrip.anchoredPosition = new Vector2(Relation.TopLeft(_hzBar).x + percent * travel, _hzGrip.anchoredPosition.y);
+                grip.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, gripLen);
+                grip.anchoredPosition = new Vector2(grip.anchoredPosition.x, Relation.TopLeft(bar).y - percent * (barLen - gripLen));
             }
         }
     }
@@ -266,6 +308,36 @@ namespace NanamiUI
                 ? (local.x - _bar.rect.xMin - grip.rect.width * 0.5f) / Mathf.Max(1, _bar.rect.width - grip.rect.width)
                 : (_bar.rect.yMax - local.y - grip.rect.height * 0.5f) / Mathf.Max(1, _bar.rect.height - grip.rect.height);
             _pane.SetPercent(_horizontal, percent);
+        }
+    }
+
+    // 挂在滚动条轨道（bar）上：点 grip 之外的轨道空白翻一页（复刻 GScrollBar 轨道点按）。
+    public sealed class ScrollBarTrack : UIBehaviour, IPointerDownHandler
+    {
+        private ScrollPane _pane;
+        private RectTransform _grip;
+        private bool _horizontal;
+
+        internal static void Bind(RectTransform bar, RectTransform grip, ScrollPane pane, bool horizontal)
+        {
+            if (bar == null || grip == null || bar.GetComponent<Graphic>() == null)
+                return; // 轨道需可收射线（烘焙的 bar 带 Image）
+            var t = bar.gameObject.GetComponent<ScrollBarTrack>() ?? bar.gameObject.AddComponent<ScrollBarTrack>();
+            t._pane = pane;
+            t._grip = grip;
+            t._horizontal = horizontal;
+        }
+
+        public void OnPointerDown(PointerEventData e)
+        {
+            if (RectTransformUtility.RectangleContainsScreenPoint(_grip, e.position, e.pressEventCamera))
+                return; // 点在 grip 上：交给 grip 拖动
+            var bar = (RectTransform)transform;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(bar, e.position, e.pressEventCamera, out var local);
+            // grip 与 bar 常是同容器兄弟、坐标系不同（差一个箭头缩进），须换到 bar 本地再比较方向，否则阈值偏移。
+            var gripLocal = (Vector2)bar.InverseTransformPoint(_grip.TransformPoint(_grip.rect.center));
+            var forward = _horizontal ? local.x > gripLocal.x : local.y < gripLocal.y;
+            _pane.PageScroll(_horizontal, forward);
         }
     }
 }

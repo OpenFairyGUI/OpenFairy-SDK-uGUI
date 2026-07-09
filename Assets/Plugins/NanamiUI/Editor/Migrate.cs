@@ -342,9 +342,12 @@ namespace NanamiUI.Editor
             }
 
             // FairyGUI 的 GButton/GComboBox 状态控制器固定名为 "button"（GetController("button")），不靠位置。
-            // Button 组件没有名为 button 的控制器（如 BagGridSub2）时补一个占位 enum。
-            // ComboBox 无 button 控制器时退化为 Component（见 baseType），不生成占位——避免与"button"子节点字段撞名（Dropdown）。
-            if (xml.Extension == Schema.ComponentExtension.Button && !xml.Controllers.Any(c => c.Name == "button") && used.Add(Field("button")))
+            // 无该控制器时补一个占位 enum，使 Button/ComboBox 仍是可交互的泛型面（Button<button>/ComboBox<button>），
+            // 而不是退化成 Component 丢掉点击/下拉。占位 enum 是嵌套类型 `button`，与"button"子节点的 m_button 字段
+            // 不同名（type vs m_ 前缀字段），不冲突——Dropdown（有 button 子节点、无 button 控制器、但有 dropdown 资源）正属此例。
+            var buttonController = xml.Controllers.FirstOrDefault(c => c.Name == "button");
+            var isButtonFamily = xml.Extension is Schema.ComponentExtension.Button or Schema.ComponentExtension.ComboBox;
+            if (isButtonFamily && buttonController == null)
                 fields.InsertRange(0, new[]
                 {
                     "        public enum button",
@@ -352,11 +355,11 @@ namespace NanamiUI.Editor
                     "            up,",
                     "        }",
                 });
+            var stateEnum = buttonController != null ? Identifier(buttonController.Name) : "button";
             var baseType = xml.Extension switch
             {
-                Schema.ComponentExtension.Button => $"NanamiUI.Button<{name}.{(xml.Controllers.FirstOrDefault(c => c.Name == "button") is { } buttonController ? Identifier(buttonController.Name) : "button")}>",
-                // 有 button 控制器才做成 ComboBox<T>（复用其视觉态 + 下拉）；无控制器（如 Dropdown）退化为 Component。
-                Schema.ComponentExtension.ComboBox when xml.Controllers.FirstOrDefault(c => c.Name == "button") is { } comboController => $"NanamiUI.ComboBox<{name}.{Identifier(comboController.Name)}>",
+                Schema.ComponentExtension.Button => $"NanamiUI.Button<{name}.{stateEnum}>",
+                Schema.ComponentExtension.ComboBox => $"NanamiUI.ComboBox<{name}.{stateEnum}>",
                 Schema.ComponentExtension.ProgressBar => "NanamiUI.ProgressBar",
                 Schema.ComponentExtension.Slider => "NanamiUI.Slider",
                 Schema.ComponentExtension.Label => "NanamiUI.Label",
@@ -472,6 +475,7 @@ namespace NanamiUI.Editor
                         if (childGo.transform.parent == rt)
                             childGo.transform.SetParent(view.Viewport, false);
                     SetGrips(view, ContentBounds(children));
+                    root.AddComponent<ScrollPaneHost>(); // 运行时自挂 ScrollPane，转换后无需胶水即可滚动
                 }
 
                 var byId = new Dictionary<string, (Schema.Display Xml, GameObject Go)>();
@@ -493,6 +497,16 @@ namespace NanamiUI.Editor
                     BuildController(controller);
                 SyncRelations(root);
 
+                // 按钮关联控制器（<Button controller=.. page=..>）：点击换 owner 上该控制器的页，实现 tab/radio 组（复刻 relatedController）。
+                foreach (var (element, go) in children)
+                    if (element.Button?.Controller is { } ctrlName && controllers.TryGetValue(ctrlName, out var ctrlData)
+                        && ButtonComponent(go) is ButtonBase relatedButton)
+                    {
+                        relatedButton.relatedOwner = comp;
+                        relatedButton.relatedControllerField = ctrlData.FieldName;
+                        relatedButton.relatedPage = Array.IndexOf(ctrlData.PageIds, element.Button.Page);
+                    }
+
                 if (IsButton(comp.GetType()))
                 {
                     // FairyGUI 按钮整块可点，与内部图形无关。uGUI 需要一个覆盖全 rect 的 raycast 面：
@@ -512,6 +526,20 @@ namespace NanamiUI.Editor
                         ConfigureButton(root, buttonEl, component.PackageId);
                     if (xml.ComboBox is { } comboEl) // 组件定义级：烘焙 dropdown 资源
                         ConfigureComboBox(root, comboEl, component.PackageId);
+                    if (xml.Extension == Schema.ComponentExtension.ComboBox)
+                    {
+                        // ComboBox 内部可能含独立的 button 子组件（如 Dropdown 的 zd9g42 面）。uGUI 点击只解析到最深 handler、
+                        // 不像 FairyGUI 那样冒泡到 combobox → 点击被内部 button 抢走、下拉打不开。加一张盖满全 rect 的透明射线面
+                        // 作最后子物体，令整块点击都落到 ComboBox 自身（内部 button 只作视觉面，不单独可点）。
+                        var comboHit = new GameObject("comboHit", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
+                        var chrt = (RectTransform)comboHit.transform;
+                        chrt.SetParent(root.transform, false);
+                        chrt.anchorMin = Vector2.zero;
+                        chrt.anchorMax = Vector2.one;
+                        chrt.offsetMin = chrt.offsetMax = Vector2.zero;
+                        chrt.SetAsLastSibling();
+                        comboHit.GetComponent<UnityEngine.UI.Image>().color = new Color(0, 0, 0, 0);
+                    }
                 }
                 else if (comp is ProgressBar progressBar)
                     SetupProgressBar(progressBar, xml, children, root);
@@ -924,17 +952,23 @@ namespace NanamiUI.Editor
         {
             var ext = xml.Slider;
             slider.titleType = ParseTitleType(ext.TitleType);
+            slider.min = ext.Min;
+            slider.reverse = ext.Reverse;
+            slider.wholeNumbers = ext.WholeNumbers;
+            slider.changeOnClick = ext.ChangeOnClick;
             slider.title = Child(children, "title")?.GetComponent<TextField>();
             var size = xml.Size;
             if (Child(children, "bar") is { } bar)
             {
                 slider.bar = (RectTransform)bar.transform;
                 slider.barMaxWidthDelta = size.x - slider.bar.rect.width;
+                slider.barStartX = slider.bar.anchoredPosition.x;
             }
             if (Child(children, "bar_v") is { } barV)
             {
                 slider.barV = (RectTransform)barV.transform;
                 slider.barMaxHeightDelta = size.y - slider.barV.rect.height;
+                slider.barStartY = -slider.barV.anchoredPosition.y;
             }
             if (Child(children, "grip") is { } grip)
                 slider.grip = (RectTransform)grip.transform;
@@ -964,9 +998,12 @@ namespace NanamiUI.Editor
 
         private static void ConfigureSlider(GameObject go, Schema.Extension xml)
         {
+            // 实例级只覆盖 value/max/min（同 GSlider.Setup_AfterAdd）；reverse/wholeNumbers/changeOnClick 是定义级
+            // （ConstructExtension），由 SetupSlider 烘定，实例 XML 的属性默认值不能覆盖它们。
             var slider = go.GetComponent<Slider>();
             slider.value = xml.Value;
             slider.max = xml.Max;
+            slider.min = xml.Min;
             slider.Apply();
             SyncRelations(go);
         }
@@ -1239,6 +1276,10 @@ namespace NanamiUI.Editor
                 ConfigureButton(itemGo, item, owner.PackageId);
             }
             SetGrips(view, content);
+            if (element.Overflow == Schema.Overflow.Scroll)
+                go.AddComponent<ScrollPaneHost>(); // 运行时自挂 ScrollPane
+            if (element.SelectionMode != "none")
+                go.AddComponent<ListSelection>().selectionMode = element.SelectionMode; // 点项选中/发 onClickItem
         }
 
         // 默认滚动条来自 Common.json 的 ui:// 引用；未配置则返回 null，viewport 退化为满宽。
@@ -1540,7 +1581,11 @@ namespace NanamiUI.Editor
                 field.placeholder = ph;
             }
 
-            go.AddComponent<TextInput>().field = field;
+            var submit = go.AddComponent<InputSubmit>(); // Enter 提交中继（仅回车、仅单行），复刻 GTextInput onSubmit
+            submit.field = field;
+            var input = go.AddComponent<TextInput>();
+            input.field = field;
+            input.submit = submit;
         }
 
         private static void StretchFull(RectTransform rt)

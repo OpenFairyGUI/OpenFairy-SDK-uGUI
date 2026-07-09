@@ -15,6 +15,7 @@ namespace NanamiUI.Tests
         private enum RadioPage { up, down, over, selectedOver }
         private class TestButton : Button<RadioPage> { }
         private class TestCombo : ComboBox<RadioPage> { }
+        private class TestOwner : NanamiUI.Component { public Controller<RadioPage> m_ctrl; }
 
         private NanamiPageRenderer _rig;
 
@@ -263,7 +264,7 @@ namespace NanamiUI.Tests
         }
 
         [UnityTest]
-        public IEnumerator ComboBox_selectedIndex_updates_title_and_fires_once()
+        public IEnumerator ComboBox_selectedIndex_updates_title_without_firing_onChanged()
         {
             var comboRt = Child(_rig.CanvasRt, "combo", Vector2.zero, new Vector2(100, 30), false);
             var combo = comboRt.gameObject.AddComponent<TestCombo>();
@@ -280,10 +281,8 @@ namespace NanamiUI.Tests
             Assert.AreEqual("B", combo.titleText.text, "selectedIndex 赋值应刷新标题");
             Assert.AreEqual("B", combo.text, "text 应为当前项显示文本");
             Assert.AreEqual("vb", combo.value, "value 应为平行 values 项");
-            Assert.AreEqual(1, fired, "值变化应发一次 onChanged");
-
-            combo.selectedIndex = 1; // 同值不再发
-            Assert.AreEqual(1, fired, "赋相同值不应再发 onChanged");
+            // 复刻 GComboBox：程序化赋值 selectedIndex 只刷新标题，不发 onChanged（onChanged 仅用户点选下拉项时发）。
+            Assert.AreEqual(0, fired, "程序化赋值 selectedIndex 不应发 onChanged");
 
             Object.Destroy(comboRt.gameObject);
         }
@@ -306,7 +305,8 @@ namespace NanamiUI.Tests
             input.maxLength = 6;
             Assert.AreEqual(6, field.characterLimit, "maxLength 应设 characterLimit");
             input.editable = false;
-            Assert.IsFalse(field.interactable, "editable=false 应禁用交互");
+            Assert.IsTrue(field.readOnly, "editable=false 应设只读（复刻 FairyGUI：只读但仍可聚焦/复制）");
+            Assert.IsTrue(field.interactable, "只读不等于禁用，interactable 仍为 true");
             input.text = "hello";
             Assert.AreEqual("hello", input.text, "text 读写应经 field");
 
@@ -338,6 +338,228 @@ namespace NanamiUI.Tests
             Assert.AreEqual(300f, content.anchoredPosition.y, 0.5f, "滚动应钳到 contentHeight-viewHeight=300");
 
             Object.Destroy(root.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator ScrollPaneHost_attaches_and_real_drag_scrolls()
+        {
+            var root = Child(_rig.CanvasRt, "scroll", Vector2.zero, new Vector2(100, 100), false);
+            var viewport = new GameObject("viewport", typeof(RectTransform), typeof(RectMask2D)).GetComponent<RectTransform>();
+            viewport.SetParent(root, false);
+            viewport.anchorMin = viewport.anchorMax = viewport.pivot = new Vector2(0, 1);
+            viewport.sizeDelta = new Vector2(100, 100);
+            viewport.anchoredPosition = Vector2.zero;
+            Child(viewport, "big", Vector2.zero, new Vector2(100, 400), true);
+            root.gameObject.AddComponent<ScrollPaneHost>(); // 复刻 Migrate 烘焙：运行时自挂 ScrollPane
+            yield return null; // ScrollPaneHost.Start
+
+            var pane = root.GetComponent<ScrollPane>();
+            Assert.IsNotNull(pane, "ScrollPaneHost 应在 Start 自挂 ScrollPane");
+            var content = viewport.Find("content") as RectTransform;
+            Assert.IsNotNull(content, "应把 viewport 子节点包进 content");
+
+            // 真实拖动：手指上移（局部 y 从 -80 到 -20），内容下移露出底部（content.y 增大）。
+            var e = new PointerEventData(EventSystem.current)
+            {
+                position = ScreenAt(viewport, new Vector2(50, -80)),
+                pointerPressRaycast = new RaycastResult { module = _rig.Raycaster },
+            };
+            pane.OnBeginDrag(e);
+            e.position = ScreenAt(viewport, new Vector2(50, -20)); // 指针上移 60
+            pane.OnDrag(e);
+            Assert.Greater(content.anchoredPosition.y, 30f, "手指上移 60 应下移内容约 60（content.y 增大）");
+            Object.Destroy(root.gameObject);
+        }
+
+        private Vector2 ScreenAt(RectTransform parent, Vector2 local) =>
+            RectTransformUtility.WorldToScreenPoint(_rig.Camera, parent.TransformPoint(local));
+
+        [UnityTest]
+        public IEnumerator Button_related_controller_switches_page_and_syncs_group()
+        {
+            var ownerRt = Child(_rig.CanvasRt, "owner", Vector2.zero, new Vector2(300, 100), false);
+            var owner = ownerRt.gameObject.AddComponent<TestOwner>();
+            var buttons = new TestButton[3];
+            for (var i = 0; i < 3; i++)
+            {
+                var b = Child(ownerRt, "b" + i, new Vector2(i * 100, 0), new Vector2(90, 40), false).gameObject.AddComponent<TestButton>();
+                b.mode = ButtonMode.Radio;
+                b.relatedOwner = owner;
+                b.relatedControllerField = "m_ctrl";
+                b.relatedPage = i;
+                buttons[i] = b;
+            }
+            yield return null;
+
+            buttons[1].OnPointerClick(new PointerEventData(EventSystem.current));
+            var page = owner.m_ctrl.page;
+            Assert.AreEqual(RadioPage.down, page, "点第 1 个按钮应把控制器切到第 1 页（down）");
+            Assert.IsTrue(buttons[1].selected, "被点按钮应选中");
+            Assert.IsFalse(buttons[0].selected, "同组其它按钮应取消选中");
+            Assert.IsFalse(buttons[2].selected, "同组其它按钮应取消选中");
+
+            buttons[2].OnPointerClick(new PointerEventData(EventSystem.current));
+            Assert.AreEqual(RadioPage.over, owner.m_ctrl.page, "点第 2 个按钮应切到第 2 页（over）");
+            Assert.IsFalse(buttons[1].selected, "换选后前一个应取消选中");
+            Assert.IsTrue(buttons[2].selected, "新点的应选中");
+            Object.Destroy(ownerRt.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator ListSelection_single_mode_selects_clicked_deselects_others()
+        {
+            var listRt = Child(_rig.CanvasRt, "list", Vector2.zero, new Vector2(200, 200), false);
+            var buttons = new TestButton[3];
+            for (var i = 0; i < 3; i++)
+                buttons[i] = Child(listRt, "item" + i, new Vector2(0, i * 40), new Vector2(200, 40), false).gameObject.AddComponent<TestButton>();
+            var sel = listRt.gameObject.AddComponent<ListSelection>();
+            sel.selectionMode = "single";
+            var clicked = -1;
+            sel.onClickItem.AddListener(i => clicked = i);
+            yield return null; // ListSelection.Start -> Rebind 接线
+
+            buttons[1].onClick.Invoke(); // 模拟真实点击项 1
+            Assert.AreEqual(1, clicked, "onClickItem 应带被点项索引");
+            Assert.IsTrue(buttons[1].selected, "单选：被点项选中");
+            Assert.IsFalse(buttons[0].selected, "单选：其它项取消");
+
+            buttons[0].onClick.Invoke();
+            Assert.IsTrue(buttons[0].selected, "改点项 0 后其选中");
+            Assert.IsFalse(buttons[1].selected, "项 1 取消（单选互斥）");
+            Object.Destroy(listRt.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator GearLook_grayed_propagates_to_button_grayed()
+        {
+            var buttonGo = Child(_rig.CanvasRt, "btn", Vector2.zero, new Vector2(80, 40), false);
+            var button = buttonGo.gameObject.AddComponent<TestButton>();
+            var gear = new GearLook<RadioPage>
+            {
+                target = buttonGo.gameObject,
+                pages = new[] { RadioPage.up, RadioPage.down },
+                alphas = new[] { 1f, 1f },
+                defaultAlpha = 1f,
+                rotations = new[] { 0f, 0f },
+                defaultRotation = 0f,
+                grayed = new[] { false, true },
+                defaultGrayed = false,
+            };
+            gear.Apply(RadioPage.down);
+            yield return null;
+            Assert.IsTrue(button.grayed, "GearLook 置灰应把按钮 grayed 置 true（进 disabled 页、拦截点击）");
+
+            var fired = false;
+            button.onClick.AddListener(() => fired = true);
+            button.OnPointerClick(new PointerEventData(EventSystem.current));
+            Assert.IsFalse(fired, "grayed 按钮点击应被拦截，不发 onClick");
+
+            gear.Apply(RadioPage.up);
+            Assert.IsFalse(button.grayed, "非置灰页应恢复可点");
+            Object.Destroy(buttonGo.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator Depth_setsortingorder_forward_move_lands_correctly()
+        {
+            var container = Child(_rig.CanvasRt, "c", Vector2.zero, new Vector2(400, 400), false);
+            var a = Child(container, "a", Vector2.zero, new Vector2(50, 50), true);
+            var b = Child(container, "b", Vector2.zero, new Vector2(50, 50), true);
+            var move = Child(container, "move", Vector2.zero, new Vector2(50, 50), true); // sibling index 2
+            yield return null;
+
+            // a、b order 0；把 move 提到 order 5：应排到 order<=5 的其它子物体之后 = 末尾（index 2 保持）。
+            NanamiUI.Depth.SetSortingOrder(move, 5);
+            Assert.AreEqual(2, move.GetSiblingIndex(), "forward move：move 应落在末尾（在 a、b 之后）");
+
+            // 再把 a 提到 order 10：应排到最后 → 顺序 b, move, a。
+            NanamiUI.Depth.SetSortingOrder(a, 10);
+            Assert.AreEqual(2, a.GetSiblingIndex(), "a 提到最高 order 应到末尾");
+            Assert.AreSame(b, container.GetChild(0), "顺序应为 b, move, a：首位是 b");
+            Assert.AreSame(move.transform, container.GetChild(1), "次位是 move");
+            Object.Destroy(container.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator Slider_reverse_fills_from_opposite_end()
+        {
+            var sliderRt = Child(_rig.CanvasRt, "slider", Vector2.zero, new Vector2(200, 20), false);
+            var slider = sliderRt.gameObject.AddComponent<Slider>();
+            slider.min = 0;
+            slider.max = 100;
+            slider.reverse = true;
+            slider.bar = Child(sliderRt, "bar", Vector2.zero, new Vector2(200, 20), true);
+            slider.barStartX = slider.bar.anchoredPosition.x;
+            yield return null;
+
+            slider.value = 25; // reverse：percent 0.25 → bar 宽 50，右移到 (fullWidth-50)=150 处
+            slider.Apply();
+            Assert.AreEqual(50f, slider.bar.rect.width, 1f, "reverse slider 宽度仍按 percent");
+            Assert.AreEqual(slider.barStartX + 150f, slider.bar.anchoredPosition.x, 1f, "reverse：bar 从右端起，左移露出");
+            Object.Destroy(sliderRt.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator Button_check_related_controller_toggles_to_opposite_page()
+        {
+            var ownerRt = Child(_rig.CanvasRt, "owner", Vector2.zero, new Vector2(100, 100), false);
+            var owner = ownerRt.gameObject.AddComponent<TestOwner>();
+            var cb = Child(ownerRt, "cb", Vector2.zero, new Vector2(80, 40), false).gameObject.AddComponent<TestButton>();
+            cb.mode = ButtonMode.Check;
+            cb.relatedOwner = owner;
+            cb.relatedControllerField = "m_ctrl";
+            cb.relatedPage = 1; // 勾选 → 控制器第 1 页（down）
+            yield return null;
+
+            cb.OnPointerClick(new PointerEventData(EventSystem.current));
+            Assert.IsTrue(cb.selected, "勾选应选中");
+            Assert.AreEqual(RadioPage.down, owner.m_ctrl.page, "勾选应把控制器设到第 1 页");
+            cb.OnPointerClick(new PointerEventData(EventSystem.current));
+            Assert.IsFalse(cb.selected, "再点取消勾选");
+            Assert.AreEqual(RadioPage.up, owner.m_ctrl.page, "取消勾选应把控制器回对页(第 0 页)——否则目标只能开不能关");
+            Object.Destroy(ownerRt.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator Button_common_tab_switches_page_without_marking_selected()
+        {
+            var ownerRt = Child(_rig.CanvasRt, "owner", Vector2.zero, new Vector2(200, 100), false);
+            var owner = ownerRt.gameObject.AddComponent<TestOwner>();
+            var tab = Child(ownerRt, "tab", Vector2.zero, new Vector2(80, 40), false).gameObject.AddComponent<TestButton>();
+            tab.mode = ButtonMode.Common; // Common tab：激活态由控制器 gears 驱动，不靠 selected
+            tab.relatedOwner = owner;
+            tab.relatedControllerField = "m_ctrl";
+            tab.relatedPage = 1;
+            yield return null;
+
+            tab.OnPointerClick(new PointerEventData(EventSystem.current));
+            Assert.AreEqual(RadioPage.down, owner.m_ctrl.page, "Common tab 点击应换控制器页");
+            Assert.IsFalse(tab.selected, "Common tab 不应被置 selected（否则卡在按下页）");
+            Object.Destroy(ownerRt.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator ListSelection_multiple_mode_toggles_each_item_once_per_click()
+        {
+            var listRt = Child(_rig.CanvasRt, "list", Vector2.zero, new Vector2(200, 200), false);
+            var buttons = new TestButton[2];
+            for (var i = 0; i < 2; i++)
+            {
+                buttons[i] = Child(listRt, "item" + i, new Vector2(0, i * 40), new Vector2(200, 40), false).gameObject.AddComponent<TestButton>();
+                buttons[i].mode = ButtonMode.Check; // 勾选态项：验证不与 ListSelection 双翻
+            }
+            var sel = listRt.gameObject.AddComponent<ListSelection>();
+            sel.selectionMode = "multiple";
+            yield return null; // Rebind：接线 + 置 changeStateOnClick=false
+
+            var ped = new PointerEventData(EventSystem.current);
+            buttons[0].OnPointerClick(ped);
+            Assert.IsTrue(buttons[0].selected, "多选：点一次应选中（本体自翻已禁，仅 ListSelection 翻一次）");
+            buttons[1].OnPointerClick(ped);
+            Assert.IsTrue(buttons[1].selected && buttons[0].selected, "多选：各项独立、互不取消");
+            buttons[0].OnPointerClick(ped);
+            Assert.IsFalse(buttons[0].selected, "多选：再点应取消（单次翻转，非双翻回原态）");
+            Object.Destroy(listRt.gameObject);
         }
     }
 }

@@ -204,6 +204,61 @@ namespace NanamiUI.Tests
         }
 
         [UnityTest]
+        public IEnumerator ComboBox_selecting_dropdown_item_updates_title_and_closes()
+        {
+            yield return Enter("m_btn_ComboBox");
+            var demo = Comp("UI.Basics.Demo_ComboBox");
+            var comboComp = (UnityEngine.Component)Field(demo, "m_n1");
+            Assert.IsTrue(ClickWorld((RectTransform)comboComp.transform), "ComboBox 应被命中");
+            for (var i = 0; i < 5; i++)
+                yield return null;
+            Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, "应弹出下拉");
+
+            // 下拉项都在 Root 覆盖层里（combo 本体在页面画布），取第 2 项真实点击。
+            var items = NanamiUI.Root.inst.rect.GetComponentsInChildren<NanamiUI.ButtonBase>(true);
+            Assert.Greater(items.Length, 1, "下拉应有多项");
+            var options = (string[])comboComp.GetType().GetField("items").GetValue(comboComp);
+            Assert.IsTrue(ClickWorld((RectTransform)items[1].transform), "下拉第 2 项应被真实射线命中");
+            for (var i = 0; i < 5; i++)
+                yield return null;
+            Assert.IsFalse(NanamiUI.Root.inst.HasAnyPopup, "点选项后下拉应收起");
+            var text = (string)comboComp.GetType().GetProperty("text").GetValue(comboComp);
+            Assert.AreEqual(options[1], text, "选第 2 项后 ComboBox 当前文本应为该项");
+        }
+
+        private static bool IsComboBox(Type t)
+        {
+            for (; t != null; t = t.BaseType)
+                if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(NanamiUI.ComboBox<>))
+                    return true;
+            return false;
+        }
+
+        [UnityTest]
+        public IEnumerator Every_combobox_on_the_page_opens_a_dropdown()
+        {
+            yield return Enter("m_btn_ComboBox");
+            var demo = (UnityEngine.Component)Comp("UI.Basics.Demo_ComboBox");
+            Assert.IsNotNull(demo, "ComboBox demo 应实例化");
+            // 逐个真实点击页内每个 combobox（含 Dropdown 变体 n4/n5），断言各自都能弹下拉——而不是抽查一个 n1 就断言"ComboBox 可用"。
+            var combos = new List<NanamiUI.ButtonBase>();
+            foreach (var b in demo.GetComponentsInChildren<NanamiUI.ButtonBase>(true))
+                if (IsComboBox(b.GetType()))
+                    combos.Add(b);
+            Assert.Greater(combos.Count, 1, "ComboBox demo 应有多个下拉（含 Dropdown 变体，不能只有 n1/n6）");
+            foreach (var combo in combos)
+            {
+                NanamiUI.Root.inst.HidePopup();
+                yield return null;
+                Assert.IsTrue(ClickWorld((RectTransform)combo.transform), $"{combo.name} 应被真实射线命中");
+                for (var i = 0; i < 5; i++)
+                    yield return null;
+                Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, $"点 {combo.name} 应弹出下拉（每个 combobox 都要能开，不只抽查一个）");
+            }
+            NanamiUI.Root.inst.HidePopup();
+        }
+
+        [UnityTest]
         public IEnumerator Slider_is_reachable_by_real_click_and_changes_value()
         {
             yield return Enter("m_btn_Slider");

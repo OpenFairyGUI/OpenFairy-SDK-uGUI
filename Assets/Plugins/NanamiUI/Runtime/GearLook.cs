@@ -30,6 +30,9 @@ namespace NanamiUI
                 target.AddComponent<Grayed>();
             else if (!isGrayed && effect != null)
                 UnityEngine.Object.Destroy(effect); // Grayed.OnDisable 还原原材质
+            // 传播到按钮：置 grayed → 进 disabled 页并拦截点击（复刻 GButton.HandleGrayedChanged），否则灰显却仍可点。
+            if (target.GetComponent<ButtonBase>() is { } button)
+                button.SetGrayed(isGrayed);
         }
 
         public override void Apply(T page)

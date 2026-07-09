@@ -6,7 +6,8 @@ using UnityEngine.UI;
 namespace NanamiUI.TestSupport
 {
     // NanamiUI 侧交互驱动：只经非泛型 Runtime 面驱动，故不依赖生成的 UI.{包} 类型。
-    // Slider 用"由目标 value 反算出的合成指针"经真实 OnDrag 达到该值（同时验证 ScreenPoint↔Local 往返 + Apply）；
+    // Slider 用"由目标 value 反算出的合成指针"经真实 OnPointerDown 达到该值（changeOnClick 路径，同时验证 ScreenPoint↔Local 往返 + Apply）；
+    // 连续 OnDrag 拖动路径由 BakedInteractionTests.Baked_slider_continuous_drag 覆盖。
     // Button/Checkbox 经真实 OnPointerClick（Check/Radio 会翻 selected）。
     public static class InteractionDriver
     {

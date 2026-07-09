@@ -1,6 +1,6 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace NanamiUI
 {
@@ -32,6 +32,11 @@ namespace NanamiUI
             _authoredListH = _list.rect.height;
             for (var i = _list.childCount - 1; i >= 0; i--)
                 UnityEngine.Object.DestroyImmediate(_list.GetChild(i).gameObject);
+            // 菜单项点击 + 尺寸由 AddItem/Layout 自管，去掉列表自带的选择/自挂滚动接线。
+            if (_list.GetComponent<ListSelection>() is { } listSelection)
+                UnityEngine.Object.Destroy(listSelection);
+            if (_list.GetComponent<ScrollPaneHost>() is { } host)
+                UnityEngine.Object.Destroy(host);
             _content.SetActive(false);
         }
 
@@ -66,6 +71,14 @@ namespace NanamiUI
             Layout();
             _content.SetActive(true);
             Root.inst.ShowPopup(_contentRt, target, dir);
+        }
+
+        // 在指针处弹出（复刻 PopupMenu.Show() 无 target 时用 touchPosition），供右键上下文菜单。默认 Auto：贴近屏幕底时上翻。
+        public void ShowAtPointer(PointerEventData e, PopupDirection dir = PopupDirection.Auto)
+        {
+            Layout();
+            _content.SetActive(true);
+            Root.inst.ShowPopupAt(_contentRt, Root.inst.ScreenToDesign(e.position, e.pressEventCamera), dir);
         }
 
         public void Hide() => Root.inst.HidePopup(_contentRt);

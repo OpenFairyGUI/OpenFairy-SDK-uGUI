@@ -9,11 +9,12 @@ namespace NanamiUI
     public class TextInput : Component
     {
         public InputField field;
+        public InputSubmit submit; // 挂在 field 上的 Enter 提交中继（Migrate 烘焙）
 
         public string text
         {
             get => field.text;
-            set => field.text = value;
+            set => field.SetTextWithoutNotify(value); // 复刻 FairyGUI：程序化赋值不发 onChanged，避免回写自触发
         }
 
         public bool password
@@ -28,13 +29,14 @@ namespace NanamiUI
             set => field.characterLimit = value;
         }
 
+        // 复刻 FairyGUI editable=false：只读（仍可聚焦/选择/复制），而非整体禁用。
         public bool editable
         {
-            get => field.interactable;
-            set => field.interactable = value;
+            get => !field.readOnly;
+            set => field.readOnly = !value;
         }
 
         public UnityEvent<string> onChanged => field.onValueChanged;
-        public UnityEvent<string> onSubmit => field.onEndEdit;
+        public UnityEvent<string> onSubmit => submit.onSubmit;
     }
 }

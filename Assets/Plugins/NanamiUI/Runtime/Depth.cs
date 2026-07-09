@@ -21,16 +21,26 @@ namespace NanamiUI
             return parent.childCount;
         }
 
-        // 复刻 GObject.sortingOrder setter + ChildSortingOrderChanged：SetSiblingIndex 自带移除位移，
-        // 故用 ignore=child 求目标位再钳到 childCount-1，等价 oldIndex<newIndex → newIndex-1 的调整。
+        // 复刻 GObject.sortingOrder setter + ChildSortingOrderChanged。SetSiblingIndex 先移除再插入，故目标位
+        // = 应排在它前面的其它子物体数（order<=它的都在前，等值稳定追加在后，同 GetInsertPosForSortingChild 的 first-strictly-greater）。
         public static void SetSortingOrder(RectTransform child, int order)
         {
             var so = child.GetComponent<SortObject>();
             if (so == null)
                 so = child.gameObject.AddComponent<SortObject>();
             so.order = Mathf.Max(0, order);
-            var index = SortIndex((RectTransform)child.parent, so.order, child);
-            child.SetSiblingIndex(Mathf.Min(index, child.parent.childCount - 1));
+            var parent = child.parent;
+            var index = 0;
+            for (var i = 0; i < parent.childCount; i++)
+            {
+                var c = parent.GetChild(i);
+                if (c == child)
+                    continue;
+                var o = c.TryGetComponent(out SortObject s) ? s.order : 0;
+                if (o <= so.order)
+                    index++;
+            }
+            child.SetSiblingIndex(index);
         }
 
         // 运行时建矩形（复刻 GGraph.DrawRect）：Shape 的 Rect 网格已完全对齐 FairyGUI；按 order 插到正确兄弟位。

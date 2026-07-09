@@ -91,9 +91,8 @@ namespace NanamiUI.Example
             var prefab = Prefab(name);
             var go = prefab != null ? Instantiate(prefab, _container, false) : Placeholder(name);
             Place((RectTransform)go.transform);
-            if (name == "Button")
-                SetupButtonDemo(go);
-            else if (name == "Graph")
+            // Button demo 的 tab/radio 组现由烘焙的关联控制器（<Button controller=..>）运行时自处理，无需胶水。
+            if (name == "Graph")
                 PlayGraph(go);
             else if (name == "Depth")
                 PlayDepth(go);
@@ -348,51 +347,12 @@ namespace NanamiUI.Example
 
         private object Get(string field) => _mainType.GetField(field).GetValue(_main);
 
-        private static void SetupButtonDemo(GameObject go)
-        {
-            var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), component => component.GetType().FullName == "UI.Basics.Demo_Button");
-            BindGroup(demo, "m_RadioGroup", "m_n18", "m_n19", "m_n20");
-            BindGroup(demo, "m_tab", "m_n23", "m_n24", "m_n25");
-        }
-
-        private static void BindGroup(NanamiUI.Component owner, string controllerField, params string[] buttonFields)
-        {
-            SetPage(owner, controllerField, "_0");
-            for (var i = 0; i < buttonFields.Length; i++)
-            {
-                var index = i;
-                var button = Get(owner, buttonFields[index]);
-                SetSelected(button, index == 0);
-                BindButton(button, () =>
-                {
-                    SetPage(owner, controllerField, "_" + index);
-                    for (var j = 0; j < buttonFields.Length; j++)
-                        SetSelected(Get(owner, buttonFields[j]), j == index);
-                });
-            }
-        }
-
         private static object Get(object owner, string field) => owner.GetType().GetField(field).GetValue(owner);
 
         private static void BindButton(object button, UnityAction action)
         {
             var onClick = (UnityEvent)button.GetType().GetField("onClick").GetValue(button);
             onClick.AddListener(action);
-        }
-
-        private static void SetSelected(object button, bool selected)
-        {
-            button.GetType().GetField("selected").SetValue(button, selected);
-            button.GetType().GetMethod("RefreshState").Invoke(button, null);
-        }
-
-        private static void SetPage(object owner, string fieldName, string page)
-        {
-            var field = owner.GetType().GetField(fieldName);
-            var controller = field.GetValue(owner);
-            var property = controller.GetType().GetProperty("page");
-            property.SetValue(controller, Enum.Parse(property.PropertyType, page));
-            field.SetValue(owner, controller);
         }
 
         private static void Place(RectTransform rt)
