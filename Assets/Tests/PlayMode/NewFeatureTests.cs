@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using NanamiUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
@@ -284,6 +285,13 @@ namespace NanamiUI.Tests
             // 复刻 GComboBox：程序化赋值 selectedIndex 只刷新标题，不发 onChanged（onChanged 仅用户点选下拉项时发）。
             Assert.AreEqual(0, fired, "程序化赋值 selectedIndex 不应发 onChanged");
 
+            combo.value = "vc";
+            Assert.AreEqual(2, combo.selectedIndex, "程序化设置 value 应按 values 反查 selectedIndex");
+            Assert.AreEqual("C", combo.text, "设置 value 后应刷新显示文本");
+            combo.text = "A";
+            Assert.AreEqual(0, combo.selectedIndex, "程序化设置 text 应按 items 反查 selectedIndex");
+            Assert.AreEqual(0, fired, "程序化设置 text/value 同样不应发 onChanged");
+
             Object.Destroy(comboRt.gameObject);
         }
 
@@ -368,6 +376,47 @@ namespace NanamiUI.Tests
             e.position = ScreenAt(viewport, new Vector2(50, -20)); // 指针上移 60
             pane.OnDrag(e);
             Assert.Greater(content.anchoredPosition.y, 30f, "手指上移 60 应下移内容约 60（content.y 增大）");
+            Object.Destroy(root.gameObject);
+        }
+
+        [UnityTest]
+        public IEnumerator List_fill_after_scrollpane_attached_refreshes_hit_and_selection()
+        {
+            var root = Child(_rig.CanvasRt, "list", Vector2.zero, new Vector2(100, 100), false);
+            var viewport = new GameObject("viewport", typeof(RectTransform), typeof(RectMask2D)).GetComponent<RectTransform>();
+            viewport.SetParent(root, false);
+            viewport.anchorMin = viewport.anchorMax = viewport.pivot = new Vector2(0, 1);
+            viewport.sizeDelta = new Vector2(100, 100);
+
+            var itemPrefab = new GameObject("item", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image), typeof(TestButton));
+            ((RectTransform)itemPrefab.transform).sizeDelta = new Vector2(100, 40);
+            var source = root.gameObject.AddComponent<ListSource>();
+            source.itemPrefab = itemPrefab;
+            source.itemSize = new Vector2(100, 40);
+            source.layout = "column";
+            var selection = root.gameObject.AddComponent<ListSelection>();
+            selection.selectionMode = "multiple";
+            var clicked = -1;
+            selection.onClickItem.AddListener(i => clicked = i);
+            ScrollPane.Attach(root);
+            yield return null;
+
+            NanamiUI.List.Fill(root, 3, (item, _) => item.GetComponent<TestButton>().mode = ButtonMode.Check);
+            selection.Rebind(); // 第二次重绑不应留下重复 listener
+            var content = viewport.Find("content") as RectTransform;
+            var hit = content.GetChild(0) as RectTransform;
+            Assert.IsNotNull(hit, "List.Fill 不应删除 ScrollPane 的透明命中面");
+            Assert.AreEqual("__scrollHit", hit.name, "ScrollPane 的保留命中面应仍在 content 内");
+            Assert.AreEqual(0, hit.GetSiblingIndex(), "命中面应保持在最底层，不遮住列表项");
+            Assert.GreaterOrEqual(hit.sizeDelta.y, 120f, "命中面高度应随重填后的内容刷新");
+
+            var button = content.GetComponentsInChildren<TestButton>(true).First();
+            button.OnPointerClick(new PointerEventData(EventSystem.current));
+            Assert.IsTrue(button.selected, "ListSelection 重绑后应由列表选择逻辑选中项");
+            Assert.AreEqual(0, clicked, "onClickItem 应按当前动态项索引触发一次");
+            Assert.IsFalse(button.changeStateOnClick, "列表项自身翻转应关闭，避免和 ListSelection 双翻");
+
+            Object.Destroy(itemPrefab);
             Object.Destroy(root.gameObject);
         }
 

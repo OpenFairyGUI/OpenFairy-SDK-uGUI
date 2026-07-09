@@ -13,13 +13,16 @@ namespace NanamiUI
 
         [System.NonSerialized] public UnityEvent<int> onClickItem = new();
 
-        private readonly List<ButtonBase> _items = new();
+        private readonly List<(ButtonBase Button, UnityAction Action)> _items = new();
 
         protected override void Start() => Rebind();
 
         // 扫描 content 里的按钮项接线（List.Fill 动态填充后可再调）。
         public void Rebind()
         {
+            foreach (var item in _items)
+                if (item.Button != null)
+                    item.Button.onClick.RemoveListener(item.Action);
             _items.Clear();
             var content = List.Container((RectTransform)transform);
             for (var i = 0; i < content.childCount; i++)
@@ -30,9 +33,10 @@ namespace NanamiUI
                 if (child.GetComponent<ButtonBase>() is { } button)
                 {
                     var index = _items.Count;
-                    _items.Add(button);
+                    UnityAction action = () => Click(index);
+                    _items.Add((button, action));
                     button.changeStateOnClick = false; // 选择由本组件驱动，禁项本体自翻 selected（复刻 GList 关掉 item changeStateOnClick）
-                    button.onClick.AddListener(() => Click(index));
+                    button.onClick.AddListener(action);
                 }
             }
         }
@@ -42,7 +46,7 @@ namespace NanamiUI
             get
             {
                 for (var i = 0; i < _items.Count; i++)
-                    if (_items[i].Selected)
+                    if (_items[i].Button.Selected)
                         return i;
                 return -1;
             }
@@ -50,7 +54,7 @@ namespace NanamiUI
 
         private void Click(int index)
         {
-            var clicked = _items[index];
+            var clicked = _items[index].Button;
             switch (selectionMode)
             {
                 case "none":
@@ -61,7 +65,7 @@ namespace NanamiUI
                     break;
                 default: // single
                     foreach (var item in _items)
-                        item.Selected = ReferenceEquals(item, clicked); // 单选：本项选中、其余取消
+                        item.Button.Selected = ReferenceEquals(item.Button, clicked); // 单选：本项选中、其余取消
                     break;
             }
             onClickItem.Invoke(index);

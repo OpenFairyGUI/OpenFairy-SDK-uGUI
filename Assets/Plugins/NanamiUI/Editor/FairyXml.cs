@@ -82,6 +82,9 @@ namespace NanamiUI.Editor
                     break;
                 case Schema.Extension extension:
                     extension.Items = extension.ItemNodes.Select(item => item.Title ?? "").ToArray();
+                    extension.Values = extension.ItemNodes.Any(item => item.Value != null)
+                        ? extension.ItemNodes.Select(item => item.Value ?? item.Title ?? "").ToArray()
+                        : Array.Empty<string>();
                     break;
             }
         }
@@ -509,7 +512,7 @@ namespace NanamiUI.Editor.Schema
         // 按钮关联控制器（FairyGUI relatedController/relatedPageId）：点击换该控制器的页，实现 tab/radio 组。
         [XmlAttribute("controller")] public string Controller;
         [XmlAttribute("page")] public string Page;
-        [XmlAttribute("value")] public float Value = 50;
+        [XmlAttribute("value")] public string Value;
         [XmlAttribute("max")] public float Max = 100;
         [XmlAttribute("min")] public float Min;
         [XmlAttribute("titleType")] public string TitleType;
@@ -521,6 +524,7 @@ namespace NanamiUI.Editor.Schema
         [XmlElement("item")] public Extension[] ItemNodes = Array.Empty<Extension>();
 
         public string[] Items = Array.Empty<string>();
+        public string[] Values = Array.Empty<string>();
     }
 
     public class Transition
@@ -548,4 +552,3 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("path")] public string Path;
     }
 }
-

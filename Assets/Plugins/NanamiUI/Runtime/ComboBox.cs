@@ -34,15 +34,23 @@ namespace NanamiUI
             }
         }
 
-        // 当前显示文本 / 值（复刻 GComboBox.text / value）。
-        public string text => items != null && _selectedIndex >= 0 && _selectedIndex < items.Length ? items[_selectedIndex] : "";
-        public string value => values != null && _selectedIndex >= 0 && _selectedIndex < values.Length ? values[_selectedIndex] : text;
+        // 当前显示文本 / 值（复刻 GComboBox.text / value）：程序化赋值只刷新显示，不发 onChanged。
+        public string text
+        {
+            get => items != null && _selectedIndex >= 0 && _selectedIndex < items.Length ? items[_selectedIndex] : "";
+            set => selectedIndex = items != null ? Array.IndexOf(items, value) : -1;
+        }
+
+        public string value
+        {
+            get => values != null && _selectedIndex >= 0 && _selectedIndex < values.Length ? values[_selectedIndex] : text;
+            set => selectedIndex = values != null && values.Length > 0 ? Array.IndexOf(values, value) : items != null ? Array.IndexOf(items, value) : -1;
+        }
 
         // 经 base Title 设标题（写 _title），使后续 RefreshState 不把标题回退到初始项。
         private void Apply()
         {
-            if (items != null && _selectedIndex >= 0 && _selectedIndex < items.Length)
-                Title = items[_selectedIndex];
+            Title = items != null && _selectedIndex >= 0 && _selectedIndex < items.Length ? items[_selectedIndex] : "";
         }
 
         public override void OnPointerClick(PointerEventData eventData)

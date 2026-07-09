@@ -55,18 +55,6 @@ namespace NanamiUI
             pane._viewport = viewport;
             pane._content = content;
             pane._viewSize = viewport.rect.size;
-            pane._contentSize = ContentBounds(content);
-            content.sizeDelta = pane._contentSize;
-
-            // 透明射线面覆盖内容，令空白处也能起拖。用保留名 "__scrollHit"（含 FairyGUI 不产出的双下划线），避免与真实元素撞名被当作内容漏测。
-            var blocker = new GameObject(HitName, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
-            var brt = (RectTransform)blocker.transform;
-            brt.SetParent(content, false);
-            brt.anchorMin = brt.anchorMax = brt.pivot = new Vector2(0, 1);
-            brt.sizeDelta = pane._contentSize;
-            brt.anchoredPosition = Vector2.zero;
-            brt.SetAsFirstSibling();
-            blocker.GetComponent<UnityEngine.UI.Image>().color = new Color(0, 0, 0, 0);
 
             pane.FindBar(scrollRoot, "ScrollBar_VT", ref pane._vtBar, ref pane._vtGrip);
             pane.FindBar(scrollRoot, "ScrollBar_HZ", ref pane._hzBar, ref pane._hzGrip);
@@ -76,6 +64,7 @@ namespace NanamiUI
                 ScrollBarGrip.Bind(pane._hzGrip, pane, true);
             ScrollBarTrack.Bind(pane._vtBar, pane._vtGrip, pane, false);
             ScrollBarTrack.Bind(pane._hzBar, pane._hzGrip, pane, true);
+            pane.RefreshContent();
             return pane;
         }
 
@@ -112,9 +101,33 @@ namespace NanamiUI
 
         private static Vector2 ClampToBounds(Vector2 pos, Vector2 max) => new(Mathf.Clamp(pos.x, -max.x, 0), Mathf.Clamp(pos.y, 0, max.y));
 
+        public void RefreshContent()
+        {
+            _contentSize = ContentBounds(_content);
+            _content.sizeDelta = _contentSize;
+            EnsureHit();
+            UpdateGrips();
+        }
+
+        private void EnsureHit()
+        {
+            var hit = _content.Find(HitName) as RectTransform;
+            if (hit == null)
+            {
+                var go = new GameObject(HitName, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
+                hit = (RectTransform)go.transform;
+                hit.SetParent(_content, false);
+                go.GetComponent<UnityEngine.UI.Image>().color = new Color(0, 0, 0, 0);
+            }
+            hit.anchorMin = hit.anchorMax = hit.pivot = new Vector2(0, 1);
+            hit.sizeDelta = Vector2.Max(_contentSize, _viewSize);
+            hit.anchoredPosition = Vector2.zero;
+            hit.SetAsFirstSibling();
+        }
+
         public void OnBeginDrag(PointerEventData e)
         {
-            _contentSize = ContentBounds(_content); // 内容可能在 Attach 之后被 List.Fill 填充，起拖时重算滚动范围
+            RefreshContent(); // 内容可能在 Attach 之后被 List.Fill 填充，起拖时重算滚动范围
             _dragging = true;
             _velocity = Vector2.zero;
             _startContent = _content.anchoredPosition;
@@ -147,7 +160,7 @@ namespace NanamiUI
         {
             if (!mouseWheelEnabled)
                 return;
-            _contentSize = ContentBounds(_content); // 内容可能在 Attach 后被 List.Fill 填充，滚轮前重算范围
+            RefreshContent(); // 内容可能在 Attach 后被 List.Fill 填充，滚轮前重算范围
             var max = MaxScroll;
             var pos = _content.anchoredPosition;
             if (max.y > 0)
@@ -163,7 +176,7 @@ namespace NanamiUI
         // 拖动滚动条 grip：percent 为沿轨道的比例（0 顶/左），映射到内容位置。
         internal void SetPercent(bool horizontal, float percent)
         {
-            _contentSize = ContentBounds(_content);
+            RefreshContent();
             var max = MaxScroll;
             var pos = _content.anchoredPosition;
             percent = Mathf.Clamp01(percent);
@@ -180,7 +193,7 @@ namespace NanamiUI
         // 点滚动条轨道空白处翻一页（复刻 GScrollBar 轨道点按 ScrollUp/Down(4)）：往点击一侧移动一个 view 高/宽。
         internal void PageScroll(bool horizontal, bool forward)
         {
-            _contentSize = ContentBounds(_content);
+            RefreshContent();
             var max = MaxScroll;
             var pos = _content.anchoredPosition;
             if (horizontal)
@@ -196,7 +209,7 @@ namespace NanamiUI
         // 把子节点滚到可见区（复刻 ScrollPane.ScrollToView 的简版）。
         public void ScrollToView(RectTransform target)
         {
-            _contentSize = ContentBounds(_content);
+            RefreshContent();
             var max = MaxScroll;
             var top = -target.anchoredPosition.y;
             var pos = _content.anchoredPosition;

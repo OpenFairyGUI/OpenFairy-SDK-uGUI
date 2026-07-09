@@ -33,8 +33,6 @@ namespace NanamiUI.Editor
             demo.popupMenuPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/popupmenu/PopupMenu.prefab");
             demo.popupItemPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/popupmenu/PopupMenuItem.prefab");
             demo.popupComPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/components/Component12.prefab");
-            demo.gridItem1Prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/components/GridItem.prefab");
-            demo.gridItem2Prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/components/GridItem2.prefab");
             PrefabUtility.SaveAsPrefabAsset(main, MainPath);
             PrefabUtility.UnloadPrefabContents(main);
         }

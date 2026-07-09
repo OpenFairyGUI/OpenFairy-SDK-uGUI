@@ -10,12 +10,12 @@
   - `Tools/NanamiUI/Migrate`
   - `Tools/NanamiUI/Generate Golden References`
   - `Tools/NanamiUI/Run PlayMode Tests`
-- 最近一次验证：2026-07-09 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `97/97`（含修 ComboBox Dropdown 变体点击无反应 + 枚举式交互扫）。
-- 本轮发布整改：修 `ComboBox.selectedIndex` 程序化赋值不刷新/不发事件的 bug（改属性 + 加 `values/text/value`）+ 下拉按 `visibleItemCount` 裁剪滚动；`ScrollPane` 补滚轮/滚动条 grip 拖动/惯性回弹/`onScroll`/`ScrollToView`；`ProgressBar.TweenValue` 加 ease、`Slider` 加 grip touch 事件；修 `MovieClip.SetFrame` 越界不钳导致自播 Update 越界的 bug；`Window.modal` + `Root` 模态层；`PopupMenu.AddItem` 返回项按钮 + `ClearItems`；`InputText` 加 `password`/`maxLength`/`editable`/`onSubmit`。转换器健壮性整改（对非 demo 的真实工程）：包名/空名 sanitize 进命名空间、非 button list item、陈旧 gear 页 id、`Image`/`RectTransform` 字段全限定、内嵌 `ui://` 容错。
-- 真跑才暴露的三个 bug（已修 + 新增真射线交互测试 `InteractionRuntimeTests`）：① MovieClip 页空白（`<jta>` movieclip 标签被丢弃，现已识别）；② Popup/Window 按钮点不动（button 根加透明 raycast 面，整块可点）；③ Text 输入框不工作（真因是 `NanamiUI.Text` 作 InputField 面时 `OnEnable` 清 raycastTarget + 自绘不填 generator；改用原生 InputField 结构：透明 Image 作 targetGraphic + 普通 UI.Text 作 textComponent，placeholder 仍 NanamiUI.Text。`activeInputHandler` 保持 `1`）。详见 `AGENTS.md`。
+- 最近一次验证：2026-07-09 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `99/99`（含发布前 final review 新增的 ComboBox item value 解析与动态 List.Fill/ScrollPane/ListSelection 回归）。
+- 本轮发布整改：修 `ComboBox.selectedIndex` 程序化赋值不刷新/不发事件的 bug（改属性 + 加 `values/text/value`，并支持从 XML `<item value>` 烘焙字符串值、程序化设置 `text`/`value`）+ 下拉按 `visibleItemCount` 裁剪滚动；`ScrollPane` 补滚轮/滚动条 grip 拖动/惯性回弹/`onScroll`/`ScrollToView`；`List.Fill` 在已挂 ScrollPane 后重填会保留并刷新 `__scrollHit`，同时自动重绑 `ListSelection` 且避免重复 listener；`ProgressBar.TweenValue` 加 ease、`Slider` 加 grip touch 事件；修 `MovieClip.SetFrame` 越界不钳导致自播 Update 越界的 bug；`Window.modal` + `Root` 模态层；`PopupMenu.AddItem` 返回项按钮 + `ClearItems`；`InputText` 加 `password`/`maxLength`/`editable`/`onSubmit`。转换器健壮性整改（对非 demo 的真实工程）：包名/空名 sanitize 进命名空间、非 button list item、陈旧 gear 页 id、`Image`/`RectTransform` 字段全限定、内嵌 `ui://` 容错、生成控制器 enum 与 runtime 基类成员同名时显式 `new` 消除隐藏警告。
+- 真跑才暴露的三个 bug（已修 + 新增真射线交互测试 `InteractionRuntimeTests`）：① MovieClip 页空白（`<jta>` movieclip 标签被丢弃，现已识别）；② Popup/Window 按钮点不动（button 根加透明 raycast 面，整块可点）；③ Text 输入框不工作（真因是 `NanamiUI.TextField` 作 InputField 面时 `OnEnable` 清 raycastTarget + 自绘不填 generator；改用原生 InputField 结构：透明 Image 作 targetGraphic + 普通 UI.Text 作 textComponent，placeholder 仍 NanamiUI.TextField。`activeInputHandler` 保持 `1`）。详见 `AGENTS.md`。
 - `InteractionRuntimeTests` 覆盖真射线交互：MovieClip 自播、Window 开关、Popup 开/点项收起、ComboBox 开下拉、Slider 可点跳值、InputText 可编辑读写。
 - 2026-07-09 交互烘焙完整化：让**转换产物在无 demo 胶水下也具备完整交互**（通用 SDK 发布前提）。补齐按钮关联控制器(tab/单选组)、`overflow=scroll` 自挂 ScrollPane、Slider `min/reverse/wholeNumbers/changeOnClick`、列表选择 + `onClickItem`、ComboBox onChanged 语义、输入框 `SetTextWithoutNotify`/只读/回车提交、Window frame 拖动、右键指针弹菜单、GearLook 置灰传按钮、Depth 前移越位修正。新增 `BakedInteractionTests`（直接实例化 prefab、无胶水、真射线驱动）证明通用工程已具交互。详见 `AGENTS.md`「交互烘焙完整化」。
-- 当前 `Run PlayMode Tests` `97/97`。范围与取舍详见 `AGENTS.md`「发布范围与取舍」。
+- 当前 `Run PlayMode Tests` `99/99`。范围与取舍详见 `AGENTS.md`「发布范围与取舍」。
 
 ## 标准验证流程
 
@@ -48,8 +48,8 @@
 | List | 完成 | `ListSource` 已烘焙，动态填项和拖动滚动已覆盖。 |
 | ProgressBar | 完成 | demo 值循环已覆盖。 |
 | Slider | 完成 | 横/竖拖动几何参照已覆盖。 |
-| ComboBox | 基本完成 | button 控制器版本已支持下拉；无 button 控制器的 Dropdown 变体不接下拉。 |
-| Clip&Scroll | 基本完成 | ScrollPane 支持拖动滚动；无惯性/回弹/虚拟化。 |
+| ComboBox | 完成 | button 控制器版本与无 button 控制器的 Dropdown 变体均支持下拉；支持 `items/values/text/value`、`visibleItemCount` 裁剪滚动。 |
+| Clip&Scroll | 基本完成 | ScrollPane 支持拖动、滚轮、滚动条 grip 拖动、轨道点按翻页、惯性回弹；无虚拟化/分页吸附。 |
 | Controller | 完成 | 静态 golden 覆盖；按名非泛型 controller 面暂未提供。 |
 | Relation | 完成 | 静态 golden 覆盖。 |
 | Label | 完成 | 静态 golden 覆盖。 |
@@ -77,14 +77,14 @@
 - FairyGUI XML 通过 `XmlAttribute` / `XmlElement` / `XmlArrayItem` 标注的 `NanamiUI.Editor.Schema` 类型和轻量自定义 converter reader 反序列化为 `Schema.Package` / `Schema.Component` / `Schema.Display` 等结构化数据，`Vector2`、bool 默认值、派生字段和有限选项 enum 在 schema 层落型，转换器后续逻辑不再直接读取 XML attribute。
 - 运行时配置来自 `settings/Common.json` 和可选的 `NanamiUISettings`，本工程限定导出 `Basics`、`Transition`。
 - codegen 已支持 C# 关键字转义、controller enum 内嵌、`Button<T>`、`ComboBox<T>`、`ProgressBar`、`Slider` 等基类选择。
-- `ListSource`、ComboBox items/dropdown、Window1 列表已通过全量 Migrate 重烘焙。
+- `ListSource`、ComboBox items/values/dropdown、Window1 列表已通过全量 Migrate 重烘焙；Example Grid 已改用通用 `List.Fill`，不再自挂 SDK 级滚动能力。
 - Basics demo 的工程胶水通过 `[MigratePostProcess]` 自动配置，不再作为菜单入口暴露。
 
 ## 已知边界
 
 - Popup/ComboBox 外点关闭使用透明 blocker，表现为模态；这是为了避开新 Input System 下旧 `UnityEngine.Input` 的异常。
-- `ScrollPane` 只实现拖动滚动，无惯性、回弹、虚拟化。
-- ComboBox 下拉已按 `visibleItemCount` 裁剪并滚动（项数超出时 `ScrollPane.Attach`）。
+- `ScrollPane` 已支持拖动、滚轮、滚动条 grip 拖动、轨道点按翻页、惯性回弹；仍无虚拟化、分页吸附、下拉刷新。
+- ComboBox 下拉已按 `visibleItemCount` 裁剪并滚动（项数超出时 `ScrollPane.Attach`）；无 button 控制器的 Dropdown 变体同样接下拉。
 - Grid demo 主要填可见文本，部分装饰/交互细节从简。
 - 文本仍有少量 UBB 混合字号断行、行内图片基线差异。
 - GoodHit/PowerUp 中的 Shake 和部分 movieclip 相位差会放大像素 diff，但视觉表现已对齐。
@@ -105,7 +105,7 @@
 - 轨迹行为：`PageTransitionTests` 覆盖翻页 display lock 动效轨迹。
 - Main 导航：`MainNavigationTests` 覆盖 Main 初始页、20 个入口页真实 pointer 进入、子页面返回 Main，以及进出动效中态和终态。
 - Demo smoke：覆盖 ComboBox、Depth/DragDrop、Grid、List、Popup、ProgressBar、Text、Window 等运行 demo 胶水。
-- 专项测试：`DragDepthTests`、`TextLinkTests`、`WindowPopupTests`、`MainNavigationTests`、`NewFeatureTests`。
+- 专项测试：`DragDepthTests`、`TextLinkTests`、`WindowPopupTests`、`MainNavigationTests`、`NewFeatureTests`；其中 `NewFeatureTests` 覆盖 ComboBox 程序化 `text/value` 设置与 `List.Fill` 动态重填后的 ScrollPane/ListSelection 刷新。
 - 通用工程交互（无 demo 胶水）：`BakedInteractionTests` 直接实例化转换 prefab，真射线驱动，覆盖 tab 换页、单选组互斥、`overflow=scroll` 自挂滚动、输入框结构、Slider 连续拖动。
 
-当前 PlayMode 测试结果为 `97/97` 通过。
+当前 PlayMode 测试结果为 `99/99` 通过。

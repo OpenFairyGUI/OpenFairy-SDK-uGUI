@@ -325,7 +325,7 @@ namespace NanamiUI.Editor
                 DeleteScript($"{Path.GetDirectoryName(path)}/{name}_{cname}.cs".Replace('\\', '/'));
                 if (used.Add(Field(cname)))
                 {
-                    fields.Add($"        public enum {cname}");
+                    fields.Add(EnumDeclaration(cname, xml.Extension));
                     fields.Add("        {");
                     fields.AddRange(PageMembers(controller).Select(page => $"            {page.Member},"));
                     fields.Add("        }");
@@ -350,7 +350,7 @@ namespace NanamiUI.Editor
             if (isButtonFamily && buttonController == null)
                 fields.InsertRange(0, new[]
                 {
-                    "        public enum button",
+                    EnumDeclaration("button", xml.Extension),
                     "        {",
                     "            up,",
                     "        }",
@@ -381,6 +381,23 @@ namespace NanamiUI.Editor
             code.AppendLine("}");
 
             WriteScript(path, code.ToString());
+        }
+
+        private static string EnumDeclaration(string name, Schema.ComponentExtension extension) =>
+            $"        public {(HidesRuntimeMember(name, extension) ? "new " : "")}enum {name}";
+
+        private static bool HidesRuntimeMember(string name, Schema.ComponentExtension extension)
+        {
+            var type = extension switch
+            {
+                Schema.ComponentExtension.Button => typeof(Button<>),
+                Schema.ComponentExtension.ComboBox => typeof(ComboBox<>),
+                Schema.ComponentExtension.ProgressBar => typeof(ProgressBar),
+                Schema.ComponentExtension.Slider => typeof(Slider),
+                Schema.ComponentExtension.Label => typeof(Label),
+                _ => typeof(Component),
+            };
+            return type.GetMember(name).Length > 0;
         }
 
         private static bool _scriptsChanged;
@@ -990,7 +1007,7 @@ namespace NanamiUI.Editor
         private static void ConfigureProgressBar(GameObject go, Schema.Extension xml)
         {
             var progress = go.GetComponent<ProgressBar>();
-            progress.value = xml.Value;
+            progress.value = FloatValue(xml.Value, 50);
             progress.max = xml.Max;
             progress.Apply();
             SyncRelations(go);
@@ -1001,7 +1018,7 @@ namespace NanamiUI.Editor
             // 实例级只覆盖 value/max/min（同 GSlider.Setup_AfterAdd）；reverse/wholeNumbers/changeOnClick 是定义级
             // （ConstructExtension），由 SetupSlider 烘定，实例 XML 的属性默认值不能覆盖它们。
             var slider = go.GetComponent<Slider>();
-            slider.value = xml.Value;
+            slider.value = FloatValue(xml.Value, 50);
             slider.max = xml.Max;
             slider.min = xml.Min;
             slider.Apply();
@@ -1012,7 +1029,7 @@ namespace NanamiUI.Editor
         {
             var combo = go.GetComponents<UnityEngine.Component>().FirstOrDefault(c => IsButton(c.GetType()));
             if (combo == null)
-                return; // 无 button 控制器、退化为 Component 的 ComboBox（如 Dropdown）：无 items/dropdown 面，跳过
+                return;
             var type = combo.GetType();
             if (xml.Dropdown is { } dropdown && TryResolve(dropdown, packageId, out var dropRes))
                 type.GetField("dropdownPrefab").SetValue(combo, LoadPrefab(dropRes));
@@ -1021,9 +1038,14 @@ namespace NanamiUI.Editor
             if (items.Length > 0)
             {
                 type.GetField("items").SetValue(combo, items);
+                if (xml.Values.Length > 0)
+                    type.GetField("values").SetValue(combo, xml.Values);
                 type.GetProperty("Title").SetValue(combo, items[0]); // 默认选中项 0
             }
         }
+
+        private static float FloatValue(string value, float defaultValue) =>
+            value == null ? defaultValue : float.Parse(value, CultureInfo.InvariantCulture);
 
         private static void SyncRelations(GameObject go)
         {
@@ -1884,4 +1906,3 @@ namespace NanamiUI.Editor
         }
     }
 }
-

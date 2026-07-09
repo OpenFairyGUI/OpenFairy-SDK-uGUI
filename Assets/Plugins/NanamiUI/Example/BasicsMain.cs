@@ -17,8 +17,6 @@ namespace NanamiUI.Example
         public GameObject popupMenuPrefab;
         public GameObject popupItemPrefab;
         public GameObject popupComPrefab;
-        public GameObject gridItem1Prefab;
-        public GameObject gridItem2Prefab;
 
         private NanamiUI.Window _winA, _winB;
         private NanamiUI.PopupMenu _pm;
@@ -106,21 +104,19 @@ namespace NanamiUI.Example
                 StartCoroutine(PlayProgressBar(go));
             else if (name == "Text")
                 PlayText(go);
-            else if (name == "List" || name == "Clip&Scroll")
-                AttachScrollPanes(go);
             else if (name == "Grid")
                 PlayGrid(go);
             // ComboBox 现由烘焙的 NanamiUI.ComboBox<T> 运行时自处理（点击弹下拉、选项设标题），无需胶水。
         }
 
-        // 复刻 FairyGUI PlayGrid：把两个列表用平台名+随机数据填满，再挂滚动。
+        // 复刻 FairyGUI PlayGrid：把两个列表用平台名+随机数据填满；滚动由烘焙的 ScrollPaneHost 自挂。
         private void PlayGrid(GameObject go)
         {
             var demo = Array.Find(go.GetComponents<NanamiUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Grid");
             var names = System.Enum.GetNames(typeof(RuntimePlatform));
             var colors = new[] { Color.yellow, Color.red, Color.white, Color.cyan };
 
-            FillList((RectTransform)((UnityEngine.Component)Get(demo, "m_list1")).transform, gridItem1Prefab, names.Length, (item, i) =>
+            NanamiUI.List.Fill((RectTransform)((UnityEngine.Component)Get(demo, "m_list1")).transform, names.Length, (item, i) =>
             {
                 var comp = ItemComp(item, "UI.Basics.GridItem");
                 SetText(comp, "m_t0", (i + 1).ToString());
@@ -128,30 +124,12 @@ namespace NanamiUI.Example
                 if (Get(comp, "m_t2") is NanamiUI.TextField t2)
                     t2.color = colors[UnityEngine.Random.Range(0, colors.Length)];
             });
-            FillList((RectTransform)((UnityEngine.Component)Get(demo, "m_list2")).transform, gridItem2Prefab, names.Length, (item, i) =>
+            NanamiUI.List.Fill((RectTransform)((UnityEngine.Component)Get(demo, "m_list2")).transform, names.Length, (item, i) =>
             {
                 var comp = ItemComp(item, "UI.Basics.GridItem2");
                 SetText(comp, "m_t1", names[i]);
                 SetText(comp, "m_t3", UnityEngine.Random.Range(0, 10000).ToString());
             });
-
-            AttachScrollPanes(go);
-        }
-
-        private void FillList(RectTransform list, GameObject itemPrefab, int count, System.Action<GameObject, int> setup)
-        {
-            var viewport = list.Find("viewport") as RectTransform ?? list;
-            for (var i = viewport.childCount - 1; i >= 0; i--)
-                DestroyImmediate(viewport.GetChild(i).gameObject);
-            var itemH = ((RectTransform)itemPrefab.transform).rect.height;
-            for (var i = 0; i < count; i++)
-            {
-                var item = Instantiate(itemPrefab, viewport, false);
-                var rt = (RectTransform)item.transform;
-                rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
-                rt.anchoredPosition = new Vector2(0, -i * itemH);
-                setup(item, i);
-            }
         }
 
         private static object ItemComp(GameObject item, string fullName) =>
@@ -161,14 +139,6 @@ namespace NanamiUI.Example
         {
             if (Get(comp, field) is NanamiUI.TextField text)
                 text.text = value;
-        }
-
-        // 给 demo 里所有滚动结构（名为 "viewport" 的 RectMask2D）挂运行时拖动滚动。
-        private void AttachScrollPanes(GameObject go)
-        {
-            foreach (var mask in go.GetComponentsInChildren<RectMask2D>(true))
-                if (mask.name == "viewport")
-                    NanamiUI.ScrollPane.Attach((RectTransform)mask.transform.parent);
         }
 
         // 复刻 FairyGUI PlayProgressBar：每帧把每个进度条 value +1、越过 max 回 0（FairyGUI 用 0.001s Timer ≈ 每帧）。

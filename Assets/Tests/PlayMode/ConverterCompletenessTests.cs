@@ -71,5 +71,34 @@ namespace NanamiUI.Tests
 #endif
             yield return null;
         }
+
+        [Test]
+        public void ComboBox_item_values_parse_as_strings()
+        {
+#if UNITY_EDITOR
+            var path = Path.Combine(Directory.GetCurrentDirectory(), "Temp", "NanamiUIComboValueTest.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllText(path, @"
+<component size=""10,10"" extention=""ComboBox"">
+  <ComboBox>
+    <item title=""A"" value=""alpha""/>
+    <item title=""B"" value=""2""/>
+  </ComboBox>
+</component>");
+
+            var fairyXml = AppDomain.CurrentDomain.GetAssemblies()
+                .Select(assembly => assembly.GetType("NanamiUI.Editor.FairyXml"))
+                .FirstOrDefault(type => type != null);
+            Assert.IsNotNull(fairyXml, "应能找到编辑器 XML 解析器");
+            var component = fairyXml.GetMethod("LoadComponent").Invoke(null, new object[] { path });
+            var combo = component.GetType().GetField("ComboBox").GetValue(component);
+            var items = (string[])combo.GetType().GetField("Items").GetValue(combo);
+            var values = (string[])combo.GetType().GetField("Values").GetValue(combo);
+
+            CollectionAssert.AreEqual(new[] { "A", "B" }, items);
+            CollectionAssert.AreEqual(new[] { "alpha", "2" }, values);
+            File.Delete(path);
+#endif
+        }
     }
 }
