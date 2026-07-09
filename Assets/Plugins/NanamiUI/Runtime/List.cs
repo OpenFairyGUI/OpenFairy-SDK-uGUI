@@ -12,15 +12,15 @@ namespace NanamiUI
             ?? list.Find("viewport") as RectTransform
             ?? list;
 
-        public static void Fill(RectTransform list, int count, Action<GameObject, int> setup)
+        public static void Fill(RectTransform list, int count, Action<GameObject, int> setup, bool rebindSelection = true)
         {
             var source = list.GetComponent<ListSource>();
             var container = Container(list);
             for (var i = container.childCount - 1; i >= 0; i--)
             {
                 var child = container.GetChild(i);
-                if (child.name != ScrollPane.HitName)
-                    UnityEngine.Object.DestroyImmediate(child.gameObject);
+                if (child.name != ScrollPane.HitName && child.name != ListSource.PoolName)
+                    source.ReleaseItem(child.gameObject);
             }
 
             // 复刻 FairyGUI ListLayoutType：column（竖排，默认）/ row（横排）/ flow_hz（横向流式换行网格）/ flow_vt（纵向流式）。
@@ -31,7 +31,7 @@ namespace NanamiUI
 
             for (var i = 0; i < count; i++)
             {
-                var item = UnityEngine.Object.Instantiate(source.itemPrefab, container, false);
+                var item = source.GetItem(container);
                 var rt = (RectTransform)item.transform;
                 rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
                 var (col, row) = source.layout switch
@@ -44,10 +44,12 @@ namespace NanamiUI
                 rt.anchoredPosition = new Vector2(col * stepX, -row * stepY);
                 setup(item, i);
             }
+            source.PlacePoolRootLast();
             if (container.Find(ScrollPane.HitName) is RectTransform hit)
                 hit.SetAsFirstSibling();
             list.GetComponent<ScrollPane>()?.RefreshContent();
-            list.GetComponent<ListSelection>()?.Rebind();
+            if (rebindSelection && list.GetComponent<ListSelection>() is { enabled: true } selection)
+                selection.Rebind();
         }
     }
 }

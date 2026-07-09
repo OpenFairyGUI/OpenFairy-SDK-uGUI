@@ -99,6 +99,28 @@ namespace NanamiUI.Tests
         }
 
         [UnityTest]
+        public IEnumerator PopupMenu_clear_items_reuses_items_and_clears_callbacks()
+        {
+            var pm = new NanamiUI.PopupMenu(Load(PopupMenuPrefab), Load(PopupItemPrefab));
+            var oldCallback = 0;
+            var freshCallback = 0;
+            var first = pm.AddItem("Old", () => oldCallback++);
+            var firstGo = ((UnityEngine.Component)first).gameObject;
+
+            pm.ClearItems();
+            Assert.AreEqual(0, pm.ContentPane.Find("list").childCount, "ClearItems 应把菜单项移出 active list");
+
+            var second = pm.AddItem("Fresh", () => freshCallback++);
+            var secondGo = ((UnityEngine.Component)second).gameObject;
+            Assert.AreSame(firstGo, secondGo, "PopupMenu 应复用已清空的菜单项，而不是销毁重建");
+
+            secondGo.GetComponent<IPointerClickHandler>().OnPointerClick(new PointerEventData(EventSystem.current));
+            Assert.AreEqual(0, oldCallback, "复用菜单项时旧 callback 应被清掉");
+            Assert.AreEqual(1, freshCallback, "复用菜单项应只触发本轮 callback");
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator Window_shows_centered_and_close_hides()
         {
             var win = new CenteringWindow { prefab = Load(WindowAPrefab) };
@@ -158,6 +180,8 @@ namespace NanamiUI.Tests
             var list = FindDeep(_gr.rect, "list");
             Assert.IsNotNull(list, "应实例化下拉 list");
             var source = list.GetComponent<ListSource>();
+            Assert.IsFalse(list.GetComponent<ListSelection>()?.enabled ?? false, "ComboBox 下拉应禁用普通 ListSelection，由 ComboBox 自己发 onChanged");
+            Assert.IsFalse(list.GetComponent<ScrollPaneHost>()?.enabled ?? false, "ComboBox 下拉应禁用 prefab 自带 ScrollPaneHost，只在超出可见项时手动 Attach");
             Assert.AreEqual(5 * source.itemSize.y, list.rect.height, 1f, "list 高应裁到 visibleItemCount*itemH");
             Assert.IsNotNull(list.GetComponent<ScrollPane>(), "项数超可见数应挂 ScrollPane 以滚动");
             _gr.HidePopup();

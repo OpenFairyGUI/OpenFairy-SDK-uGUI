@@ -60,6 +60,8 @@ NanamiUI 是基于 uGUI 的 FairyGUI Runtime SDK。目标是让用户继续用 F
 - 静态结构优于动态解析；不要滥用 `string`。只有真实文本内容才用 `string`，有限选项用 enum，结构化值用 struct/class 字段等能保持静态引用和编译期检查的表达方式。
 - 能通过明确的正向函数调用完成的流程，不引入 `Action` 回调等动态分发方式。
 - 能在烘焙 prefab 阶段生成并序列化保存的数据，不放到运行时生成。
+- 尽量减少运行时动态创建和销毁 Unity Object，能在烘焙时确定的就在烘焙时创建，暂时不需要就 SetActive(false)。
+- 尽量减少 GC。
 
 ## 标准工具入口
 

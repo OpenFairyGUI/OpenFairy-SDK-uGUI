@@ -88,9 +88,9 @@ namespace NanamiUI
             _dropdownRt = (RectTransform)_dropdown.transform;
             // 下拉项点击 + 滚动由 ComboBox 自管，去掉列表自带的选择/自挂滚动接线（否则未超可见数也会挂 ScrollPane）。
             if (list.GetComponent<ListSelection>() is { } listSelection)
-                Destroy(listSelection);
+                listSelection.enabled = false;
             if (list.GetComponent<ScrollPaneHost>() is { } host)
-                Destroy(host);
+                host.enabled = false;
             var source = list.GetComponent<ListSource>();
             List.Fill(list, items.Length, (itemGo, i) =>
             {
@@ -98,7 +98,7 @@ namespace NanamiUI
                 button.Title = items[i];
                 var index = i;
                 button.onClick.AddListener(() => Select(index));
-            });
+            }, false);
             // 可见高度按 visibleItemCount 裁剪；项数不超时表现与撑开一致（demo 短下拉不受影响）。
             var visible = Mathf.Min(items.Length, Mathf.Max(1, visibleItemCount));
             var h = visible * source.itemSize.y;

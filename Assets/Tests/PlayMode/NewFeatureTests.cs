@@ -420,6 +420,37 @@ namespace NanamiUI.Tests
             Object.Destroy(root.gameObject);
         }
 
+        [UnityTest]
+        public IEnumerator List_fill_reuses_pooled_items_and_clears_runtime_listeners()
+        {
+            var root = Child(_rig.CanvasRt, "list", Vector2.zero, new Vector2(100, 100), false);
+            var itemPrefab = new GameObject("item", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image), typeof(TestButton));
+            ((RectTransform)itemPrefab.transform).sizeDelta = new Vector2(100, 40);
+            var source = root.gameObject.AddComponent<ListSource>();
+            source.itemPrefab = itemPrefab;
+            source.itemSize = new Vector2(100, 40);
+            source.layout = "column";
+
+            var fired = 0;
+            NanamiUI.List.Fill(root, 2, (item, i) => item.GetComponent<TestButton>().onClick.AddListener(() => fired += i + 1));
+            var first = root.GetComponentsInChildren<TestButton>(false).OrderBy(button => button.transform.GetSiblingIndex()).ToArray();
+            first[0].onClick.Invoke();
+            Assert.AreEqual(1, fired, "第一次填充的 listener 应触发一次");
+
+            fired = 0;
+            NanamiUI.List.Fill(root, 2, (item, i) => item.GetComponent<TestButton>().onClick.AddListener(() => fired += 10 + i));
+            var second = root.GetComponentsInChildren<TestButton>(false).OrderBy(button => button.transform.GetSiblingIndex()).ToArray();
+            CollectionAssert.AreEquivalent(first, second, "List.Fill 应复用整批 item，而不是销毁重建");
+            Assert.AreEqual("__listPool", root.GetChild(root.childCount - 1).name, "池根应留在末尾，不污染可见 item 顺序");
+
+            second[0].onClick.Invoke();
+            Assert.AreEqual(10, fired, "复用 item 时旧 listener 应被清掉，只触发本轮 setup 的 listener");
+
+            Object.Destroy(itemPrefab);
+            Object.Destroy(root.gameObject);
+            yield return null;
+        }
+
         private Vector2 ScreenAt(RectTransform parent, Vector2 local) =>
             RectTransformUtility.WorldToScreenPoint(_rig.Camera, parent.TransformPoint(local));
 
