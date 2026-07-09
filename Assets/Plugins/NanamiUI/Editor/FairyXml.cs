@@ -138,7 +138,15 @@ namespace NanamiUI.Editor
             if (type == typeof(ValueTuple<string, string>[]))
                 return ParsePages(value);
             if (type.IsEnum)
-                return ParseEnum(type, value);
+                return value == "" ? Enum.ToObject(type, 0) : ParseEnum(type, value); // 空属性值（如 scale=""）= 缺省
+            if (type.IsArray && type.GetElementType().IsEnum)
+            {
+                var parts = value.Split(',');
+                var array = Array.CreateInstance(type.GetElementType(), parts.Length);
+                for (var i = 0; i < parts.Length; i++)
+                    array.SetValue(ParseEnum(type.GetElementType(), parts[i]), i);
+                return array;
+            }
             throw new NotSupportedException($"FairyXml cannot convert {type.Name}");
         }
 
@@ -147,7 +155,8 @@ namespace NanamiUI.Editor
             foreach (var field in type.GetFields())
                 if (field.GetCustomAttributes(typeof(XmlEnumAttribute), true).FirstOrDefault() is XmlEnumAttribute xmlEnum && xmlEnum.Name == value)
                     return Enum.Parse(type, field.Name);
-            return Enum.Parse(type, value, true);
+            // XML 词表的标点风格（left-left / multiple_singleclick）折叠成成员名，忽略大小写（titleType="valueAndmax" 等杂写）。
+            return Enum.Parse(type, value.Replace("-", "").Replace("_", ""), true);
         }
 
         private static Vector2 ParsePair(string value)
@@ -285,6 +294,34 @@ namespace NanamiUI.Editor.Schema
         [XmlEnum("regular_polygon")] RegularPolygon,
     }
 
+    // package.xml 图片资源的缩放方式（缺省/空 = 整图）。
+    public enum ImageScale
+    {
+        None,
+        [XmlEnum("9grid")] NineGrid,
+        [XmlEnum("tile")] Tile,
+    }
+
+    // 列表排布的 XML 词表 → 运行时 ListLayoutType 在 Migrate 映射。
+    public enum ListLayout
+    {
+        [XmlEnum("column")] SingleColumn,
+        [XmlEnum("row")] SingleRow,
+        [XmlEnum("flow_hz")] FlowHorizontal,
+        [XmlEnum("flow_vt")] FlowVertical,
+        [XmlEnum("pagination")] Pagination,
+    }
+
+    // 文本自动尺寸。Shrink/Ellipsis 未实现，转换时按 Height 处理。
+    public enum TextAutoSize
+    {
+        Both,
+        None,
+        Height,
+        Shrink,
+        Ellipsis,
+    }
+
     public enum GearKind
     {
         [XmlEnum("gearDisplay")]
@@ -332,7 +369,7 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("id")] public string Id;
         [XmlAttribute("name")] public string FileName;
         [XmlAttribute("path")] public string Path = "";
-        [XmlAttribute("scale")] public string Scale;
+        [XmlAttribute("scale")] public ImageScale Scale;
         [XmlAttribute("scale9grid")] public string Scale9Grid;
         [XmlAttribute("texture")] public string Texture;
         [XmlAttribute("exported")] public bool Exported;
@@ -438,8 +475,8 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("clipSoftness")] public string ClipSoftness;
         [XmlAttribute("lineGap")] public float LineGap;
         [XmlAttribute("colGap")] public float ColGap;
-        [XmlAttribute("layout")] public string Layout = "column";
-        [XmlAttribute("selectionMode")] public string SelectionMode = "single"; // FairyGUI 列表默认单选
+        [XmlAttribute("layout")] public ListLayout Layout;
+        [XmlAttribute("selectionMode")] public NanamiUI.ListSelectionMode SelectionMode = NanamiUI.ListSelectionMode.Single; // FairyGUI 列表默认单选
         [XmlAttribute("text")] public string Text = "";
         [XmlAttribute("fontSize")] public int? FontSize;
         [XmlAttribute("leading")] public int Leading = 3;
@@ -452,7 +489,7 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("prompt")] public string Prompt;
         [XmlAttribute("bold")] public bool Bold;
         [XmlAttribute("italic")] public bool Italic;
-        [XmlAttribute("autoSize")] public string AutoSize = "both";
+        [XmlAttribute("autoSize")] public TextAutoSize AutoSize = TextAutoSize.Both;
         [XmlAttribute("singleLine")] public bool SingleLine;
         [XmlAttribute("font")] public string Font;
 
@@ -483,7 +520,7 @@ namespace NanamiUI.Editor.Schema
     public class Relation
     {
         [XmlAttribute("target")] public string Target = "";
-        [XmlAttribute("sidePair")] public string[] SidePairs = Array.Empty<string>();
+        [XmlAttribute("sidePair")] public NanamiUI.RelationSide[] SidePairs = Array.Empty<NanamiUI.RelationSide>();
     }
 
     public class Gear
@@ -506,7 +543,7 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("title")] public string Title;
         [XmlAttribute("selectedTitle")] public string SelectedTitle;
         [XmlAttribute("icon")] public string Icon;
-        [XmlAttribute("mode")] public string Mode;
+        [XmlAttribute("mode")] public NanamiUI.ButtonMode? Mode; // 实例级缺省时不覆盖定义级
         [XmlAttribute("checked")] public bool Checked;
         [XmlAttribute("titleColor")] public string TitleColor;
         // 按钮关联控制器（FairyGUI relatedController/relatedPageId）：点击换该控制器的页，实现 tab/radio 组。
@@ -515,7 +552,7 @@ namespace NanamiUI.Editor.Schema
         [XmlAttribute("value")] public string Value;
         [XmlAttribute("max")] public float Max = 100;
         [XmlAttribute("min")] public float Min;
-        [XmlAttribute("titleType")] public string TitleType;
+        [XmlAttribute("titleType")] public NanamiUI.ProgressTitleType TitleType;
         [XmlAttribute("reverse")] public bool Reverse;
         [XmlAttribute("wholeNumbers")] public bool WholeNumbers;
         [XmlAttribute("changeOnClick")] public bool ChangeOnClick = true;

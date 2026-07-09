@@ -13,7 +13,7 @@ namespace NanamiUI
         public Vector2 itemSize;
         public float lineGap;
         public float colGap;
-        public string layout;
+        public ListLayoutType layout;
 
         private ObjectPool<GameObject> _pool;
         private RectTransform _poolRoot;

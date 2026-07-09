@@ -33,7 +33,7 @@ namespace NanamiUI.Editor
             public string File;
             public string Package;
             public string PackageId;
-            public string Scale;
+            public Schema.ImageScale Scale;
             public string Scale9Grid;
             public string Texture;
             public bool Exported;
@@ -199,11 +199,11 @@ namespace NanamiUI.Editor
 
             var target = SpritePath(image);
             Directory.CreateDirectory(Path.GetDirectoryName(target));
-            if (image.Scale == "tile")
+            if (image.Scale == Schema.ImageScale.Tile)
                 File.WriteAllBytes(target, TrimTransparent(File.ReadAllBytes(image.File))); // FairyGUI 图集会裁透明边，平铺单元按裁剪后尺寸
             else
                 File.Copy(image.File, target, true);
-            ImportSprite(target, image.Scale == "tile");
+            ImportSprite(target, image.Scale == Schema.ImageScale.Tile);
 
             if (image.Scale9Grid != null)
             {
@@ -673,8 +673,8 @@ namespace NanamiUI.Editor
                         Schema.LoaderFill.ScaleNoBorder => Loader.FillType.ScaleNoBorder,
                         _ => Loader.FillType.None,
                     };
-                    loader.align = element.Align switch { Schema.Align.Center => 1, Schema.Align.Right => 2, _ => 0 };
-                    loader.vAlign = element.VAlign switch { Schema.VAlign.Middle => 1, Schema.VAlign.Bottom => 2, _ => 0 };
+                    loader.align = element.Align switch { Schema.Align.Center => Loader.AlignType.Center, Schema.Align.Right => Loader.AlignType.Right, _ => Loader.AlignType.Left };
+                    loader.vAlign = element.VAlign switch { Schema.VAlign.Middle => Loader.VertAlignType.Middle, Schema.VAlign.Bottom => Loader.VertAlignType.Bottom, _ => Loader.VertAlignType.Top };
                     var url = element.Source;
                     if (url != null && TryResolve(url, owner.PackageId, out var content) && content.Type == Schema.ResourceKind.Image)
                     {
@@ -845,7 +845,7 @@ namespace NanamiUI.Editor
 
         private static void ConfigureImage(UnityEngine.UI.Image image, Resource resource, Schema.Display element)
         {
-            image.type = resource.Scale == "tile" ? UnityEngine.UI.Image.Type.Tiled : image.sprite.border == Vector4.zero ? UnityEngine.UI.Image.Type.Simple : UnityEngine.UI.Image.Type.Sliced;
+            image.type = resource.Scale == Schema.ImageScale.Tile ? UnityEngine.UI.Image.Type.Tiled : image.sprite.border == Vector4.zero ? UnityEngine.UI.Image.Type.Simple : UnityEngine.UI.Image.Type.Sliced;
             image.color = ParseColor(element.Color ?? "#ffffffff");
             if (element.FillMethod != Schema.ImageFillMethod.None)
             {
@@ -882,7 +882,7 @@ namespace NanamiUI.Editor
             if (buttonXml.Icon is { } icon)
                 button.Icon = LoadSprite(icon, packageId);
             if (buttonXml.Mode is { } mode)
-                button.mode = (ButtonMode)Enum.Parse(typeof(ButtonMode), mode);
+                button.mode = mode;
             button.selected = buttonXml.Checked && button.mode != ButtonMode.Common; // 复刻 GButton.selected：Common 忽略选中态
             button.RefreshState();
         }
@@ -955,7 +955,7 @@ namespace NanamiUI.Editor
         private static void SetupProgressBar(ProgressBar progress, Schema.Component xml, List<(Schema.Display Xml, GameObject Go)> children, GameObject root)
         {
             var ext = xml.ProgressBar;
-            progress.titleType = ParseTitleType(ext.TitleType);
+            progress.titleType = ext.TitleType;
             progress.reverse = ext.Reverse;
             progress.title = Child(children, "title")?.GetComponent<TextField>();
             var size = xml.Size;
@@ -980,7 +980,7 @@ namespace NanamiUI.Editor
         private static void SetupSlider(Slider slider, Schema.Component xml, List<(Schema.Display Xml, GameObject Go)> children, GameObject root)
         {
             var ext = xml.Slider;
-            slider.titleType = ParseTitleType(ext.TitleType);
+            slider.titleType = ext.TitleType;
             slider.min = ext.Min;
             slider.reverse = ext.Reverse;
             slider.wholeNumbers = ext.WholeNumbers;
@@ -1008,14 +1008,6 @@ namespace NanamiUI.Editor
             slider.Apply();
             SyncRelations(root);
         }
-
-        private static ProgressTitleType ParseTitleType(string value) => value?.ToLowerInvariant() switch
-        {
-            "valueandmax" => ProgressTitleType.ValueAndMax,
-            "value" => ProgressTitleType.Value,
-            "max" => ProgressTitleType.Max,
-            _ => ProgressTitleType.Percent,
-        };
 
         private static GameObject Child(List<(Schema.Display Xml, GameObject Go)> children, string name) =>
             children.FirstOrDefault(child => child.Xml.Name == name).Go;
@@ -1268,7 +1260,14 @@ namespace NanamiUI.Editor
             source.itemSize = itemSize;
             source.lineGap = lineGap;
             source.colGap = colGap;
-            source.layout = layout;
+            source.layout = layout switch
+            {
+                Schema.ListLayout.SingleRow => ListLayoutType.SingleRow,
+                Schema.ListLayout.FlowHorizontal => ListLayoutType.FlowHorizontal,
+                Schema.ListLayout.FlowVertical => ListLayoutType.FlowVertical,
+                Schema.ListLayout.Pagination => ListLayoutType.Pagination,
+                _ => ListLayoutType.SingleColumn,
+            };
 
             var view = element.Overflow == Schema.Overflow.Scroll
                 ? BuildScrollView(go, element, size)
@@ -1280,11 +1279,12 @@ namespace NanamiUI.Editor
             foreach (var _ in element.Items)
                 switch (layout)
                 {
-                    case "row":
+                    case Schema.ListLayout.SingleRow:
                         positions.Add(new Vector2(x, 0));
                         x += itemSize.x + colGap;
                         break;
-                    case "flow_hz":
+                    case Schema.ListLayout.FlowHorizontal:
+                    case Schema.ListLayout.Pagination: // 分页吸附不做：按 flow_hz 排布
                         if (x != 0 && x + itemSize.x > viewSize.x)
                         {
                             x = 0;
@@ -1293,7 +1293,7 @@ namespace NanamiUI.Editor
                         positions.Add(new Vector2(x, y));
                         x += itemSize.x + colGap;
                         break;
-                    case "flow_vt":
+                    case Schema.ListLayout.FlowVertical:
                         if (y != 0 && y + itemSize.y > viewSize.y)
                         {
                             y = 0;
@@ -1302,7 +1302,7 @@ namespace NanamiUI.Editor
                         positions.Add(new Vector2(x, y));
                         y += itemSize.y + lineGap;
                         break;
-                    default:
+                    default: // SingleColumn
                         positions.Add(new Vector2(0, y));
                         y += itemSize.y + lineGap;
                         break;
@@ -1321,7 +1321,7 @@ namespace NanamiUI.Editor
             SetGrips(view, content);
             if (element.Overflow == Schema.Overflow.Scroll)
                 AddScrollHost(go, view); // 运行时自挂 ScrollPane
-            if (element.SelectionMode != "none")
+            if (element.SelectionMode != ListSelectionMode.None)
                 go.AddComponent<ListSelection>().selectionMode = element.SelectionMode; // 点项选中/发 onClickItem
         }
 
@@ -1555,19 +1555,33 @@ namespace NanamiUI.Editor
             {
                 if (relation.Target != "")
                     continue;
+                // 容器关联 → uGUI 锚点。*-left/*-top 跟随容器左/上边，容器局部系里该边不动 = 默认左上锚；
+                // ext 关联未在容器关联中出现过（数据里只作兄弟关联），不映射。
                 foreach (var pair in relation.SidePairs)
                     switch (pair)
                     {
-                        case "width-width":
-                        case "width":
+                        case RelationSide.Width:
+                        case RelationSide.WidthWidth:
                             anchorMin.x = 0; anchorMax.x = 1; break;
-                        case "height-height":
-                        case "height":
+                        case RelationSide.Height:
+                        case RelationSide.HeightHeight:
                             anchorMin.y = 0; anchorMax.y = 1; break;
-                        case "right-right": anchorMin.x = anchorMax.x = 1; break;
-                        case "center-center": anchorMin.x = anchorMax.x = 0.5f; break;
-                        case "bottom-bottom": anchorMin.y = anchorMax.y = 0; break;
-                        case "middle-middle": anchorMin.y = anchorMax.y = 0.5f; break;
+                        case RelationSide.Size:
+                            anchorMin = Vector2.zero; anchorMax = Vector2.one; break;
+                        case RelationSide.LeftRight:
+                        case RelationSide.RightRight:
+                            anchorMin.x = anchorMax.x = 1; break;
+                        case RelationSide.LeftCenter:
+                        case RelationSide.CenterCenter:
+                        case RelationSide.RightCenter:
+                            anchorMin.x = anchorMax.x = 0.5f; break;
+                        case RelationSide.TopBottom:
+                        case RelationSide.BottomBottom:
+                            anchorMin.y = anchorMax.y = 0; break;
+                        case RelationSide.TopMiddle:
+                        case RelationSide.MiddleMiddle:
+                        case RelationSide.BottomMiddle:
+                            anchorMin.y = anchorMax.y = 0.5f; break;
                     }
             }
 
@@ -1677,11 +1691,11 @@ namespace NanamiUI.Editor
             var bold = element.Bold;
             var italic = element.Italic;
             text.fontStyle = bold && italic ? FontStyle.BoldAndItalic : bold ? FontStyle.Bold : italic ? FontStyle.Italic : FontStyle.Normal;
-            var autoSize = element.AutoSize;
-            text.horizontalOverflow = autoSize == "both" || element.SingleLine
+            // Shrink/Ellipsis 未实现，按 Height（竖向撑开）处理。
+            text.horizontalOverflow = element.AutoSize == Schema.TextAutoSize.Both || element.SingleLine
                 ? HorizontalWrapMode.Overflow
                 : HorizontalWrapMode.Wrap;
-            text.verticalOverflow = autoSize == "none" ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow;
+            text.verticalOverflow = element.AutoSize == Schema.TextAutoSize.None ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow;
             text.alignment = (element.VAlign, element.Align) switch
             {
                 (Schema.VAlign.Middle, Schema.Align.Center) => TextAnchor.MiddleCenter,

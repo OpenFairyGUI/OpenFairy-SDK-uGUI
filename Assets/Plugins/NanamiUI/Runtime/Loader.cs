@@ -15,9 +15,23 @@ namespace NanamiUI
             ScaleNoBorder,
         }
 
+        public enum AlignType
+        {
+            Left,
+            Center,
+            Right,
+        }
+
+        public enum VertAlignType
+        {
+            Top,
+            Middle,
+            Bottom,
+        }
+
         public FillType fill;
-        public int align;
-        public int vAlign;
+        public AlignType align;
+        public VertAlignType vAlign;
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {
@@ -46,8 +60,18 @@ namespace NanamiUI
 
             var w = size.x * sx;
             var h = size.y * sy;
-            var x = rect.xMin + (align == 1 ? (rect.width - w) / 2 : align == 2 ? rect.width - w : 0);
-            var y = rect.yMax - (vAlign == 1 ? (rect.height - h) / 2 : vAlign == 2 ? rect.height - h : 0);
+            var x = rect.xMin + align switch
+            {
+                AlignType.Center => (rect.width - w) / 2,
+                AlignType.Right => rect.width - w,
+                _ => 0,
+            };
+            var y = rect.yMax - vAlign switch
+            {
+                VertAlignType.Middle => (rect.height - h) / 2,
+                VertAlignType.Bottom => rect.height - h,
+                _ => 0,
+            };
             var uv = UnityEngine.Sprites.DataUtility.GetOuterUV(overrideSprite);
             var color32 = (Color32)color;
 

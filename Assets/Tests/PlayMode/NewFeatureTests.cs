@@ -112,7 +112,7 @@ namespace NanamiUI.Tests
 
             var relation = follower.gameObject.AddComponent<Relation>();
             relation.target = target;
-            relation.sidePairs = new[] { "right-right" }; // follower 的 x 跟随 target 右边缘变化
+            relation.sidePairs = new[] { RelationSide.RightRight }; // follower 的 x 跟随 target 右边缘变化
             relation.Record();
             yield return null;
 
@@ -396,9 +396,9 @@ namespace NanamiUI.Tests
             var source = root.gameObject.AddComponent<ListSource>();
             source.itemPrefab = itemPrefab;
             source.itemSize = new Vector2(100, 40);
-            source.layout = "column";
+            source.layout = ListLayoutType.SingleColumn;
             var selection = root.gameObject.AddComponent<ListSelection>();
-            selection.selectionMode = "multiple";
+            selection.selectionMode = ListSelectionMode.Multiple;
             var clicked = -1;
             selection.onClickItem.AddListener(i => clicked = i);
             ScrollPane.Attach(root);
@@ -432,7 +432,7 @@ namespace NanamiUI.Tests
             var source = root.gameObject.AddComponent<ListSource>();
             source.itemPrefab = itemPrefab;
             source.itemSize = new Vector2(100, 40);
-            source.layout = "column";
+            source.layout = ListLayoutType.SingleColumn;
 
             var fired = 0;
             NanamiUI.List.Fill(root, 2, (item, i) => item.GetComponent<TestButton>().onClick.AddListener(() => fired += i + 1));
@@ -508,7 +508,7 @@ namespace NanamiUI.Tests
                 buttons[i].mode = ButtonMode.Radio; // 可选中列表项 = Radio/Check（GButton.selected 对 Common 忽略，FairyGUI 同）
             }
             var sel = listRt.gameObject.AddComponent<ListSelection>();
-            sel.selectionMode = "single";
+            sel.selectionMode = ListSelectionMode.Single;
             var clicked = -1;
             sel.onClickItem.AddListener(i => clicked = i);
             yield return null; // ListSelection.Start -> Rebind 接线
@@ -644,7 +644,7 @@ namespace NanamiUI.Tests
                 buttons[i].mode = ButtonMode.Check; // 勾选态项：验证不与 ListSelection 双翻
             }
             var sel = listRt.gameObject.AddComponent<ListSelection>();
-            sel.selectionMode = "multiple_singleclick";
+            sel.selectionMode = ListSelectionMode.MultipleSingleClick;
             yield return null; // Rebind：接线 + 置 changeStateOnClick=false
 
             var ped = new PointerEventData(EventSystem.current);
@@ -669,7 +669,7 @@ namespace NanamiUI.Tests
                 buttons[i].mode = ButtonMode.Check;
             }
             var sel = listRt.gameObject.AddComponent<ListSelection>();
-            sel.selectionMode = "multiple";
+            sel.selectionMode = ListSelectionMode.Multiple;
             yield return null;
 
             var ped = new PointerEventData(EventSystem.current);

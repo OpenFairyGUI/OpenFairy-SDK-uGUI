@@ -5,12 +5,21 @@ using UnityEngine.EventSystems;
 
 namespace NanamiUI
 {
+    // 复刻 FairyGUI ListSelectionMode。
+    public enum ListSelectionMode
+    {
+        Single,
+        Multiple,
+        MultipleSingleClick,
+        None,
+    }
+
     // 复刻 FairyGUI GList 选择：点击列表项按 selectionMode 置选中，并对任意类型的项发 onClickItem(index)。
-    // 无修饰键点击下 single 与 multiple 都是排它选中，multiple_singleclick 每次点击切换（复刻 SetSelectionOnEvent）。
-    // 由 Migrate 在 selectionMode != none 时挂到 list 根；ComboBox 下拉自管选择（Build 时禁用本组件）。
+    // 无修饰键点击下 Single 与 Multiple 都是排它选中，MultipleSingleClick 每次点击切换（复刻 SetSelectionOnEvent）。
+    // 由 Migrate 在 selectionMode != None 时挂到 list 根；ComboBox 下拉自管选择（Build 时禁用本组件）。
     public sealed class ListSelection : UIBehaviour, IPointerClickHandler
     {
-        public string selectionMode = "single"; // single / multiple / multiple_singleclick / none
+        public ListSelectionMode selectionMode = ListSelectionMode.Single;
 
         [System.NonSerialized] public UnityEvent<int> onClickItem = new();
 
@@ -76,12 +85,13 @@ namespace NanamiUI
             var clicked = _items[index].Button;
             switch (selectionMode)
             {
-                case "none":
+                case ListSelectionMode.None:
                     break;
-                case "multiple_singleclick":
-                    clicked.Selected = !clicked.Selected; // 每次点击切换（复刻 Multiple_SingleClick）
+                case ListSelectionMode.MultipleSingleClick:
+                    clicked.Selected = !clicked.Selected; // 每次点击切换
                     break;
-                default: // single 与 multiple 的无修饰键点击一致：排它选中
+                case ListSelectionMode.Single:
+                case ListSelectionMode.Multiple: // 无修饰键点击与 Single 一致：排它选中
                     foreach (var item in _items)
                         if (item.Button != null)
                             item.Button.Selected = ReferenceEquals(item.Button, clicked);
