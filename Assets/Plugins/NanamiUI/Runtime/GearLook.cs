@@ -36,10 +36,11 @@ namespace NanamiUI
         }
 
         // 组透明度按 CanvasGroup.alpha 乘算传播（复刻 FairyGUI 组 alpha），不覆盖各子物体 authored 的 color.a。
+        // CanvasGroup 由 Migrate 烘焙；运行时只缓存静态引用，不再动态补组件。
         private CanvasGroup Group()
         {
             if (_group == null)
-                _group = target.GetComponent<CanvasGroup>() ?? target.AddComponent<CanvasGroup>();
+                _group = target.GetComponent<CanvasGroup>();
             return _group;
         }
 

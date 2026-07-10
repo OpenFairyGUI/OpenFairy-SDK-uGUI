@@ -73,6 +73,8 @@ namespace NanamiUI
             lastSize = size;
 
             var rt = (RectTransform)transform;
+            var position = Vector2.zero;
+            var resize = Vector2.zero;
             // X 位置关联 = 目标锚点 x 的变化（左锚 move.x、中锚 +0.5 grow.x、右锚 +grow.x）；
             // Y 位置关联 = 目标锚点 y 的变化（上锚 move.y、中锚 -0.5 grow.y、下锚 -grow.y，y 向下取负 grow）。
             // ext 关联 = 本体一边跟随目标、对边保持不动（尺寸随之伸缩）。
@@ -81,71 +83,77 @@ namespace NanamiUI
                 {
                     case RelationSide.LeftLeft:
                     case RelationSide.RightLeft:
-                        rt.anchoredPosition += new Vector2(move.x, 0);
+                        position.x += move.x;
                         break;
                     case RelationSide.LeftCenter:
                     case RelationSide.CenterCenter:
                     case RelationSide.RightCenter:
-                        rt.anchoredPosition += new Vector2(move.x + grow.x * 0.5f, 0);
+                        position.x += move.x + grow.x * 0.5f;
                         break;
                     case RelationSide.LeftRight:
                     case RelationSide.RightRight:
-                        rt.anchoredPosition += new Vector2(move.x + grow.x, 0);
+                        position.x += move.x + grow.x;
                         break;
                     case RelationSide.TopTop:
                     case RelationSide.BottomTop:
-                        rt.anchoredPosition += new Vector2(0, move.y);
+                        position.y += move.y;
                         break;
                     case RelationSide.TopMiddle:
                     case RelationSide.MiddleMiddle:
                     case RelationSide.BottomMiddle:
-                        rt.anchoredPosition += new Vector2(0, move.y - grow.y * 0.5f);
+                        position.y += move.y - grow.y * 0.5f;
                         break;
                     case RelationSide.TopBottom:
                     case RelationSide.BottomBottom:
-                        rt.anchoredPosition += new Vector2(0, move.y - grow.y);
+                        position.y += move.y - grow.y;
                         break;
                     case RelationSide.Width:
                     case RelationSide.WidthWidth:
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rt.rect.width + grow.x);
+                        resize.x += grow.x;
                         break;
                     case RelationSide.Height:
                     case RelationSide.HeightHeight:
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rt.rect.height + grow.y);
+                        resize.y += grow.y;
                         break;
                     case RelationSide.Size:
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rt.rect.width + grow.x);
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rt.rect.height + grow.y);
+                        resize += grow;
                         break;
                     case RelationSide.LeftExtLeft: // 左边跟随目标左边，右边不动
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rt.rect.width - move.x);
-                        rt.anchoredPosition += new Vector2(move.x, 0);
+                        resize.x -= move.x;
+                        position.x += move.x;
                         break;
                     case RelationSide.LeftExtRight: // 左边跟随目标右边，右边不动
-                        rt.anchoredPosition += new Vector2(move.x + grow.x, 0);
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rt.rect.width - grow.x - move.x);
+                        position.x += move.x + grow.x;
+                        resize.x -= grow.x + move.x;
                         break;
                     case RelationSide.RightExtLeft: // 右边跟随目标左边，左边不动
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rt.rect.width + move.x);
+                        resize.x += move.x;
                         break;
                     case RelationSide.RightExtRight: // 右边跟随目标右边，左边不动
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rt.rect.width + move.x + grow.x);
+                        resize.x += move.x + grow.x;
                         break;
                     case RelationSide.TopExtTop: // 上边跟随目标上边，下边不动
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rt.rect.height + move.y);
-                        rt.anchoredPosition += new Vector2(0, move.y);
+                        resize.y += move.y;
+                        position.y += move.y;
                         break;
                     case RelationSide.TopExtBottom: // 上边跟随目标下边，下边不动
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rt.rect.height + move.y - grow.y);
-                        rt.anchoredPosition += new Vector2(0, move.y - grow.y);
+                        resize.y += move.y - grow.y;
+                        position.y += move.y - grow.y;
                         break;
                     case RelationSide.BottomExtTop: // 下边跟随目标上边，上边不动
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rt.rect.height - move.y);
+                        resize.y -= move.y;
                         break;
                     case RelationSide.BottomExtBottom: // 下边跟随目标下边，上边不动
-                        rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rt.rect.height - move.y + grow.y);
+                        resize.y += grow.y - move.y;
                         break;
                 }
+            if (position != Vector2.zero)
+                rt.anchoredPosition += position;
+            var rectSize = rt.rect.size;
+            if (resize.x != 0)
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rectSize.x + resize.x);
+            if (resize.y != 0)
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rectSize.y + resize.y);
         }
 
         // 集中驱动：单个循环遍历所有活跃 Relation，替代每实例每帧一次 LateUpdate 的 native→managed 派发底噪。

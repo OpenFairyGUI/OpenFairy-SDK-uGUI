@@ -154,7 +154,8 @@ namespace NanamiUI
         {
             Play(times, delay);
             var version = _playVersion;
-            await UniTask.WaitWhile(() => this != null && version == _playVersion && _playing);
+            while (this != null && version == _playVersion && _playing)
+                await UniTask.Yield(PlayerLoopTiming.Update);
         }
 
         // 复刻 FairyGUI Stop() 默认 setToComplete：未完成 item 落到终态（倒放落回起态）。

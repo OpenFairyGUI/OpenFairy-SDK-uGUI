@@ -135,6 +135,79 @@ namespace NanamiUI.Tests
             Object.Destroy(container.gameObject);
         }
 
+        [TestCase(RelationSide.LeftLeft, 10, 0, 0, 0)]
+        [TestCase(RelationSide.LeftCenter, 20, 0, 0, 0)]
+        [TestCase(RelationSide.LeftRight, 30, 0, 0, 0)]
+        [TestCase(RelationSide.CenterCenter, 20, 0, 0, 0)]
+        [TestCase(RelationSide.RightLeft, 10, 0, 0, 0)]
+        [TestCase(RelationSide.RightCenter, 20, 0, 0, 0)]
+        [TestCase(RelationSide.RightRight, 30, 0, 0, 0)]
+        [TestCase(RelationSide.TopTop, 0, -15, 0, 0)]
+        [TestCase(RelationSide.TopMiddle, 0, -30, 0, 0)]
+        [TestCase(RelationSide.TopBottom, 0, -45, 0, 0)]
+        [TestCase(RelationSide.MiddleMiddle, 0, -30, 0, 0)]
+        [TestCase(RelationSide.BottomTop, 0, -15, 0, 0)]
+        [TestCase(RelationSide.BottomMiddle, 0, -30, 0, 0)]
+        [TestCase(RelationSide.BottomBottom, 0, -45, 0, 0)]
+        [TestCase(RelationSide.Width, 0, 0, 20, 0)]
+        [TestCase(RelationSide.WidthWidth, 0, 0, 20, 0)]
+        [TestCase(RelationSide.Height, 0, 0, 0, 30)]
+        [TestCase(RelationSide.HeightHeight, 0, 0, 0, 30)]
+        [TestCase(RelationSide.Size, 0, 0, 20, 30)]
+        [TestCase(RelationSide.LeftExtLeft, 10, 0, -10, 0)]
+        [TestCase(RelationSide.LeftExtRight, 30, 0, -30, 0)]
+        [TestCase(RelationSide.RightExtLeft, 0, 0, 10, 0)]
+        [TestCase(RelationSide.RightExtRight, 0, 0, 30, 0)]
+        [TestCase(RelationSide.TopExtTop, 0, -15, 0, -15)]
+        [TestCase(RelationSide.TopExtBottom, 0, -45, 0, -45)]
+        [TestCase(RelationSide.BottomExtTop, 0, 0, 0, 15)]
+        [TestCase(RelationSide.BottomExtBottom, 0, 0, 0, 45)]
+        public void Every_relation_side_applies_the_expected_delta(RelationSide side, float dx, float dy, float dw, float dh)
+        {
+            var root = new GameObject("relation", typeof(RectTransform)).GetComponent<RectTransform>();
+            root.sizeDelta = new Vector2(400, 300);
+            var target = Child(root, "target", new Vector2(20, 30), new Vector2(100, 80), false);
+            var follower = Child(root, "follower", new Vector2(200, 100), new Vector2(100, 80), false);
+            var relation = follower.gameObject.AddComponent<Relation>();
+            relation.target = target;
+            relation.sidePairs = new[] { side };
+            relation.Record();
+            var startPosition = follower.anchoredPosition;
+            var startSize = follower.rect.size;
+
+            target.anchoredPosition += new Vector2(10, -15);
+            target.sizeDelta += new Vector2(20, 30);
+            relation.Sync();
+
+            Assert.AreEqual(startPosition.x + dx, follower.anchoredPosition.x, 0.01f, side.ToString());
+            Assert.AreEqual(startPosition.y + dy, follower.anchoredPosition.y, 0.01f, side.ToString());
+            Assert.AreEqual(startSize.x + dw, follower.rect.width, 0.01f, side.ToString());
+            Assert.AreEqual(startSize.y + dh, follower.rect.height, 0.01f, side.ToString());
+            Object.DestroyImmediate(root.gameObject);
+        }
+
+        [Test]
+        public void Relation_combines_multiple_pairs_before_writing_recttransform()
+        {
+            var root = new GameObject("relation", typeof(RectTransform)).GetComponent<RectTransform>();
+            root.sizeDelta = new Vector2(400, 300);
+            var target = Child(root, "target", new Vector2(20, 30), new Vector2(100, 80), false);
+            var follower = Child(root, "follower", new Vector2(200, 100), new Vector2(100, 80), false);
+            var relation = follower.gameObject.AddComponent<Relation>();
+            relation.target = target;
+            relation.sidePairs = new[] { RelationSide.RightRight, RelationSide.BottomBottom, RelationSide.Width, RelationSide.Height };
+            relation.Record();
+            var startPosition = follower.anchoredPosition;
+
+            target.anchoredPosition += new Vector2(10, -15);
+            target.sizeDelta += new Vector2(20, 30);
+            relation.Sync();
+
+            Assert.AreEqual(startPosition + new Vector2(30, -45), follower.anchoredPosition);
+            Assert.AreEqual(new Vector2(120, 110), follower.rect.size);
+            Object.DestroyImmediate(root.gameObject);
+        }
+
         [UnityTest]
         public IEnumerator MovieClip_setframe_is_deterministic_and_autoplays()
         {
@@ -224,6 +297,7 @@ namespace NanamiUI.Tests
         public IEnumerator GearLook_applies_alpha_via_canvasgroup_without_overwriting_child_color()
         {
             var go = Child(_rig.CanvasRt, "gl", Vector2.zero, new Vector2(50, 50), true);
+            go.gameObject.AddComponent<CanvasGroup>(); // Migrate 会为每个 GearLook target 烘焙；测试手搭结构同步满足该静态契约
             var image = go.GetComponent<UnityEngine.UI.Image>();
             image.color = new Color(1, 1, 1, 1);
             var gear = new GearLook<RadioPage>
@@ -548,6 +622,7 @@ namespace NanamiUI.Tests
         public IEnumerator GearLook_grayed_propagates_to_button_grayed()
         {
             var buttonGo = Child(_rig.CanvasRt, "btn", Vector2.zero, new Vector2(80, 40), false);
+            buttonGo.gameObject.AddComponent<CanvasGroup>(); // 同 Migrate.ConfigureGearLook 的烘焙结构
             var button = buttonGo.gameObject.AddComponent<TestButton>();
             var gear = new GearLook<RadioPage>
             {

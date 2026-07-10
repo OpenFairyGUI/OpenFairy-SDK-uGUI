@@ -10,13 +10,14 @@
   - `Tools/NanamiUI/Migrate`
   - `Tools/NanamiUI/Generate Golden References`
   - `Tools/NanamiUI/Run PlayMode Tests`
-- 最近一次验证：2026-07-09 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `101/101`（含发布前 final review 新增的 ComboBox item value 解析、动态 List.Fill/ScrollPane/ListSelection 回归，以及 List/PopupMenu 池化复用回归）。
+- 最近一次验证：2026-07-10 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `133/133`；静态 golden、真实射线交互、转换完整性、池化复用及 `RelationSide` 全枚举回归均通过。
 - 本轮发布整改：修 `ComboBox.selectedIndex` 程序化赋值不刷新/不发事件的 bug（改属性 + 加 `values/text/value`，并支持从 XML `<item value>` 烘焙字符串值、程序化设置 `text`/`value`）+ 下拉按 `visibleItemCount` 裁剪滚动；`ScrollPane` 补滚轮/滚动条 grip 拖动/惯性回弹/`onScroll`/`ScrollToView`；`List.Fill` 在已挂 ScrollPane 后重填会保留并刷新 `__scrollHit`，同时自动重绑 `ListSelection` 且避免重复 listener；`ProgressBar.TweenValue` 加 ease、`Slider` 加 grip touch 事件；修 `MovieClip.SetFrame` 越界不钳导致自播 Update 越界的 bug；`Window.modal` + `Root` 模态层；`PopupMenu.AddItem` 返回项按钮 + `ClearItems`；`TextInput` 加 `password`/`maxLength`/`editable`/`onSubmit`。转换器健壮性整改（对非 demo 的真实工程）：包名/空名 sanitize 进命名空间、非 button list item、陈旧 gear 页 id、`Image`/`RectTransform` 字段全限定、内嵌 `ui://` 容错、生成控制器 enum 与 runtime 基类成员同名时显式 `new` 消除隐藏警告。
-- 本轮性能优化：参照 FairyGUI `GObjectPool` 思路，`ListSource` 基于 `UnityEngine.Pool.ObjectPool<GameObject>` 复用动态列表项，`PopupMenu` 复用菜单项；`ComboBox` 下拉改为禁用 prefab 自带 `ListSelection`/`ScrollPaneHost`，并调用 `List.Fill(..., false)` 跳过普通列表选择重绑，避免同帧 `Destroy`/重接线风险。
+- 本轮性能优化：参照 FairyGUI `GObjectPool` 思路，`ListSource` 基于 `UnityEngine.Pool.ObjectPool<GameObject>` 复用动态列表项，`PopupMenu` 复用菜单项；`ComboBox` 下拉改为禁用 prefab 自带 `ListSelection`/`ScrollPaneHost`，并调用 `List.Fill(..., false)` 跳过普通列表选择重绑。进一步把 TextField 逐字符数据从整份 `Run` 复制压缩为 run 索引 + 缓存 advance，`Relation` 同帧合并 RectTransform 写入，列表项每轮只扫描/复位一次按钮，PopupMenu 点击中继复用 `UnityAction`，`Transition.PlayAsync` 去掉谓词闭包。
+- 2026-07-10 工程打磨：`FairyXml` 按 Schema 类型缓存反射字段/特性和 enum alias，避免每个 XML 节点重复扫描；生成脚本旧 `Text/Shape/InputText` 与裸 `Image/RectTransform` 死锁遗留已清理，并加全目录回归；全工程移除 `GetComponent() ?? AddComponent()`，规避 Unity 6.4 `UnityEngine.Object` 假 null 导致的 `MissingComponentException`；FairyGUI vendored SDK 的对象查找调用升级到 Unity 6.4 非弃用 API；PlayMode 结果文件会附失败堆栈。
 - 真跑才暴露的三个 bug（已修 + 新增真射线交互测试 `InteractionRuntimeTests`）：① MovieClip 页空白（`<jta>` movieclip 标签被丢弃，现已识别）；② Popup/Window 按钮点不动（button 根加透明 raycast 面，整块可点）；③ Text 输入框不工作（真因是 `NanamiUI.TextField` 作 InputField 面时 `OnEnable` 清 raycastTarget + 自绘不填 generator；改用原生 InputField 结构：透明 Image 作 targetGraphic + 普通 UI.Text 作 textComponent，placeholder 仍 NanamiUI.TextField。`activeInputHandler` 保持 `1`）。详见 `AGENTS.md`。
 - `InteractionRuntimeTests` 覆盖真射线交互：MovieClip 自播、Window 开关、Popup 开/点项收起、ComboBox 开下拉、Slider 可点跳值、TextInput 可编辑读写。
 - 2026-07-09 交互烘焙完整化：让**转换产物在无 demo 胶水下也具备完整交互**（通用 SDK 发布前提）。补齐按钮关联控制器(tab/单选组)、`overflow=scroll` 自挂 ScrollPane、Slider `min/reverse/wholeNumbers/changeOnClick`、列表选择 + `onClickItem`、ComboBox onChanged 语义、输入框 `SetTextWithoutNotify`/只读/回车提交、Window frame 拖动、右键指针弹菜单、GearLook 置灰传按钮、Depth 前移越位修正。新增 `BakedInteractionTests`（直接实例化 prefab、无胶水、真射线驱动）证明通用工程已具交互。详见 `AGENTS.md`「交互烘焙完整化」。
-- 当前 `Run PlayMode Tests` `101/101`。范围与取舍详见 `AGENTS.md`「发布范围与取舍」。
+- 当前 `Run PlayMode Tests` `133/133`。范围与取舍详见 `AGENTS.md`「发布范围与取舍」。
 
 ## 标准验证流程
 
@@ -109,4 +110,4 @@
 - 专项测试：`DragDepthTests`、`TextLinkTests`、`WindowPopupTests`、`MainNavigationTests`、`NewFeatureTests`；其中 `NewFeatureTests` 覆盖 ComboBox 程序化 `text/value` 设置与 `List.Fill` 动态重填后的 ScrollPane/ListSelection 刷新。
 - 通用工程交互（无 demo 胶水）：`BakedInteractionTests` 直接实例化转换 prefab，真射线驱动，覆盖 tab 换页、单选组互斥、`overflow=scroll` 自挂滚动、输入框结构、Slider 连续拖动。
 
-当前 PlayMode 测试结果为 `101/101` 通过。
+当前 PlayMode 测试结果为 `133/133` 通过。

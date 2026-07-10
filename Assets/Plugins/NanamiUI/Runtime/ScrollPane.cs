@@ -343,7 +343,8 @@ namespace NanamiUI
         {
             if (grip == null || bar == null || grip.GetComponent<Graphic>() == null)
                 return; // 无图形的 grip 收不到射线，不接拖动（烘焙的可见 grip 都带 Image）
-            var g = grip.gameObject.GetComponent<ScrollBarGrip>() ?? grip.gameObject.AddComponent<ScrollBarGrip>();
+            if (!grip.TryGetComponent(out ScrollBarGrip g))
+                g = grip.gameObject.AddComponent<ScrollBarGrip>();
             g._pane = pane;
             g._bar = bar;
             g._horizontal = horizontal;
@@ -389,7 +390,8 @@ namespace NanamiUI
         {
             if (bar == null || grip == null || bar.GetComponent<Graphic>() == null)
                 return; // 轨道需可收射线（烘焙的 bar 带 Image）
-            var t = bar.gameObject.GetComponent<ScrollBarTrack>() ?? bar.gameObject.AddComponent<ScrollBarTrack>();
+            if (!bar.TryGetComponent(out ScrollBarTrack t))
+                t = bar.gameObject.AddComponent<ScrollBarTrack>();
             t._pane = pane;
             t._grip = grip;
             t._horizontal = horizontal;

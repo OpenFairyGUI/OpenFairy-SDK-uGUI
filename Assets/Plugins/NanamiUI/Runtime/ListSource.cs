@@ -54,8 +54,6 @@ namespace NanamiUI
                 setup(item, i);
             }
             PlacePoolRootLast();
-            if (container.Find(ScrollPane.HitName) is RectTransform hit)
-                hit.SetAsFirstSibling();
             list.GetComponent<ScrollPane>()?.RefreshContent();
             if (rebindSelection && list.GetComponent<ListSelection>() is { enabled: true } selection)
                 selection.Rebind();
@@ -67,7 +65,6 @@ namespace NanamiUI
             var item = _pool.Get();
             var rt = (RectTransform)item.transform;
             rt.SetParent(parent, false);
-            ResetButtons(item);
             item.SetActive(true);
             return item;
         }
@@ -90,6 +87,7 @@ namespace NanamiUI
                 () =>
                 {
                     var item = Instantiate(itemPrefab, PoolRoot, false);
+                    ResetButtons(item);
                     item.SetActive(false);
                     return item;
                 },

@@ -44,7 +44,8 @@ namespace NanamiUI
                 if (button != null)
                 {
                     var index = _items.Count;
-                    relay = child.GetComponent<ListSelectionItem>() ?? child.gameObject.AddComponent<ListSelectionItem>();
+                    if (!child.TryGetComponent(out relay))
+                        relay = child.gameObject.AddComponent<ListSelectionItem>();
                     relay.Bind(this, button, index);
                     button.changeStateOnClick = false; // 选择由本组件驱动，禁项本体自翻 selected（复刻 GList 关掉 item changeStateOnClick）
                 }

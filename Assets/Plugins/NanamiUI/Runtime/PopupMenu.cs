@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.Pool;
 
@@ -37,13 +38,14 @@ namespace NanamiUI
                 () =>
                 {
                     var item = UnityEngine.Object.Instantiate(_itemPrefab, PoolRoot, false);
+                    ResetItem(item);
                     item.SetActive(false);
                     return item;
                 },
                 null,
                 item =>
                 {
-                    ResetButton(item);
+                    ResetItem(item);
                     item.transform.SetParent(PoolRoot, false);
                     item.SetActive(false);
                 },
@@ -65,19 +67,15 @@ namespace NanamiUI
             var index = _count++;
             var itemGo = _itemPool.Get();
             itemGo.transform.SetParent(_list, false);
-            ResetButton(itemGo);
             itemGo.SetActive(true);
             var rt = (RectTransform)itemGo.transform;
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
             rt.anchoredPosition = new Vector2(0, -index * _itemSize.y);
             var button = itemGo.GetComponent<ButtonBase>();
             button.title = caption;
-            button.onClick.AddListener(() =>
-            {
-                if (hideOnClickItem)
-                    Hide();
-                callback?.Invoke();
-            });
+            if (!itemGo.TryGetComponent(out PopupMenuItem item))
+                item = itemGo.AddComponent<PopupMenuItem>();
+            item.Bind(this, button, callback);
             return button;
         }
 
@@ -129,8 +127,9 @@ namespace NanamiUI
             }
         }
 
-        private static void ResetButton(GameObject item)
+        private static void ResetItem(GameObject item)
         {
+            item.GetComponent<PopupMenuItem>()?.Unbind();
             if (item.GetComponent<ButtonBase>() is { } button)
             {
                 button.onClick.RemoveAllListeners();
@@ -146,6 +145,41 @@ namespace NanamiUI
             var listH = _count * _itemSize.y;
             _list.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, listH);
             _contentRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, _authoredContentH + (listH - _authoredListH));
+        }
+    }
+
+    // 每个池化菜单项只创建一次 UnityAction；复用时只替换 owner/callback，避免 AddItem 的捕获闭包。
+    internal sealed class PopupMenuItem : MonoBehaviour
+    {
+        private PopupMenu _owner;
+        private ButtonBase _button;
+        private Action _callback;
+        private UnityAction _click;
+
+        internal void Bind(PopupMenu owner, ButtonBase button, Action callback)
+        {
+            Unbind();
+            _owner = owner;
+            _button = button;
+            _callback = callback;
+            _click ??= Click;
+            _button.onClick.AddListener(_click);
+        }
+
+        internal void Unbind()
+        {
+            if (_button != null && _click != null)
+                _button.onClick.RemoveListener(_click);
+            _owner = null;
+            _button = null;
+            _callback = null;
+        }
+
+        private void Click()
+        {
+            if (_owner.hideOnClickItem)
+                _owner.Hide();
+            _callback?.Invoke();
         }
     }
 }

@@ -100,5 +100,47 @@ namespace NanamiUI.Tests
             File.Delete(path);
 #endif
         }
+
+        [Test]
+        public void Every_component_xml_deserializes_with_cached_schema_metadata()
+        {
+#if UNITY_EDITOR
+            var fairyXml = AppDomain.CurrentDomain.GetAssemblies().AsValueEnumerable()
+                .Select(assembly => assembly.GetType("NanamiUI.Editor.FairyXml"))
+                .FirstOrDefault(type => type != null);
+            Assert.IsNotNull(fairyXml, "应能找到编辑器 XML 解析器");
+            var load = fairyXml.GetMethod("LoadComponent");
+            var xmlRoot = Path.Combine(Directory.GetCurrentDirectory(), "UIProject/assets");
+            var checkedCount = 0;
+            foreach (var path in Directory.GetFiles(xmlRoot, "*.xml", SearchOption.AllDirectories))
+            {
+                XDocument doc;
+                try { doc = XDocument.Load(path); }
+                catch { continue; }
+                if (doc.Root?.Name.LocalName != "component")
+                    continue;
+                Assert.DoesNotThrow(() => load.Invoke(null, new object[] { path }), path);
+                checkedCount++;
+            }
+            Assert.Greater(checkedCount, 0);
+#endif
+        }
+
+        [Test]
+        public void Every_generated_script_uses_current_unambiguous_runtime_types()
+        {
+#if UNITY_EDITOR
+            var scriptRoot = Path.Combine(Directory.GetCurrentDirectory(), "Assets/UIProject/Scripts");
+            var failures = new List<string>();
+            foreach (var path in Directory.GetFiles(scriptRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                var code = File.ReadAllText(path);
+                if (code.Contains("NanamiUI.Text ") || code.Contains("NanamiUI.Shape ") || code.Contains("NanamiUI.InputText ")
+                    || code.Contains("public Image ") || code.Contains("public RectTransform "))
+                    failures.Add(Path.GetRelativePath(scriptRoot, path));
+            }
+            Assert.IsEmpty(failures, "生成脚本仍引用旧类型或含歧义短名：\n" + string.Join("\n", failures));
+#endif
+        }
     }
 }

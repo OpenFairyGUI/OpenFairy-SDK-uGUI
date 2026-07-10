@@ -122,7 +122,7 @@ namespace FairyGUI
                 else
                 {
 #if UNITY_2022_2_OR_NEWER
-                    UIContentScaler scaler = GameObject.FindFirstObjectByType<UIContentScaler>();
+                    UIContentScaler scaler = GameObject.FindAnyObjectByType<UIContentScaler>();
 #else
                     UIContentScaler scaler = GameObject.FindObjectOfType<UIContentScaler>();
 #endif

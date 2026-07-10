@@ -48,7 +48,11 @@ namespace NanamiUI.Editor
             private static void Recurse(ITestResultAdaptor r, StringBuilder sb)
             {
                 if (!r.HasChildren && !r.Test.IsSuite)
+                {
                     sb.AppendLine($"{r.TestStatus} {r.Test.FullName}{(r.TestStatus == TestStatus.Passed ? "" : " :: " + r.Message)}");
+                    if (r.TestStatus != TestStatus.Passed && !string.IsNullOrEmpty(r.StackTrace))
+                        sb.AppendLine(r.StackTrace);
+                }
                 if (r.Children != null)
                     foreach (var child in r.Children)
                         Recurse(child, sb);

@@ -108,7 +108,7 @@ namespace FairyGUI
 
             UIConfig.ClearResourceRefs();
 #if UNITY_2023_2_OR_NEWER
-            UIConfig[] configs = GameObject.FindObjectsByType<UIConfig>(FindObjectsSortMode.None);
+            UIConfig[] configs = GameObject.FindObjectsByType<UIConfig>();
 #else
             UIConfig[] configs = GameObject.FindObjectsOfType<UIConfig>();
 #endif

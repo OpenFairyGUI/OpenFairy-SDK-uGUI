@@ -44,7 +44,7 @@ namespace NanamiUI.Tests
             Array.Find(go.GetComponentsInChildren<NanamiUI.Component>(true), c => c.GetType().FullName == fullName);
 
         private static object Field(object owner, string name) => owner.GetType().GetField(name).GetValue(owner);
-        private static bool Selected(object button) => (bool)button.GetType().GetField("selected").GetValue(button);
+        private static bool Selected(object button) => (bool)button.GetType().GetProperty("selected").GetValue(button);
 
         private static string ControllerPage(object owner, string field)
         {

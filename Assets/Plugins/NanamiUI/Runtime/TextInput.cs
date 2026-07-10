@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 namespace NanamiUI
 {
-    // 复刻 FairyGUI GTextInput：可编辑文本，基于 uGUI InputField。显示用 NanamiUI.Text，prompt 用 placeholder Text。
+    // 复刻 FairyGUI GTextInput：可编辑文本，基于 uGUI InputField。显示用 NanamiUI.TextField，prompt 用 placeholder TextField。
     // 已知限制：InputField 的光标定位依赖 textComponent 的 TextGenerator，而 NanamiUI.TextField 走自绘布局，故光标像素位置可能略偏；
     // 文本读写/占位切换/onChanged 均正常。
     public class TextInput : Component

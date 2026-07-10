@@ -252,7 +252,7 @@ namespace FairyGUI
             cachedTransform.localScale = new Vector3(StageCamera.DefaultUnitsPerPixel, StageCamera.DefaultUnitsPerPixel, StageCamera.DefaultUnitsPerPixel);
 
 #if UNITY_2022_2_OR_NEWER
-            StageEngine engine = GameObject.FindFirstObjectByType<StageEngine>();
+            StageEngine engine = GameObject.FindAnyObjectByType<StageEngine>();
 #else
             StageEngine engine = GameObject.FindObjectOfType<StageEngine>();
 #endif

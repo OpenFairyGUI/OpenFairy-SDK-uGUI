@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using ZLinq;
 
 namespace NanamiUI
 {
@@ -51,8 +50,7 @@ namespace NanamiUI
 
         // 找到关闭按钮（frame 下名为 closeButton 的 ButtonBase）并接 Hide。
         protected void BindCloseButton() =>
-            contentPane.GetComponentsInChildren<ButtonBase>(true).AsValueEnumerable()
-                .FirstOrDefault(b => b.name == "closeButton")?.onClick.AddListener(Hide);
+            FindDeep(contentPane, "closeButton")?.GetComponent<ButtonBase>()?.onClick.AddListener(Hide);
 
         // 找到 frame 下的 dragArea 并让拖它移动整个窗口（复刻 Window.dragArea + StartDrag）。dragArea 常是空 graph，补透明射线面。
         protected void BindDragArea()
@@ -71,8 +69,9 @@ namespace NanamiUI
 
         private static RectTransform FindDeep(Transform root, string name)
         {
-            foreach (Transform child in root)
+            for (var i = 0; i < root.childCount; i++)
             {
+                var child = root.GetChild(i);
                 if (child.name == name)
                     return (RectTransform)child;
                 if (FindDeep(child, name) is { } found)

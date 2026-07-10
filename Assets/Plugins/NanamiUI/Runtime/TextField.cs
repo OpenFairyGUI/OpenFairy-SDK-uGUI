@@ -40,7 +40,7 @@ namespace NanamiUI
 
         private static readonly Dictionary<string, Font> Fonts = new();
 
-        private struct Run : IEquatable<Run>
+        private struct Run
         {
             public string Text;
             public int Image;
@@ -50,14 +50,6 @@ namespace NanamiUI
             public string Href;
             public Color32 TL, BL, TR, BR;
 
-            // 显式实现：ValueType.Equals(object) 会逐字符装箱 + 反射比较，而本比较跑在排版的逐字符循环里。
-            // Text/Href 按引用比较即可——同一 run 的所有字符共享同一实例。
-            public bool Equals(Run other) =>
-                ReferenceEquals(Text, other.Text) && Image == other.Image && Size == other.Size
-                && Style == other.Style && Underline == other.Underline && ReferenceEquals(Href, other.Href)
-                && Eq(TL, other.TL) && Eq(BL, other.BL) && Eq(TR, other.TR) && Eq(BR, other.BR);
-
-            private static bool Eq(Color32 a, Color32 b) => a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
         }
 
         private struct Quad
@@ -455,8 +447,9 @@ namespace NanamiUI
 
         private struct Character
         {
-            public Run Run;
+            public int Run;
             public char Value;
+            public float Width;
         }
 
         private struct Line
@@ -521,37 +514,36 @@ namespace NanamiUI
                 var x = 2f + Mathf.Max(0, indent);
                 var baselineY = y + line.Baseline;
                 var runStart = x;
-                var activeRun = default(Run);
-                var hasActiveRun = false;
+                var activeRun = -1;
 
                 for (var i = line.Start; i < line.Start + line.Count; i++)
                 {
                     var character = _characters[i];
-                    if (character.Run.Image >= 0)
+                    var run = runs[character.Run];
+                    if (run.Image >= 0)
                     {
-                        if (hasActiveRun)
+                        if (activeRun >= 0)
                         {
-                            FinishRun(activeRun, runStart, x, y, line.Height, baselineY);
-                            hasActiveRun = false;
+                            FinishRun(runs[activeRun], runStart, x, y, line.Height, baselineY);
+                            activeRun = -1;
                         }
-                        var sprite = imageSprites[character.Run.Image];
-                        _placements.Add((character.Run.Image, new Vector2(x + 1, baselineY - sprite.rect.height * 0.8f)));
-                        x += sprite.rect.width + 2 + letterSpacing;
+                        var sprite = imageSprites[run.Image];
+                        _placements.Add((run.Image, new Vector2(x + 1, baselineY - sprite.rect.height * 0.8f)));
+                        x += character.Width;
                         continue;
                     }
 
-                    if (!hasActiveRun || !activeRun.Equals(character.Run))
+                    if (activeRun != character.Run)
                     {
-                        if (hasActiveRun)
-                            FinishRun(activeRun, runStart, x, y, line.Height, baselineY);
+                        if (activeRun >= 0)
+                            FinishRun(runs[activeRun], runStart, x, y, line.Height, baselineY);
                         activeRun = character.Run;
                         runStart = x;
-                        hasActiveRun = true;
                     }
-                    x += DrawChar(character.Value, character.Run, x, baselineY);
+                    x += DrawChar(character.Value, run, x, baselineY);
                 }
-                if (hasActiveRun)
-                    FinishRun(activeRun, runStart, x, y, line.Height, baselineY);
+                if (activeRun >= 0)
+                    FinishRun(runs[activeRun], runStart, x, y, line.Height, baselineY);
                 y += line.Height + lineSpacing;
             }
         }
@@ -634,12 +626,13 @@ namespace NanamiUI
             for (var i = start; i < start + count; i++)
             {
                 var character = _characters[i];
-                if (character.Run.Image >= 0)
+                var run = _runs[character.Run];
+                if (run.Image >= 0)
                 {
-                    var size = imageSprites[character.Run.Image].rect.size;
+                    var size = imageSprites[run.Image].rect.size;
                     baseline = Mathf.Max(baseline, size.y * 0.8f);
                     descent = Mathf.Max(descent, size.y * 0.2f);
-                    width += size.x + 2 + letterSpacing;
+                    width += character.Width;
                     continue;
                 }
                 float glyphBaseline, glyphHeight;
@@ -652,12 +645,12 @@ namespace NanamiUI
                 }
                 else
                 {
-                    glyphBaseline = Mathf.RoundToInt(character.Run.Size);
-                    glyphHeight = Mathf.RoundToInt(character.Run.Size * 1.25f);
+                    glyphBaseline = Mathf.RoundToInt(run.Size);
+                    glyphHeight = Mathf.RoundToInt(run.Size * 1.25f);
                 }
                 baseline = Mathf.Max(baseline, glyphBaseline);
                 descent = Mathf.Max(descent, glyphHeight - glyphBaseline);
-                width += CharWidth(character.Value, character.Run);
+                width += character.Width;
             }
             if (baseline == 0)
             {
@@ -677,12 +670,14 @@ namespace NanamiUI
             var wordPossible = false;
             var wordLen = 0;
 
-            foreach (var run in runs)
+            for (var runIndex = 0; runIndex < runs.Count; runIndex++)
             {
+                var run = runs[runIndex];
                 if (run.Image >= 0)
                 {
-                    _pendingCharacters.Add(new Character { Run = run });
-                    x += CharWidth('\0', run);
+                    var width = CharWidth('\0', run);
+                    _pendingCharacters.Add(new Character { Run = runIndex, Width = width });
+                    x += width;
                     wordPossible = false;
                     if (wrap && x > rectWidth && _pendingCharacters.Count > 1)
                         CommitLine(_pendingCharacters.Count - 1, ref x);
@@ -713,8 +708,9 @@ namespace NanamiUI
                         wordPossible = true;
                     }
 
-                    _pendingCharacters.Add(new Character { Run = run, Value = ch });
-                    x += CharWidth(ch, run);
+                    var width = CharWidth(ch, run);
+                    _pendingCharacters.Add(new Character { Run = runIndex, Value = ch, Width = width });
+                    x += width;
 
                     if (wrap && x > rectWidth)
                     {
@@ -744,7 +740,7 @@ namespace NanamiUI
                 Width = metrics.Width,
             });
             _pendingCharacters.RemoveRange(0, count);
-            width = _pendingCharacters.AsValueEnumerable().Sum(character => CharWidth(character.Value, character.Run));
+            width = _pendingCharacters.AsValueEnumerable().Sum(character => character.Width);
         }
     }
 }
