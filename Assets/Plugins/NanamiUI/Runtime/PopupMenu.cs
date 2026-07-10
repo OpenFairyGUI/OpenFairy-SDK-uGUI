@@ -1,4 +1,5 @@
 using System;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
@@ -62,7 +63,7 @@ namespace NanamiUI
         }
 
         // 返回项按钮：调用方可直接设 grayed/selected(勾选)/icon 等，无需再包一层 SetItemXxx。
-        public ButtonBase AddItem(string caption, Action callback)
+        public ButtonBase AddItem(string caption)
         {
             var index = _count++;
             var itemGo = _itemPool.Get();
@@ -75,7 +76,7 @@ namespace NanamiUI
             button.title = caption;
             if (!itemGo.TryGetComponent(out PopupMenuItem item))
                 item = itemGo.AddComponent<PopupMenuItem>();
-            item.Bind(this, button, callback);
+            item.Bind(this, button);
             return button;
         }
 
@@ -86,19 +87,19 @@ namespace NanamiUI
             _count = 0;
         }
 
-        public void Show(RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
+        public UniTask Show(RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
         {
             Layout();
             _content.SetActive(true);
-            Root.inst.ShowPopup(_contentRt, target, dir);
+            return Root.inst.ShowPopup(_contentRt, target, dir);
         }
 
         // 在指针处弹出（复刻 PopupMenu.Show() 无 target 时用 touchPosition），供右键上下文菜单。默认 Auto：贴近屏幕底时上翻。
-        public void ShowAtPointer(PointerEventData e, PopupDirection dir = PopupDirection.Auto)
+        public UniTask ShowAtPointer(PointerEventData e, PopupDirection dir = PopupDirection.Auto)
         {
             Layout();
             _content.SetActive(true);
-            Root.inst.ShowPopupAt(_contentRt, Root.inst.ScreenToDesign(e.position, e.pressEventCamera), dir);
+            return Root.inst.ShowPopupAt(_contentRt, Root.inst.ScreenToDesign(e.position, e.pressEventCamera), dir);
         }
 
         public void Hide() => Root.inst.HidePopup(_contentRt);
@@ -148,20 +149,18 @@ namespace NanamiUI
         }
     }
 
-    // 每个池化菜单项只创建一次 UnityAction；复用时只替换 owner/callback，避免 AddItem 的捕获闭包。
+    // 每个池化菜单项只创建一次 UnityAction；复用时只替换 owner，业务点击统一走 ButtonBase.onClick。
     internal sealed class PopupMenuItem : MonoBehaviour
     {
         private PopupMenu _owner;
         private ButtonBase _button;
-        private Action _callback;
         private UnityAction _click;
 
-        internal void Bind(PopupMenu owner, ButtonBase button, Action callback)
+        internal void Bind(PopupMenu owner, ButtonBase button)
         {
             Unbind();
             _owner = owner;
             _button = button;
-            _callback = callback;
             _click ??= Click;
             _button.onClick.AddListener(_click);
         }
@@ -172,14 +171,12 @@ namespace NanamiUI
                 _button.onClick.RemoveListener(_click);
             _owner = null;
             _button = null;
-            _callback = null;
         }
 
         private void Click()
         {
             if (_owner.hideOnClickItem)
                 _owner.Hide();
-            _callback?.Invoke();
         }
     }
 }

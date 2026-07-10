@@ -19,6 +19,43 @@ namespace NanamiUI
         public Ease ease = Ease.OutQuad; // QuadOut
         public float delay;
 
+        [NonSerialized] private Tweener _tweener;
+        [NonSerialized] private IDisplayGear _lockedDisplay;
+        [NonSerialized] private TweenCallback _completeTween;
+
+        protected void KillTween()
+        {
+            _tweener?.Kill();
+            _tweener = null;
+            ReleaseLock();
+        }
+
+        protected void TrackTween(Tweener tweener)
+        {
+            if (displayLock != null)
+            {
+                displayLock.AddLock();
+                _lockedDisplay = displayLock;
+            }
+            _tweener = tweener;
+            _completeTween ??= CompleteTween;
+            _tweener.OnComplete(_completeTween);
+        }
+
+        private void CompleteTween()
+        {
+            _tweener = null;
+            ReleaseLock();
+        }
+
+        private void ReleaseLock()
+        {
+            if (_lockedDisplay == null)
+                return;
+            _lockedDisplay.ReleaseLock();
+            _lockedDisplay = null;
+        }
+
         public abstract void Apply(T page);                            // 烘焙/编辑态：直接置位
         public virtual void Apply(T page, bool animate) => Apply(page); // 默认忽略 animate
     }

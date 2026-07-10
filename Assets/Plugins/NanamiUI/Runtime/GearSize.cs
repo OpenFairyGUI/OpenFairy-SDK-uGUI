@@ -12,9 +12,6 @@ namespace NanamiUI
         public Vector2[] scales;
         public Vector2 defaultScale;
 
-        [NonSerialized] private Tweener _tweener;
-        [NonSerialized] private IDisplayGear _lockedDisplay;
-
         private (Vector2 Size, Vector2 Scale) Values(T page)
         {
             var index = Array.IndexOf(pages, page);
@@ -25,17 +22,6 @@ namespace NanamiUI
         {
             rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
             rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
-        }
-
-        private void KillTween()
-        {
-            _tweener?.Kill();
-            _tweener = null;
-            if (_lockedDisplay != null)
-            {
-                _lockedDisplay.ReleaseLock();
-                _lockedDisplay = null;
-            }
         }
 
         public override void Apply(T page)
@@ -60,25 +46,12 @@ namespace NanamiUI
                 rt.localScale = new Vector3(scale.x, scale.y, 1);
                 return;
             }
-            if (displayLock != null)
-            {
-                displayLock.AddLock();
-                _lockedDisplay = displayLock;
-            }
-            _tweener = DOTween.To(() => 0f, t =>
+            TrackTween(DOTween.To(() => 0f, t =>
             {
                 SetSize(rt, Vector2.Lerp(startSize, size, t));
                 var s = Vector2.Lerp(startScale, scale, t);
                 rt.localScale = new Vector3(s.x, s.y, 1);
-            }, 1f, duration).SetEase(ease).SetDelay(delay).SetLink(rt.gameObject, LinkBehaviour.KillOnDestroy).OnComplete(() =>
-            {
-                _tweener = null;
-                if (_lockedDisplay != null)
-                {
-                    _lockedDisplay.ReleaseLock();
-                    _lockedDisplay = null;
-                }
-            });
+            }, 1f, duration).SetEase(ease).SetDelay(delay).SetLink(rt.gameObject, LinkBehaviour.KillOnDestroy));
         }
     }
 }

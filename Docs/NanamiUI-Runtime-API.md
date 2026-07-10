@@ -165,8 +165,7 @@ public class MovieClip : UnityEngine.UI.Image  // 逐帧动画
     public bool swing;
     public bool playing { get; set; }
     public int frame { get; set; }             // setter 即刷帧并钳进有效范围
-    public UnityEvent onPlayEnd;
-    public void SetPlaySettings(int start = 0, int end = -1, int times = 0, int endAt = -1);
+    public UniTask Play(int start = 0, int end = -1, int times = 1, int endAt = -1);
     public void Rewind();
 }
 
@@ -248,9 +247,9 @@ public sealed class Root : MonoBehaviour       // 顶层覆盖层（GRoot）：�
     public bool hasModalWindow { get; }
     public int activeWindowCount { get; }
     public void Center(RectTransform obj);
-    public void ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = Auto, Action onClose = null);
-    public void ShowPopupAt(RectTransform popup, Vector2 designPos, PopupDirection dir = Down); // 指针处弹出用
-    public void TogglePopup(RectTransform popup, RectTransform target = null, PopupDirection dir = Auto);
+    public UniTask ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = Auto);
+    public UniTask ShowPopupAt(RectTransform popup, Vector2 designPos, PopupDirection dir = Down); // 指针处弹出用
+    public UniTask TogglePopup(RectTransform popup, RectTransform target = null, PopupDirection dir = Auto);
     public void HidePopup(RectTransform popup = null);  // null = 收起全部
     public Vector2 ScreenToDesign(Vector2 screen, Camera camera);
     public Vector2 RootTopLeft(RectTransform node);
@@ -273,10 +272,10 @@ public sealed class PopupMenu : IDisposable
     public bool hideOnClickItem;
     public RectTransform ContentPane { get; }
     public PopupMenu(GameObject contentPrefab, GameObject itemPrefab);
-    public ButtonBase AddItem(string caption, Action callback); // 返回项按钮，可直接设 grayed/selected/icon
+    public ButtonBase AddItem(string caption); // 返回项按钮，可直接设 grayed/selected/icon/onClick
     public void ClearItems();
-    public void Show(RectTransform target = null, PopupDirection dir = Auto);
-    public void ShowAtPointer(PointerEventData e, PopupDirection dir = Auto); // 右键在指针处弹出
+    public UniTask Show(RectTransform target = null, PopupDirection dir = Auto);
+    public UniTask ShowAtPointer(PointerEventData e, PopupDirection dir = Auto); // 右键在指针处弹出
     public void Hide(); public void Dispose();
 }
 ```
@@ -328,9 +327,8 @@ public class Transition : MonoBehaviour        // 复刻 FairyGUI Transition 时
     public bool autoPlay; public int autoPlayTimes; public float autoPlayDelay;
     public TransitionItem[] items;             // Migrate 烘焙
     public bool playing { get; }
-    public void Play(int times = 1, float delay = 0, Action onComplete = null);
-    public void PlayReverse(int times = 1, float delay = 0, Action onComplete = null);
-    public UniTask PlayAsync(int times = 1, float delay = 0); // 播完或被打断后完成
+    public UniTask Play(int times = 1, float delay = 0);
+    public UniTask PlayReverse(int times = 1, float delay = 0); // 播完或被打断后完成
     public void Stop();                        // 复刻 Stop() 默认 setToComplete：item 落终态（倒放落起态），Shake 归位
 }
 ```

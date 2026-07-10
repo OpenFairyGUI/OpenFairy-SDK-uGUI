@@ -1,4 +1,5 @@
 using System.Collections;
+using Cysharp.Threading.Tasks;
 using NanamiUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
@@ -68,10 +69,10 @@ namespace NanamiUI.Tests
         {
             var pm = new NanamiUI.PopupMenu(Load(PopupMenuPrefab), Load(PopupItemPrefab));
             var clicked = 0;
-            pm.AddItem("Item 1", () => clicked++);
-            pm.AddItem("Item 2", () => { });
-            pm.AddItem("Item 3", () => { });
-            pm.AddItem("Item 4", () => { });
+            pm.AddItem("Item 1").onClick.AddListener(() => clicked++);
+            pm.AddItem("Item 2");
+            pm.AddItem("Item 3");
+            pm.AddItem("Item 4");
 
             var target = new GameObject("target", typeof(RectTransform));
             var trt = (RectTransform)target.transform;
@@ -81,7 +82,7 @@ namespace NanamiUI.Tests
             trt.anchoredPosition = new Vector2(60, -48); // fairy (60,48)
             Canvas.ForceUpdateCanvases();
 
-            pm.Show(trt, PopupDirection.Down);
+            var closed = pm.Show(trt, PopupDirection.Down);
             Canvas.ForceUpdateCanvases();
 
             // 期望：在 target 下方 xx=60,yy=48+48=96 → anchoredPosition (60,-96)；高度 = 60 + (4*22 - 56) = 92
@@ -93,30 +94,32 @@ namespace NanamiUI.Tests
             // 点第一项：回调触发 + 菜单收起（hideOnClickItem）。直接调 handler。
             var item = pm.ContentPane.Find("list").GetChild(0);
             ((IPointerClickHandler)item.GetComponent<IPointerClickHandler>()).OnPointerClick(new PointerEventData(EventSystem.current));
-            yield return null;
+            yield return closed.ToCoroutine();
             Assert.AreEqual(1, clicked, "点菜单项应触发其回调");
             Assert.IsFalse(_gr.hasAnyPopup, "hideOnClickItem 应在点项后收起菜单");
         }
 
         [UnityTest]
-        public IEnumerator PopupMenu_clear_items_reuses_items_and_clears_callbacks()
+        public IEnumerator PopupMenu_clear_items_reuses_items_and_clears_listeners()
         {
             var pm = new NanamiUI.PopupMenu(Load(PopupMenuPrefab), Load(PopupItemPrefab));
-            var oldCallback = 0;
-            var freshCallback = 0;
-            var first = pm.AddItem("Old", () => oldCallback++);
+            var oldListener = 0;
+            var freshListener = 0;
+            var first = pm.AddItem("Old");
+            first.onClick.AddListener(() => oldListener++);
             var firstGo = ((UnityEngine.Component)first).gameObject;
 
             pm.ClearItems();
             Assert.AreEqual(0, pm.ContentPane.Find("list").childCount, "ClearItems 应把菜单项移出 active list");
 
-            var second = pm.AddItem("Fresh", () => freshCallback++);
+            var second = pm.AddItem("Fresh");
+            second.onClick.AddListener(() => freshListener++);
             var secondGo = ((UnityEngine.Component)second).gameObject;
             Assert.AreSame(firstGo, secondGo, "PopupMenu 应复用已清空的菜单项，而不是销毁重建");
 
             secondGo.GetComponent<IPointerClickHandler>().OnPointerClick(new PointerEventData(EventSystem.current));
-            Assert.AreEqual(0, oldCallback, "复用菜单项时旧 callback 应被清掉");
-            Assert.AreEqual(1, freshCallback, "复用菜单项应只触发本轮 callback");
+            Assert.AreEqual(0, oldListener, "复用菜单项时旧 listener 应被清掉");
+            Assert.AreEqual(1, freshListener, "复用菜单项应只触发本轮 listener");
             yield return null;
         }
 

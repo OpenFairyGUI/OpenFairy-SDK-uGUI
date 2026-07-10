@@ -1,4 +1,5 @@
 using System;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -98,10 +99,10 @@ namespace NanamiUI
                 return;
             // 展开时点按钮外区域由 Root 的透明 blocker 收起（blocker 在按钮之上截获点击），故这里只管展开。
             RefreshState();
-            ShowDropdown();
+            ShowDropdown().Forget();
         }
 
-        private void ShowDropdown()
+        private async UniTask ShowDropdown()
         {
             if (_items == null || _items.Length == 0 || dropdownPrefab == null)
                 return;
@@ -117,8 +118,11 @@ namespace NanamiUI
                 Build();
             if (_dropdownRt != null)
             {
+                var closed = Root.inst.ShowPopup(_dropdownRt, (RectTransform)transform, popupDirection);
                 SetState(VisualState.Down); // 打开时按钮进 down 态（复刻 GComboBox）
-                Root.inst.ShowPopup(_dropdownRt, (RectTransform)transform, popupDirection, RefreshState); // 关闭（含外点）恢复态
+                await closed;
+                if (this != null)
+                    RefreshState(); // 关闭（含外点）恢复态
             }
         }
 

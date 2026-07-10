@@ -1,13 +1,12 @@
 using Cysharp.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace NanamiUI
 {
     // 复刻 FairyGUI MovieClip：逐帧播放，支持 swing（往返）、repeatDelay（回到首帧的额外停顿）、
-    // timeScale、SetPlaySettings（播放区间/次数/结束帧）。单帧步进（同 FairyGUI OnTimer，非一次排空）。
+    // timeScale、Play（播放区间/次数/结束帧）。单帧步进（同 FairyGUI OnTimer，非一次排空）。
     public class MovieClip : UnityEngine.UI.Image
     {
         private enum Status
@@ -24,7 +23,6 @@ namespace NanamiUI
         public bool swing;
         public float repeatDelay;
         public float timeScale = 1;
-        public UnityEvent onPlayEnd = new();
 
         [SerializeField, FormerlySerializedAs("frame")]
         private int _frame;
@@ -50,7 +48,7 @@ namespace NanamiUI
                 if (_playing == value)
                     return;
                 _playing = value;
-                RestartLoop();
+                RestartLoop().Forget();
             }
         }
 
@@ -73,7 +71,7 @@ namespace NanamiUI
         protected override void OnEnable()
         {
             base.OnEnable();
-            RestartLoop();
+            RestartLoop().Forget();
         }
 
         protected override void OnDisable()
@@ -83,7 +81,7 @@ namespace NanamiUI
         }
 
         // 从 start 帧播到 end 帧（-1=末帧），重复 times 次（0=无限循环），结束停在 endAt 帧（-1=end）。
-        public void SetPlaySettings(int start = 0, int end = -1, int times = 0, int endAt = -1)
+        public UniTask Play(int start = 0, int end = -1, int times = 1, int endAt = -1)
         {
             _start = start;
             _end = end < 0 || end > frames.Length - 1 ? frames.Length - 1 : end;
@@ -95,7 +93,7 @@ namespace NanamiUI
             _frameElapsed = 0;
             frame = start;
             _playing = true;
-            RestartLoop();
+            return RestartLoop();
         }
 
         public void Rewind()
@@ -105,11 +103,12 @@ namespace NanamiUI
             _reversed = false;
         }
 
-        private void RestartLoop()
+        private UniTask RestartLoop()
         {
             var version = ++_playVersion;
-            if (Application.isPlaying && isActiveAndEnabled && _playing && frames is { Length: > 1 } && _status != Status.Ended)
-                Run(version).Forget();
+            return Application.isPlaying && isActiveAndEnabled && _playing && frames is { Length: > 1 } && _status != Status.Ended
+                ? Run(version)
+                : UniTask.CompletedTask;
         }
 
         private async UniTask Run(int version)
@@ -120,6 +119,8 @@ namespace NanamiUI
                 if (this == null || version != _playVersion || !_playing || !isActiveAndEnabled || _status == Status.Ended)
                     return;
                 Advance(Time.deltaTime * timeScale);
+                if (_status == Status.Ended)
+                    return;
             }
         }
 
@@ -181,7 +182,6 @@ namespace NanamiUI
                 _frameElapsed = 0;
                 _status = Status.Ended;
                 frame = _endAt;
-                onPlayEnd.Invoke();
             }
             else
             {

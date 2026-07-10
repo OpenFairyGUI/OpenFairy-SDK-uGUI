@@ -16,24 +16,10 @@ namespace NanamiUI
         public bool[] touchables;
         public bool defaultTouchable = true;
 
-        [NonSerialized] private Tweener _tweener;
-        [NonSerialized] private IDisplayGear _lockedDisplay;
         [NonSerialized] private CanvasGroup _group;
         [NonSerialized] private Grayed _grayedEffect;
         [NonSerialized] private ButtonBase _button;
         [NonSerialized] private bool _effectsResolved;
-
-        // 杀 tween 并释放本 gear 持有的 display lock（DOTween.Kill 不触发 OnComplete，故显式释放，避免锁泄漏）。
-        private void KillTween()
-        {
-            _tweener?.Kill();
-            _tweener = null;
-            if (_lockedDisplay != null)
-            {
-                _lockedDisplay.ReleaseLock();
-                _lockedDisplay = null;
-            }
-        }
 
         // 组透明度按 CanvasGroup.alpha 乘算传播（复刻 FairyGUI 组 alpha），不覆盖各子物体 authored 的 color.a。
         // CanvasGroup 由 Migrate 烘焙；运行时只缓存静态引用，不再动态补组件。
@@ -91,24 +77,11 @@ namespace NanamiUI
                 rt.localEulerAngles = new Vector3(0, 0, rotation);
                 return;
             }
-            if (displayLock != null) // 有同 target 的 GearDisplay：tween 期间保持显示（复刻 GearLook AddDisplayLock）
-            {
-                displayLock.AddLock();
-                _lockedDisplay = displayLock;
-            }
-            _tweener = DOTween.To(() => 0f, t =>
+            TrackTween(DOTween.To(() => 0f, t =>
             {
                 group.alpha = Mathf.Lerp(startAlpha, alpha, t);
                 rt.localEulerAngles = new Vector3(0, 0, Mathf.LerpAngle(startRot, rotation, t));
-            }, 1f, duration).SetEase(ease).SetDelay(delay).SetLink(rt.gameObject, LinkBehaviour.KillOnDestroy).OnComplete(() =>
-            {
-                _tweener = null;
-                if (_lockedDisplay != null)
-                {
-                    _lockedDisplay.ReleaseLock();
-                    _lockedDisplay = null;
-                }
-            });
+            }, 1f, duration).SetEase(ease).SetDelay(delay).SetLink(rt.gameObject, LinkBehaviour.KillOnDestroy));
         }
     }
 }

@@ -183,11 +183,11 @@ namespace NanamiUI.Example
                 for (var i = 1; i <= 4; i++)
                 {
                     var n = i;
-                    _pm.AddItem("Item " + n, () => Debug.Log("click Item " + n));
+                    _pm.AddItem("Item " + n).onClick.AddListener(() => Debug.Log("click Item " + n));
                 }
             }
             var n0 = (UnityEngine.Component)Get(demo, "m_n0");
-            BindButton(n0, () => _pm.Show((RectTransform)n0.transform, NanamiUI.PopupDirection.Down));
+            BindButton(n0, () => _pm.Show((RectTransform)n0.transform, NanamiUI.PopupDirection.Down).Forget());
             BindButton(Get(demo, "m_n1"), () =>
             {
                 if (_popupCom == null)
@@ -195,7 +195,7 @@ namespace NanamiUI.Example
                     _popupCom = Instantiate(popupComPrefab);
                     NanamiUI.Root.inst.Center((RectTransform)_popupCom.transform);
                 }
-                NanamiUI.Root.inst.ShowPopup((RectTransform)_popupCom.transform);
+                NanamiUI.Root.inst.ShowPopup((RectTransform)_popupCom.transform).Forget();
             });
         }
 

@@ -39,7 +39,7 @@
 | B9 | ✅ | Text strikethrough / UBB [url] / html `<font>` / tab | `Text.cs` | |
 | B10 | ⬜ | Text 四角渐变 + 横向逐字裁剪 | `Text.cs` `Migrate.cs` | 逐字裁剪done；渐变推迟 |
 | B11 | ⏸️ | Transition PlayReverse + Skew/Icon | `Transition.cs` `Migrate.cs` | |
-| B12 | ⏸️ | MovieClip 播放特性(swing/repeatDelay/SetPlaySettings) | `MovieClip.cs` | swing/repeatDelay done；SetPlaySettings 推迟 |
+| B12 | ✅ | MovieClip 播放特性(swing/repeatDelay/awaitable Play) | `MovieClip.cs` | `Play` 返回 `UniTask`，显式播放默认一轮 |
 | B13 | ❌ | (不做) 外部 URL 加载 | — | 设计决策：新 SDK 不要 URL 概念，资源直接用 Unity 引用 |
 | B14 | ✅ | InputText 可编辑 | `InputText.cs`(新) `Migrate.cs` | 推迟（大模块，见备注） |
 | B15 | ⏸️ | Label / ScrollBar 运行时类 | `Label.cs` `ScrollBar.cs`(新) `Migrate.cs` | |

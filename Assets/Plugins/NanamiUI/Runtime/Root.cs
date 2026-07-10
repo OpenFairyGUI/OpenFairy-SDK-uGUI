@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -23,7 +24,7 @@ namespace NanamiUI
 
         public RectTransform rect;
         private readonly List<RectTransform> _popups = new();
-        private readonly Dictionary<RectTransform, System.Action> _onClose = new();
+        private readonly Dictionary<RectTransform, AutoResetUniTaskCompletionSource> _popupClosed = new();
         private readonly List<Window> _windows = new();
         private GameObject _blocker;
         private GameObject _modalLayer;
@@ -71,7 +72,7 @@ namespace NanamiUI
         public int activeWindowCount =>
             _windows.AsValueEnumerable().Count(w => w.contentPane != null && w.contentPane.gameObject.activeSelf);
 
-        public void ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto, System.Action onClose = null)
+        public UniTask ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
         {
             if (_popups.Contains(popup))
                 HidePopup(popup); // 去重：已在栈里则先收起该 popup 以上
@@ -82,21 +83,22 @@ namespace NanamiUI
             _blocker.transform.SetAsLastSibling();
             popup.SetAsLastSibling(); // popup 在 blocker 之上
             _popups.Add(popup);
-            if (onClose != null)
-                _onClose[popup] = onClose;
+            var closed = AutoResetUniTaskCompletionSource.Create();
+            _popupClosed.Add(popup, closed);
 
             var pos = GetPopupPosition(popup, target, dir); // 设计坐标（y-down）
             popup.anchorMin = popup.anchorMax = popup.pivot = new Vector2(0, 1);
             popup.anchoredPosition = new Vector2(pos.x, -pos.y);
+            return closed.Task;
         }
 
         // 在指定设计坐标（y-down、左上原点）弹出：先把 popup 摆到该点，再走通用定位（含屏内翻转），
         // 复刻 FairyGUI target==null 时用 touchPosition 定位——供右键上下文菜单在指针处弹出。
-        public void ShowPopupAt(RectTransform popup, Vector2 designPos, PopupDirection dir = PopupDirection.Down)
+        public UniTask ShowPopupAt(RectTransform popup, Vector2 designPos, PopupDirection dir = PopupDirection.Down)
         {
             popup.anchorMin = popup.anchorMax = popup.pivot = new Vector2(0, 1);
             popup.anchoredPosition = new Vector2(designPos.x, -designPos.y);
-            ShowPopup(popup, null, dir);
+            return ShowPopup(popup, null, dir);
         }
 
         // 屏幕点 → Root 设计坐标（y-down）。用于把指针位置传给 ShowPopupAt。
@@ -106,12 +108,14 @@ namespace NanamiUI
             return new Vector2(local.x, -local.y);
         }
 
-        public void TogglePopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
+        public UniTask TogglePopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
         {
             if (_popups.Contains(popup))
+            {
                 HidePopup(popup);
-            else
-                ShowPopup(popup, target, dir);
+                return UniTask.CompletedTask;
+            }
+            return ShowPopup(popup, target, dir);
         }
 
         // popup==null：收起全部；否则收起该 popup 及其上层。
@@ -122,13 +126,14 @@ namespace NanamiUI
                 return;
             for (var i = _popups.Count - 1; i >= from; i--)
             {
-                _popups[i].gameObject.SetActive(false);
-                if (_onClose.Remove(_popups[i], out var onClose))
-                    onClose();
+                var current = _popups[i];
+                current.gameObject.SetActive(false);
                 _popups.RemoveAt(i);
+                if (_popups.Count == 0 && _blocker != null)
+                    _blocker.SetActive(false);
+                if (_popupClosed.Remove(current, out var closed))
+                    closed.TrySetResult();
             }
-            if (_popups.Count == 0 && _blocker != null)
-                _blocker.SetActive(false);
         }
 
         private void EnsureBlocker()

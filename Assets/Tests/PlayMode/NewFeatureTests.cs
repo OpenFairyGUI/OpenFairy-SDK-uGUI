@@ -246,7 +246,7 @@ namespace NanamiUI.Tests
         }
 
         [UnityTest]
-        public IEnumerator MovieClip_setplaysettings_plays_range_and_stops()
+        public IEnumerator MovieClip_play_awaits_range_and_stops()
         {
             var go = new GameObject("mc", typeof(RectTransform), typeof(CanvasRenderer));
             ((RectTransform)go.transform).SetParent(_rig.CanvasRt, false);
@@ -257,13 +257,8 @@ namespace NanamiUI.Tests
             mc.addDelays = new float[mc.frames.Length];
             mc.interval = 0.005f;
 
-            var ended = false;
-            mc.onPlayEnd.AddListener(() => ended = true);
-            mc.SetPlaySettings(0, 2, 1, 0); // 播 0→2 一次，结束停在第 0 帧
-            for (var i = 0; i < 80 && !ended; i++)
-                yield return null;
+            yield return mc.Play(0, 2, 1, 0).ToCoroutine(); // 播 0→2 一次，结束停在第 0 帧
 
-            Assert.IsTrue(ended, "times=1 播完一轮应触发 onPlayEnd");
             Assert.AreEqual(0, mc.frame, "应停在 endAt=0 帧");
 
             Object.Destroy(go);
