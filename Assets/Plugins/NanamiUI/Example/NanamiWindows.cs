@@ -1,3 +1,4 @@
+using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using UnityEngine;
 using ZLinq;
@@ -49,7 +50,11 @@ namespace NanamiUI.Example
                 .SetEase(Ease.OutQuad).SetLink(contentPane.gameObject, LinkBehaviour.KillOnDestroy).OnComplete(HideImmediately);
         }
 
-        protected override void OnShown() => Transition("t1")?.Play();
+        protected override void OnShown()
+        {
+            if (Transition("t1") is { } transition)
+                transition.Play().Forget();
+        }
         protected override void OnHide() => Transition("t1")?.Stop();
 
         private NanamiUI.Transition Transition(string name) =>

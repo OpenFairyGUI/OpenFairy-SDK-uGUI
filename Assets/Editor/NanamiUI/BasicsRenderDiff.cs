@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Xml.Linq;
+using Cysharp.Threading.Tasks;
 using FairyGUI;
 using NanamiUI.TestSupport;
 using UnityEditor;
@@ -358,7 +359,8 @@ namespace NanamiUI.Editor
                 _nanamiInstance.transform.Find("btn_Back").gameObject.SetActive(true);
             foreach (var text in _nanamiInstance.GetComponentsInChildren<NanamiUI.TextField>(true))
                 text.WarmUp();
-            _nanamiInstance.GetComponents<Transition>().AsValueEnumerable().FirstOrDefault(transition => transition.transitionName == "t0")?.Play();
+            if (_nanamiInstance.GetComponents<Transition>().AsValueEnumerable().FirstOrDefault(transition => transition.transitionName == "t0") is { } transition)
+                transition.Play().Forget();
             _nanamiGraphLine = page.Component == "Demo_Graph"
                 ? NanamiUI.Example.GraphDemo.Setup(_nanamiInstance, _changeSprite)
                 : null;

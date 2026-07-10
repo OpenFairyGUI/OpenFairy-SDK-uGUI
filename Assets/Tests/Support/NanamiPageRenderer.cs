@@ -1,4 +1,5 @@
 using System.IO;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -65,7 +66,7 @@ namespace NanamiUI.TestSupport
                 return;
             foreach (var transition in _instance.GetComponents<Transition>())
                 if (transition.transitionName == "t0")
-                    transition.Play();
+                    transition.Play().Forget();
         }
 
         // 实例化烘焙态 prefab（不播 t0）。交互测试在此基础上驱动目标；null（prefab 缺失）由调用方判失败。

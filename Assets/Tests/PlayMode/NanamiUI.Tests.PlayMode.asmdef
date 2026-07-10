@@ -4,6 +4,7 @@
     "references": [
         "NanamiUI.Runtime",
         "NanamiUI.TestSupport",
+        "UniTask",
         "ZLinq.Unity",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

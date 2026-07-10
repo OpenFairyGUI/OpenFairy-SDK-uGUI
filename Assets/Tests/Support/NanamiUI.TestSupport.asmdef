@@ -2,7 +2,8 @@
     "name": "NanamiUI.TestSupport",
     "rootNamespace": "NanamiUI.TestSupport",
     "references": [
-        "NanamiUI.Runtime"
+        "NanamiUI.Runtime",
+        "UniTask"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -1,4 +1,5 @@
 using System.Collections;
+using Cysharp.Threading.Tasks;
 using NanamiUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
@@ -346,17 +347,52 @@ namespace NanamiUI.Tests
             yield return null;
 
             // 正向播到末态（无 yield，避免 Update 再自行 Step 干扰确定性）
-            t.Play();
+            t.Play().Forget();
             t.Step(0.2f);
             Assert.AreEqual(100f, target.anchoredPosition.x, 1f, "正向应到 end x=100");
 
             // 倒放回到起态
-            t.PlayReverse();
+            t.PlayReverse().Forget();
             t.Step(0.2f);
             Assert.AreEqual(0f, target.anchoredPosition.x, 1f, "倒放应回到 start x=0");
 
             Object.Destroy(container.gameObject);
         }
+
+        [UnityTest]
+        public IEnumerator Transition_play_completes_after_finish_and_stop() => UniTask.ToCoroutine(async () =>
+        {
+            var container = Child(_rig.CanvasRt, "c", Vector2.zero, new Vector2(400, 400), false);
+            var target = Child(container, "obj", Vector2.zero, new Vector2(50, 50), true);
+            var t = container.gameObject.AddComponent<Transition>();
+            t.items = new[]
+            {
+                new TransitionItem
+                {
+                    type = TransitionItemType.XY,
+                    target = target,
+                    tween = true,
+                    duration = 0.01f,
+                    start = new[] { 0f, 0f },
+                    end = new[] { 100f, 0f },
+                    positionOffset = Vector2.zero,
+                },
+            };
+
+            await t.Play();
+            Assert.IsFalse(t.playing);
+            Assert.AreEqual(100f, target.anchoredPosition.x, 1f);
+
+            t.items[0].duration = 10;
+            var stopped = t.PlayReverse();
+            await UniTask.Yield();
+            t.Stop();
+            await stopped;
+            Assert.IsFalse(t.playing);
+            Assert.AreEqual(0f, target.anchoredPosition.x, 1f);
+
+            Object.Destroy(container.gameObject);
+        });
 
         [UnityTest]
         public IEnumerator ComboBox_selectedIndex_updates_title_without_firing_onChanged()

@@ -90,7 +90,6 @@ namespace NanamiUI
         private bool _reversed;
         private float _time;
         private int _remainingTimes;
-        private Action _onComplete;
         private float _totalDuration;
         private bool _hasInfinite;
         private int _playVersion;
@@ -100,29 +99,22 @@ namespace NanamiUI
         private void Start()
         {
             if (autoPlay)
-                Play(autoPlayTimes, autoPlayDelay);
+                Play(autoPlayTimes, autoPlayDelay).Forget();
         }
 
         // 倒放（复刻 FairyGUI PlayReverse）：时间轴翻转，各 item 由末态回到起态。用于窗口关闭等"进场倒放"。
-        public void PlayReverse(int times = 1, float delay = 0, Action onComplete = null)
-        {
-            _reversed = true;
-            PlayFrom(times, delay, onComplete);
-        }
+        public UniTask PlayReverse(int times = 1, float delay = 0) => PlayFrom(true, times, delay);
 
-        public void Play(int times = 1, float delay = 0, Action onComplete = null)
-        {
-            _reversed = false;
-            PlayFrom(times, delay, onComplete);
-        }
+        public UniTask Play(int times = 1, float delay = 0) => PlayFrom(false, times, delay);
 
-        private void PlayFrom(int times, float delay, Action onComplete)
+        // 播完、被 Stop/新播放打断或对象销毁后完成；无限循环需由后三者之一结束。
+        private async UniTask PlayFrom(bool reversed, int times, float delay)
         {
+            _reversed = reversed;
             var version = ++_playVersion;
             _playing = true;
             _smoothStart = true;
             _remainingTimes = times;
-            _onComplete = onComplete;
             _time = -delay;
             _totalDuration = 0;
             _hasInfinite = false;
@@ -143,20 +135,23 @@ namespace NanamiUI
                     _totalDuration = Mathf.Max(_totalDuration, item.time + tail);
             }
             Step(0);
-            if (Application.isPlaying && _playing)
-                Run(version).Forget();
+            while (Application.isPlaying && this != null && version == _playVersion && _playing)
+            {
+                await UniTask.Yield(PlayerLoopTiming.Update);
+                if (this == null || version != _playVersion || !_playing)
+                    return;
+                var deltaTime = Time.deltaTime;
+                if (_smoothStart)
+                {
+                    // 复刻 GTweener 的 smoothStart：起播第一帧钳制 dt，吸收前置构建造成的帧尖峰
+                    _smoothStart = false;
+                    deltaTime = Mathf.Clamp(Time.unscaledDeltaTime, 0, Application.targetFrameRate > 0 ? 1f / Application.targetFrameRate : 0.016f);
+                }
+                Step(deltaTime);
+            }
         }
 
         public bool playing => _playing;
-
-        // await 版 Play：播完或被 Stop/新播放打断后完成。
-        public async UniTask PlayAsync(int times = 1, float delay = 0)
-        {
-            Play(times, delay);
-            var version = _playVersion;
-            while (this != null && version == _playVersion && _playing)
-                await UniTask.Yield(PlayerLoopTiming.Update);
-        }
 
         // 复刻 FairyGUI Stop() 默认 setToComplete：未完成 item 落到终态（倒放落回起态）。
         // Shake 必须归位——否则下次 Play 把偏移位当新基准，反复播放/停止位置越漂越远。
@@ -166,7 +161,6 @@ namespace NanamiUI
                 return;
             _playing = false;
             _playVersion++;
-            _onComplete = null;
             foreach (var item in items)
                 if (item.type is TransitionItemType.Sound or TransitionItemType.Nested)
                 {
@@ -181,24 +175,6 @@ namespace NanamiUI
                 var item = items[_reversed ? items.Length - 1 - i : i];
                 if (!item.tween || item.repeat >= 0)
                     Evaluate(item, effectiveTime - item.time);
-            }
-        }
-
-        private async UniTask Run(int version)
-        {
-            while (true)
-            {
-                await UniTask.Yield(PlayerLoopTiming.Update);
-                if (this == null || version != _playVersion || !_playing)
-                    return;
-                var deltaTime = Time.deltaTime;
-                if (_smoothStart)
-                {
-                    // 复刻 GTweener 的 smoothStart：起播第一帧钳制 dt，吸收前置构建造成的帧尖峰
-                    _smoothStart = false;
-                    deltaTime = Mathf.Clamp(Time.unscaledDeltaTime, 0, Application.targetFrameRate > 0 ? 1f / Application.targetFrameRate : 0.016f);
-                }
-                Step(deltaTime);
             }
         }
 
@@ -231,12 +207,7 @@ namespace NanamiUI
                 }
             }
             else
-            {
                 _playing = false;
-                var onComplete = _onComplete;
-                _onComplete = null;
-                onComplete?.Invoke();
-            }
         }
 
         private void Evaluate(TransitionItem item, float local)
@@ -342,9 +313,9 @@ namespace NanamiUI
                 {
                     var nested = (Transition)item.RuntimeTarget;
                     if (_reversed)
-                        nested.PlayReverse(item.playTimes);
+                        nested.PlayReverse(item.playTimes).Forget();
                     else
-                        nested.Play(item.playTimes);
+                        nested.Play(item.playTimes).Forget();
                     break;
                 }
                 case TransitionItemType.Pivot:
