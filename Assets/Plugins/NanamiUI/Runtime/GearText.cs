@@ -9,10 +9,12 @@ namespace NanamiUI
         public string[] values;
         public string defaultValue;
 
+        [NonSerialized] private TextField _textField;
+
         public override void Apply(T page)
         {
             var index = Array.IndexOf(pages, page);
-            target.GetComponentInChildren<TextField>(true).text = index >= 0 ? values[index] : defaultValue;
+            (_textField ??= target.GetComponentInChildren<TextField>(true)).text = index >= 0 ? values[index] : defaultValue;
         }
     }
 }

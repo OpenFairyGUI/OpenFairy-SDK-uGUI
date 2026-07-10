@@ -1,5 +1,5 @@
-using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Pool;
 using UnityEngine.UI;
 
 namespace NanamiUI
@@ -9,27 +9,27 @@ namespace NanamiUI
         public Color color = Color.black;
         public Vector2 offset = new(1, 1);
 
-        private static readonly List<UIVertex> Stream = new();
-
         public override void ModifyMesh(VertexHelper vh)
         {
             if (!IsActive())
                 return;
 
-            Stream.Clear();
-            vh.GetUIVertexStream(Stream);
+            var stream = ListPool<UIVertex>.Get();
+            var output = ListPool<UIVertex>.Get();
+            vh.GetUIVertexStream(stream);
             vh.Clear();
 
-            var output = new List<UIVertex>(Stream.Count * 2);
-            foreach (var vertex in Stream)
+            foreach (var vertex in stream)
             {
                 var copy = vertex;
                 copy.position += new Vector3(offset.x, -offset.y);
                 copy.color = color;
                 output.Add(copy);
             }
-            output.AddRange(Stream);
+            output.AddRange(stream);
             vh.AddUIVertexTriangleStream(output);
+            ListPool<UIVertex>.Release(output);
+            ListPool<UIVertex>.Release(stream);
         }
     }
 }

@@ -111,18 +111,20 @@ namespace NanamiUI
     }
 
     // 挂在窗口 frame 的 dragArea 上：拖动移动整个窗口 contentPane，并把窗口提到最前（复刻 Window.__dragStart→StartDrag）。
-    public sealed class WindowDragArea : UIBehaviour, IBeginDragHandler, IDragHandler
+    public sealed class WindowDragArea : UIBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         [System.NonSerialized] public Window window;
 
         private Vector2 _start;
         private Vector2 _startPointer;
+        private bool _dragging;
         private RectTransform Content => window.Root;
 
         public void OnBeginDrag(PointerEventData e)
         {
             if (e.button != PointerEventData.InputButton.Left)
                 return;
+            _dragging = true;
             Root.inst.BringToFront(window);
             _start = Content.anchoredPosition;
             RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)Content.parent, e.position, e.pressEventCamera, out _startPointer);
@@ -130,8 +132,16 @@ namespace NanamiUI
 
         public void OnDrag(PointerEventData e)
         {
+            if (!_dragging || e.button != PointerEventData.InputButton.Left)
+                return;
             RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)Content.parent, e.position, e.pressEventCamera, out var p);
             Content.anchoredPosition = _start + (p - _startPointer);
+        }
+
+        public void OnEndDrag(PointerEventData e)
+        {
+            if (e.button == PointerEventData.InputButton.Left)
+                _dragging = false;
         }
     }
 }

@@ -151,7 +151,6 @@ namespace NanamiUI.Example
                     if (bar)
                     {
                         bar.value = bar.value + 1 > bar.max ? 0 : bar.value + 1;
-                        bar.Apply();
                     }
                 yield return null;
             }

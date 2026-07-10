@@ -8,10 +8,12 @@ namespace NanamiUI
         public int[] values;
         public int defaultValue;
 
+        [NonSerialized] private TextField _textField;
+
         public override void Apply(T page)
         {
             var index = Array.IndexOf(pages, page);
-            target.GetComponent<TextField>().fontSize = index >= 0 ? values[index] : defaultValue;
+            (_textField ??= target.GetComponent<TextField>()).fontSize = index >= 0 ? values[index] : defaultValue;
         }
     }
 }

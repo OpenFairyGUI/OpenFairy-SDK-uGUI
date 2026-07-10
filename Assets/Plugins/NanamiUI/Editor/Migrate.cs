@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using DG.Tweening;
@@ -10,6 +9,7 @@ using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
 using UnityEngine.UI;
+using ZLinq;
 using Object = UnityEngine.Object;
 using Schema = NanamiUI.Editor.Schema;
 
@@ -44,6 +44,7 @@ namespace NanamiUI.Editor
 
         private class ControllerData
         {
+            public int Index;
             public string Name;
             public Type PageType;
             public string[] PageIds;
@@ -93,7 +94,7 @@ namespace NanamiUI.Editor
             // Collect 会按依赖顺序把它们引用到的（可能未导出、可能跨包的）组件一并带出。
             var scope = Config()?.packages;
             bool InScope(Resource r) => scope == null || scope.Length == 0 || Array.IndexOf(scope, r.Package) >= 0;
-            foreach (var entry in Resources.Values.Where(r => r.Type == Schema.ResourceKind.Component && r.Exported && InScope(r)).ToArray())
+            foreach (var entry in Resources.Values.AsValueEnumerable().Where(r => r.Type == Schema.ResourceKind.Component && r.Exported && InScope(r)).ToArray())
                 Collect(entry, components, images);
 
             foreach (var image in images)
@@ -210,7 +211,7 @@ namespace NanamiUI.Editor
                 var importer = (TextureImporter)AssetImporter.GetAtPath(target);
                 var texture = new Texture2D(2, 2);
                 texture.LoadImage(File.ReadAllBytes(image.File));
-                var grid = image.Scale9Grid.Split(',').Select(int.Parse).ToArray();
+                var grid = image.Scale9Grid.Split(',').AsValueEnumerable().Select(int.Parse).ToArray();
                 importer.spriteBorder = new Vector4(grid[0], texture.height - grid[1] - grid[3], texture.width - grid[0] - grid[2], grid[1]);
                 Object.DestroyImmediate(texture);
                 importer.SaveAndReimport();
@@ -279,7 +280,7 @@ namespace NanamiUI.Editor
             {
                 Size = new Vector2(width, height),
                 Interval = I32(7) / 1000f,
-                AddDelays = frames.Select(frame => frame.AddDelay / 1000f).ToArray(),
+                AddDelays = frames.AsValueEnumerable().Select(frame => frame.AddDelay / 1000f).ToArray(),
                 FrameCount = frameCount,
             };
         }
@@ -318,19 +319,43 @@ namespace NanamiUI.Editor
             var path = ScriptPath(component.File);
             var used = new HashSet<string>();
             var fields = new List<string>();
+            var controllerBindings = new List<(int Index, string Type, string Field)>();
 
-            foreach (var controller in xml.Controllers)
+            for (var controllerIndex = 0; controllerIndex < xml.Controllers.Length; controllerIndex++)
             {
+                var controller = xml.Controllers[controllerIndex];
                 var cname = Identifier(controller.Name);
                 DeleteScript($"{Path.GetDirectoryName(path)}/{name}_{cname}.cs".Replace('\\', '/'));
                 if (used.Add(Field(cname)))
                 {
                     fields.Add(EnumDeclaration(cname, xml.Extension));
                     fields.Add("        {");
-                    fields.AddRange(PageMembers(controller).Select(page => $"            {page.Member},"));
+                    foreach (var page in PageMembers(controller))
+                        fields.Add($"            {page.Member},");
                     fields.Add("        }");
                     fields.Add($"        public Controller<{cname}> {Field(cname)};");
+                    controllerBindings.Add((controllerIndex, cname, Field(cname)));
                 }
+            }
+
+            if (controllerBindings.Count > 0)
+            {
+                fields.Add("");
+                fields.Add("        protected override int GetControllerPage(int controller) => controller switch");
+                fields.Add("        {");
+                foreach (var binding in controllerBindings)
+                    fields.Add($"            {binding.Index} => (int){binding.Field}.page,");
+                fields.Add("            _ => -1,");
+                fields.Add("        };");
+                fields.Add("");
+                fields.Add("        protected override void SetControllerPage(int controller, int page)");
+                fields.Add("        {");
+                fields.Add("            switch (controller)");
+                fields.Add("            {");
+                foreach (var binding in controllerBindings)
+                    fields.Add($"                case {binding.Index}: {binding.Field}.page = ({binding.Type})page; break;");
+                fields.Add("            }");
+                fields.Add("        }");
             }
 
             foreach (var child in xml.DisplayList)
@@ -345,7 +370,7 @@ namespace NanamiUI.Editor
             // 无该控制器时补一个占位 enum，使 Button/ComboBox 仍是可交互的泛型面（Button<button>/ComboBox<button>），
             // 而不是退化成 Component 丢掉点击/下拉。占位 enum 是嵌套类型 `button`，与"button"子节点的 m_button 字段
             // 不同名（type vs m_ 前缀字段），不冲突——Dropdown（有 button 子节点、无 button 控制器、但有 dropdown 资源）正属此例。
-            var buttonController = xml.Controllers.FirstOrDefault(c => c.Name == "button");
+            var buttonController = xml.Controllers.AsValueEnumerable().FirstOrDefault(c => c.Name == "button");
             var isButtonFamily = xml.Extension is Schema.ComponentExtension.Button or Schema.ComponentExtension.ComboBox;
             if (isButtonFamily && buttonController == null)
                 fields.InsertRange(0, new[]
@@ -454,14 +479,15 @@ namespace NanamiUI.Editor
                 foreach (var element in xml.Controllers)
                 {
                     var name = Identifier(element.Name);
-                    var pages = PageMembers(element).ToArray();
+                    var pages = PageMembers(element).AsValueEnumerable().ToArray();
                     var pageType = componentType.GetNestedType(name);
                     controllers[element.Name] = new ControllerData
                     {
+                        Index = controllers.Count,
                         Name = name,
                         PageType = pageType,
-                        PageIds = pages.Select(page => page.Id).ToArray(),
-                        PageValues = pages.Select(page => Enum.Parse(pageType, page.Member)).ToArray(),
+                        PageIds = pages.AsValueEnumerable().Select(page => page.Id).ToArray(),
+                        PageValues = pages.AsValueEnumerable().Select(page => Enum.Parse(pageType, page.Member)).ToArray(),
                         Selected = element.Selected,
                     };
                 }
@@ -478,7 +504,7 @@ namespace NanamiUI.Editor
 
                 if (xml.Mask is { } mask)
                 {
-                    var maskGo = children.First(child => child.Xml.Id == mask).Go;
+                    var maskGo = children.AsValueEnumerable().First(child => child.Xml.Id == mask).Go;
                     maskGo.AddComponent<Mask>().showMaskGraphic = false;
                     foreach (var (_, childGo) in children)
                         if (childGo != maskGo && childGo.transform.parent == rt)
@@ -518,7 +544,7 @@ namespace NanamiUI.Editor
                         && go.GetComponent<ButtonBase>() is { } relatedButton)
                     {
                         relatedButton.relatedOwner = comp;
-                        relatedButton.relatedControllerField = ctrlData.FieldName;
+                        relatedButton.relatedController = ctrlData.Index;
                         relatedButton.relatedPage = Array.IndexOf(ctrlData.PageIds, element.Button.Page);
                         if (relatedButton.relatedPage >= 0)
                         {
@@ -586,7 +612,7 @@ namespace NanamiUI.Editor
 
                 foreach (var field in comp.GetType().GetFields())
                 {
-                    var controller = controllers.Values.FirstOrDefault(data => data.FieldName == field.Name);
+                    var controller = controllers.Values.AsValueEnumerable().FirstOrDefault(data => data.FieldName == field.Name);
                     if (controller != null)
                         field.SetValue(comp, controller.Value);
                     else if (byName.TryGetValue(field.Name, out var go))
@@ -764,15 +790,33 @@ namespace NanamiUI.Editor
                             origin.y - float.Parse(parts[1], CultureInfo.InvariantCulture));
                     }
                     var defaultValue = gearXml.Default is { } def ? Convert(def) : rt.anchoredPosition;
-                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? defaultValue : Convert(value)).ToArray());
+                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').AsValueEnumerable().Select(value => value == "-" ? defaultValue : Convert(value)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, defaultValue);
                 }
                 else if (kind == Schema.GearKind.Color)
                 {
                     var graphic = go.GetComponent<Graphic>();
-                    var def = gearXml.Default is { } value ? ParseColor(value) : graphic.color;
-                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : ParseColor(value)).ToArray());
-                    gearType.GetField("defaultValue").SetValue(gear, def);
+                    var stroke = go.GetComponent<TextStroke>();
+                    (Color Color, Color Stroke) Parse(string value, (Color Color, Color Stroke) fallback)
+                    {
+                        var parts = value.Split(',');
+                        return (ParseColor(parts[0]), parts.Length > 1 ? ParseColor(parts[1]) : fallback.Stroke);
+                    }
+                    (Color Color, Color Stroke) fallback = (graphic.color, stroke != null ? stroke.color : Color.clear);
+                    (Color Color, Color Stroke) def = gearXml.Default is { } defaultValue ? Parse(defaultValue, fallback) : fallback;
+                    var source = gearXml.Values.Split('|');
+                    var colors = new Color[source.Length];
+                    var strokes = new Color[source.Length];
+                    for (var i = 0; i < source.Length; i++)
+                    {
+                        var parsed = source[i] == "-" ? def : Parse(source[i], def);
+                        colors[i] = parsed.Color;
+                        strokes[i] = parsed.Stroke;
+                    }
+                    gearType.GetField("values").SetValue(gear, colors);
+                    gearType.GetField("defaultValue").SetValue(gear, def.Color);
+                    gearType.GetField("strokeValues").SetValue(gear, strokes);
+                    gearType.GetField("defaultStroke").SetValue(gear, def.Stroke);
                 }
                 else if (kind == Schema.GearKind.Look)
                     ConfigureGearLook(gearType, gear, gearXml, go);
@@ -783,19 +827,19 @@ namespace NanamiUI.Editor
                 else if (kind == Schema.GearKind.FontSize)
                 {
                     var def = gearXml.Default is { } value ? int.Parse(value) : go.GetComponent<TextField>().fontSize;
-                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : int.Parse(value)).ToArray());
+                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').AsValueEnumerable().Select(value => value == "-" ? def : int.Parse(value)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
                 else if (kind == Schema.GearKind.Text)
                 {
                     var def = gearXml.Default ?? go.GetComponentInChildren<TextField>(true).text;
-                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : value).ToArray());
+                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').AsValueEnumerable().Select(value => value == "-" ? def : value).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
                 else if (kind == Schema.GearKind.Icon)
                 {
                     var def = gearXml.Default is { } value ? LoadSprite(value, owner.PackageId) : null;
-                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').Select(value => value == "-" ? def : LoadSprite(value, owner.PackageId)).ToArray());
+                    gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').AsValueEnumerable().Select(value => value == "-" ? def : LoadSprite(value, owner.PackageId)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
                 else if (kind == Schema.GearKind.Display)
@@ -914,21 +958,21 @@ namespace NanamiUI.Editor
                     break;
                 case Schema.ShapeType.Polygon:
                     shape.kind = Graph.Kind.Polygon;
-                    var values = element.Points.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
-                    shape.points = Enumerable.Range(0, values.Length / 2).Select(i => new Vector2(values[i * 2], values[i * 2 + 1])).ToArray();
+                    var values = element.Points.Split(',').AsValueEnumerable().Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                    shape.points = ValueEnumerable.Range(0, values.Length / 2).Select(i => new Vector2(values[i * 2], values[i * 2 + 1])).ToArray();
                     break;
                 case Schema.ShapeType.RegularPolygon:
                     shape.kind = Graph.Kind.RegularPolygon;
                     shape.sides = element.Sides;
                     shape.startAngle = element.StartAngle;
-                    shape.distances = element.Distances?.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                    shape.distances = element.Distances?.Split(',').AsValueEnumerable().Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
                     break;
                 default:
                     if (element.Corner is { } corner)
                     {
                         shape.kind = Graph.Kind.RoundedRect;
-                        var radii = corner.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
-                        shape.corners = Enumerable.Range(0, 4).Select(i => radii[Mathf.Min(i, radii.Length - 1)]).ToArray();
+                        var radii = corner.Split(',').AsValueEnumerable().Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                        shape.corners = ValueEnumerable.Range(0, 4).Select(i => radii[Mathf.Min(i, radii.Length - 1)]).ToArray();
                     }
                     else
                         shape.kind = Graph.Kind.Rect;
@@ -940,7 +984,7 @@ namespace NanamiUI.Editor
         {
             var data = MovieClips[resource];
             var basePath = AssetPath(resource.File);
-            movieClip.frames = Enumerable.Range(0, data.FrameCount)
+            movieClip.frames = ValueEnumerable.Range(0, data.FrameCount)
                 .Select(i => AssetDatabase.LoadAssetAtPath<Sprite>(FramePath(basePath, i)))
                 .ToArray();
             movieClip.interval = data.Interval;
@@ -1010,7 +1054,7 @@ namespace NanamiUI.Editor
         }
 
         private static GameObject Child(List<(Schema.Display Xml, GameObject Go)> children, string name) =>
-            children.FirstOrDefault(child => child.Xml.Name == name).Go;
+            children.AsValueEnumerable().FirstOrDefault(child => child.Xml.Name == name).Go;
 
         private static void ConfigureProgressBar(GameObject go, Schema.Extension xml)
         {
@@ -1097,25 +1141,30 @@ namespace NanamiUI.Editor
 
         private static void ConfigureGearLook(Type gearType, object gear, Schema.Gear xml, GameObject go)
         {
-            (float Alpha, float Rotation, bool Grayed) Parse(string value, (float Alpha, float Rotation, bool Grayed) def)
+            (float Alpha, float Rotation, bool Grayed, bool Touchable) Parse(string value, (float Alpha, float Rotation, bool Grayed, bool Touchable) def)
             {
                 if (value == "-")
                     return def;
                 var parts = value.Split(',');
-                return (float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture), parts[2] == "1");
+                return (float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture),
+                    parts[2] == "1", parts.Length < 4 || parts[3] != "0");
             }
 
-            var def = Parse(xml.Default ?? "1,0,0", (1, 0, false));
-            var values = xml.Values.Split('|').Select(value => Parse(value, def)).ToArray();
-            gearType.GetField("alphas").SetValue(gear, values.Select(value => value.Alpha).ToArray());
+            var def = Parse(xml.Default ?? "1,0,0,1", (1, 0, false, true));
+            var values = xml.Values.Split('|').AsValueEnumerable().Select(value => Parse(value, def)).ToArray();
+            gearType.GetField("alphas").SetValue(gear, values.AsValueEnumerable().Select(value => value.Alpha).ToArray());
             gearType.GetField("defaultAlpha").SetValue(gear, def.Alpha);
-            gearType.GetField("rotations").SetValue(gear, values.Select(value => value.Rotation).ToArray());
+            gearType.GetField("rotations").SetValue(gear, values.AsValueEnumerable().Select(value => value.Rotation).ToArray());
             gearType.GetField("defaultRotation").SetValue(gear, def.Rotation);
-            gearType.GetField("grayed").SetValue(gear, values.Select(value => value.Grayed).ToArray());
+            gearType.GetField("grayed").SetValue(gear, values.AsValueEnumerable().Select(value => value.Grayed).ToArray());
             gearType.GetField("defaultGrayed").SetValue(gear, def.Grayed);
+            gearType.GetField("touchables").SetValue(gear, values.AsValueEnumerable().Select(value => value.Touchable).ToArray());
+            gearType.GetField("defaultTouchable").SetValue(gear, def.Touchable);
+            if (!go.TryGetComponent(out CanvasGroup _))
+                go.AddComponent<CanvasGroup>();
             // 会用到置灰的 target 烘一个 disabled 的 Grayed，初始页的开关由 BuildController 应用 gear 时切换；
             // element 自带 grayed 时 ApplyElement 已加（enabled）。
-            if ((def.Grayed || values.Any(value => value.Grayed)) && !go.TryGetComponent(out Grayed _))
+            if ((def.Grayed || values.AsValueEnumerable().Any(value => value.Grayed)) && !go.TryGetComponent(out Grayed _))
             {
                 var effect = go.AddComponent<Grayed>();
                 effect.shader = GrayscaleShader;
@@ -1136,10 +1185,10 @@ namespace NanamiUI.Editor
 
             var fallback = (Size: rt.sizeDelta, Scale: Vector2.one);
             var def = xml.Default is { } defaultValue ? Parse(defaultValue, fallback) : fallback;
-            var values = xml.Values.Split('|').Select(value => Parse(value, def)).ToArray();
-            gearType.GetField("sizes").SetValue(gear, values.Select(value => value.Size).ToArray());
+            var values = xml.Values.Split('|').AsValueEnumerable().Select(value => Parse(value, def)).ToArray();
+            gearType.GetField("sizes").SetValue(gear, values.AsValueEnumerable().Select(value => value.Size).ToArray());
             gearType.GetField("defaultSize").SetValue(gear, def.Size);
-            gearType.GetField("scales").SetValue(gear, values.Select(value => value.Scale).ToArray());
+            gearType.GetField("scales").SetValue(gear, values.AsValueEnumerable().Select(value => value.Scale).ToArray());
             gearType.GetField("defaultScale").SetValue(gear, def.Scale);
         }
 
@@ -1362,7 +1411,7 @@ namespace NanamiUI.Editor
         {
             if (value == null)
                 return (0, 0, 0, 0);
-            var parts = value.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+            var parts = value.Split(',').AsValueEnumerable().Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
             return (parts[0], parts[1], parts[2], parts[3]);
         }
 
@@ -1411,11 +1460,27 @@ namespace NanamiUI.Editor
                         switch (item.type)
                         {
                             case TransitionItemType.Sound:
-                                if (value != null && TryResolve(value, packageId, out var soundResource))
+                                var soundParts = value?.Split(',');
+                                if (soundParts is { Length: > 0 } && TryResolve(soundParts[0], packageId, out var soundResource))
+                                {
                                     item.sound = ImportSound(soundResource);
+                                    if (soundParts.Length > 1)
+                                        item.volume = float.Parse(soundParts[1], CultureInfo.InvariantCulture);
+                                    if (transition.audioSource == null)
+                                    {
+                                        var source = root.GetComponent<AudioSource>();
+                                        if (source == null)
+                                            source = root.AddComponent<AudioSource>();
+                                        source.playOnAwake = false;
+                                        transition.audioSource = source;
+                                    }
+                                }
                                 break;
                             case TransitionItemType.Nested:
-                                item.stringValue = value.Split(',')[0];
+                                var transitionParts = value.Split(',');
+                                item.stringValue = transitionParts[0];
+                                if (transitionParts.Length > 1)
+                                    item.playTimes = int.Parse(transitionParts[1]);
                                 break;
                             case TransitionItemType.Text:
                                 item.stringValue = value;
@@ -1432,7 +1497,13 @@ namespace NanamiUI.Editor
                         var designXY = target.Xml != null ? target.Xml.Position ?? Vector2.zero : Vector2.zero;
                         item.positionOffset = rt.anchoredPosition - new Vector2(designXY.x, -designXY.y);
                         if (itemXml.Path is { } path)
-                            item.pathData = path.Split(',').Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                            item.pathData = path.Split(',').AsValueEnumerable().Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
+                    }
+                    else if (item.type == TransitionItemType.Alpha)
+                    {
+                        var alphaGo = target.Go != null ? target.Go : root;
+                        if (!alphaGo.TryGetComponent(out CanvasGroup _))
+                            alphaGo.AddComponent<CanvasGroup>();
                     }
                     else if (item.type == TransitionItemType.ColorFilter)
                     {
@@ -1487,7 +1558,7 @@ namespace NanamiUI.Editor
                     return new[] { color.r, color.g, color.b, color.a };
                 }
                 default:
-                    return value.Split(',')
+                    return value.Split(',').AsValueEnumerable()
                         .Select(part => part == "-" ? float.NaN : float.Parse(part, CultureInfo.InvariantCulture))
                         .ToArray();
             }
@@ -1528,10 +1599,10 @@ namespace NanamiUI.Editor
             }
 
             var def = Parse(xml.Default ?? "0,p", (0, true));
-            var values = xml.Values.Split('|').Select(value => Parse(value, def)).ToArray();
-            gearType.GetField("frames").SetValue(gear, values.Select(value => value.Frame).ToArray());
+            var values = xml.Values.Split('|').AsValueEnumerable().Select(value => Parse(value, def)).ToArray();
+            gearType.GetField("frames").SetValue(gear, values.AsValueEnumerable().Select(value => value.Frame).ToArray());
             gearType.GetField("defaultFrame").SetValue(gear, def.Frame);
-            gearType.GetField("playings").SetValue(gear, values.Select(value => value.Playing).ToArray());
+            gearType.GetField("playings").SetValue(gear, values.AsValueEnumerable().Select(value => value.Playing).ToArray());
             gearType.GetField("defaultPlaying").SetValue(gear, def.Playing);
         }
 
@@ -1683,7 +1754,7 @@ namespace NanamiUI.Editor
                 text.text = prompt;
                 text.ubb = true;
             }
-            text.imageSprites = Regex.Matches(text.text, @"ui://\w+")
+            text.imageSprites = Regex.Matches(text.text, @"ui://\w+").AsValueEnumerable<Match>()
                 .Select(match => TryResolve(match.Value, owner.PackageId, out var res)
                     ? AssetDatabase.LoadAssetAtPath<Sprite>(SpritePath(res))
                     : null) // 陈旧/非图片的内嵌 img 标签解析不到 → null 占位，不抛
@@ -1765,7 +1836,7 @@ namespace NanamiUI.Editor
             }
             else
             {
-                var textures = charLines
+                var textures = charLines.AsValueEnumerable()
                     .Select(attrs => Resources[fontResource.PackageId + attrs["img"]])
                     .Select(image =>
                     {
@@ -1774,8 +1845,8 @@ namespace NanamiUI.Editor
                         return texture;
                     })
                     .ToArray();
-                var width = textures.Sum(texture => texture.width + 1);
-                var height = textures.Max(texture => texture.height);
+                var width = textures.AsValueEnumerable().Sum(texture => texture.width + 1);
+                var height = textures.AsValueEnumerable().Max(texture => texture.height);
                 var canvas = new Texture2D(width, height, TextureFormat.RGBA32, false);
                 canvas.SetPixels32(new Color32[width * height]);
                 var x = 0;
@@ -1861,7 +1932,7 @@ namespace NanamiUI.Editor
             // GameObject 构造器不处理 RequireComponent，Graphic 需要显式补 CanvasRenderer。
             var types = components.Length == 0
                 ? new[] { typeof(RectTransform) }
-                : components.Prepend(typeof(CanvasRenderer)).Prepend(typeof(RectTransform)).ToArray();
+                : components.AsValueEnumerable().Prepend(typeof(CanvasRenderer)).Prepend(typeof(RectTransform)).ToArray();
             var go = new GameObject(name, types);
             go.transform.SetParent(parent, false);
             return go;
@@ -1877,7 +1948,7 @@ namespace NanamiUI.Editor
             Resources.TryGetValue(value.StartsWith("ui://") ? value[5..] : packageId + value, out resource);
 
         private static Type FindType(string fullName) =>
-            TypeCache.GetTypesDerivedFrom<MonoBehaviour>().First(type => type.FullName == fullName);
+            TypeCache.GetTypesDerivedFrom<MonoBehaviour>().AsValueEnumerable().First(type => type.FullName == fullName);
 
         // 编辑器期查找、序列化进 prefab；运行时组件不做 Shader.Find。
         private static Shader GrayscaleShader => Shader.Find("NanamiUI/UI Grayscale");
@@ -1903,7 +1974,7 @@ namespace NanamiUI.Editor
 
         private static string Identifier(string name)
         {
-            var id = new string((name ?? "").Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray());
+            var id = new string((name ?? "").AsValueEnumerable().Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray());
             return id.Length == 0 || char.IsDigit(id[0]) || Keywords.Contains(id) ? "_" + id : id;
         }
 
@@ -1938,7 +2009,7 @@ namespace NanamiUI.Editor
             if (_configLoaded)
                 return _config;
             _configLoaded = true;
-            var guid = AssetDatabase.FindAssets("t:NanamiUISettings").FirstOrDefault();
+            var guid = AssetDatabase.FindAssets("t:NanamiUISettings").AsValueEnumerable().FirstOrDefault();
             if (guid != null)
                 _config = AssetDatabase.LoadAssetAtPath<NanamiUISettings>(AssetDatabase.GUIDToAssetPath(guid));
             return _config;

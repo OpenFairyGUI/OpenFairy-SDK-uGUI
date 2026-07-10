@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Xml.Linq;
 using FairyGUI;
 using NanamiUI.TestSupport;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
+using ZLinq;
 
 namespace NanamiUI.Editor
 {
@@ -138,7 +138,7 @@ namespace NanamiUI.Editor
             // 不配则 FairyGUI 侧无滚动条、viewport 用满宽，与已烤进滚动条的 NanamiUI 产物产生假 diff。
             UIConfig.verticalScrollBar = "ui://Basics/ScrollBar_VT";
             UIConfig.horizontalScrollBar = "ui://Basics/ScrollBar_HZ";
-            foreach (var package in Pages.Select(page => page.Package).Distinct())
+            foreach (var package in Pages.AsValueEnumerable().Select(page => page.Package).Distinct())
                 if (UIPackage.GetByName(package) == null)
                     UIPackage.AddPackage($"UI/{package}");
             PrepareFairyScene();
@@ -203,7 +203,7 @@ namespace NanamiUI.Editor
             var strip = BuildStrip();
             Save(strip, $"{DocsDir}/{SafeName(page.Name)}_strip.png");
             UnityEngine.Object.DestroyImmediate(strip);
-            foreach (var texture in _fairyThumbs.Concat(_nanamiThumbs))
+            foreach (var texture in _fairyThumbs.AsValueEnumerable().Concat(_nanamiThumbs))
                 if (texture != null)
                     UnityEngine.Object.DestroyImmediate(texture);
             if (_nanamiInstance != null)
@@ -228,7 +228,7 @@ namespace NanamiUI.Editor
             var diff = Diff(fairy, nanami);
             var name = SafeName(page.Name);
             Save(fairy, $"{DocsDir}/{name}_fairygui.png");
-            if (_writeGolden && ParityCatalog.StaticPages.Any(p => p.Name == page.Name))
+            if (_writeGolden && ParityCatalog.StaticPages.AsValueEnumerable().Any(p => p.Name == page.Name))
                 Save(fairy, $"{ParityCatalog.ReferenceDir}/{name}.png");
             Save(nanami, $"{DocsDir}/{name}_nanami.png");
             Save(diff, $"{DocsDir}/{name}_diff.png");
@@ -260,15 +260,15 @@ namespace NanamiUI.Editor
 
         private static void PrepareFairyScene()
         {
-            var stageCameras = UnityEngine.Object.FindObjectsByType<StageCamera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            var stageCamera = stageCameras.FirstOrDefault(stage => stage.GetComponents<Component>().Any(component => component.GetType().Name == "UniversalAdditionalCameraData"))
-                ?? stageCameras.First();
+            var stageCameras = UnityEngine.Object.FindObjectsByType<StageCamera>(FindObjectsInactive.Include);
+            var stageCamera = stageCameras.AsValueEnumerable().FirstOrDefault(stage => stage.GetComponents<Component>().AsValueEnumerable().Any(component => component.GetType().Name == "UniversalAdditionalCameraData"))
+                ?? stageCameras.AsValueEnumerable().First();
             stageCamera.gameObject.SetActive(true);
             stageCamera.enabled = true;
             _fairyCamera = stageCamera.GetComponent<Camera>();
             _fairyCamera.enabled = true;
 
-            _fairyPanel = UnityEngine.Object.FindObjectsByType<UIPanel>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+            _fairyPanel = UnityEngine.Object.FindObjectsByType<UIPanel>(FindObjectsInactive.Include).AsValueEnumerable()
                 .First(panel => panel.packageName == "Basics");
             _fairyPanel.gameObject.SetActive(true);
             _fairyPanel.enabled = true;
@@ -358,7 +358,7 @@ namespace NanamiUI.Editor
                 _nanamiInstance.transform.Find("btn_Back").gameObject.SetActive(true);
             foreach (var text in _nanamiInstance.GetComponentsInChildren<NanamiUI.TextField>(true))
                 text.WarmUp();
-            _nanamiInstance.GetComponents<Transition>().FirstOrDefault(transition => transition.transitionName == "t0")?.Play();
+            _nanamiInstance.GetComponents<Transition>().AsValueEnumerable().FirstOrDefault(transition => transition.transitionName == "t0")?.Play();
             _nanamiGraphLine = page.Component == "Demo_Graph"
                 ? NanamiUI.Example.GraphDemo.Setup(_nanamiInstance, _changeSprite)
                 : null;

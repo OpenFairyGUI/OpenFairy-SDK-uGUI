@@ -28,7 +28,7 @@ namespace NanamiUI
         public Loader iconLoader;
 
         public Component relatedOwner;
-        public string relatedControllerField;
+        public int relatedController = -1;
         public int relatedPage = -1;
         public bool changeStateOnClick = true; // 复刻 GButton：列表项交给 ListSelection 管选择时置 false，禁本体自翻 selected
 
@@ -71,9 +71,9 @@ namespace NanamiUI
                 if (HasRelatedController && Application.isPlaying) // 烘焙期选中态由控制器初始页经 GearButton 驱动，不反向写页
                 {
                     if (selected)
-                        ControllerBinding.SetPage(relatedOwner, relatedControllerField, relatedPage);
-                    else if (mode == ButtonMode.Check && ControllerBinding.GetPage(relatedOwner, relatedControllerField) == relatedPage)
-                        ControllerBinding.SetPage(relatedOwner, relatedControllerField, relatedPage == 0 ? 1 : 0);
+                        ControllerBinding.SetPage(relatedOwner, relatedController, relatedPage);
+                    else if (mode == ButtonMode.Check && ControllerBinding.GetPage(relatedOwner, relatedController) == relatedPage)
+                        ControllerBinding.SetPage(relatedOwner, relatedController, relatedPage == 0 ? 1 : 0);
                 }
             }
         }
@@ -86,7 +86,7 @@ namespace NanamiUI
         }
 
         public bool HasRelatedController =>
-            relatedOwner != null && relatedPage >= 0 && !string.IsNullOrEmpty(relatedControllerField);
+            relatedOwner != null && relatedController >= 0 && relatedPage >= 0;
 
         public abstract void RefreshState();
 
@@ -101,6 +101,42 @@ namespace NanamiUI
 
     public abstract class Button<T> : ButtonBase, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler where T : struct, Enum
     {
+        protected enum VisualState
+        {
+            Up,
+            Down,
+            Over,
+            SelectedOver,
+            Disabled,
+            SelectedDisabled,
+        }
+
+        private static class StatePages
+        {
+            public static readonly T Up;
+            public static readonly T Down;
+            public static readonly T Over;
+            public static readonly T SelectedOver;
+            public static readonly T Disabled;
+            public static readonly T SelectedDisabled;
+            public static readonly bool HasUp;
+            public static readonly bool HasDown;
+            public static readonly bool HasOver;
+            public static readonly bool HasSelectedOver;
+            public static readonly bool HasDisabled;
+            public static readonly bool HasSelectedDisabled;
+
+            static StatePages()
+            {
+                HasUp = Enum.TryParse("up", out Up);
+                HasDown = Enum.TryParse("down", out Down);
+                HasOver = Enum.TryParse("over", out Over);
+                HasSelectedOver = Enum.TryParse("selectedOver", out SelectedOver);
+                HasDisabled = Enum.TryParse("disabled", out Disabled);
+                HasSelectedDisabled = Enum.TryParse("selectedDisabled", out SelectedDisabled);
+            }
+        }
+
         public Controller<T> controller;
 
         private bool _down, _over;
@@ -111,7 +147,7 @@ namespace NanamiUI
                 return;
             _down = true;
             if (mode == ButtonMode.Common) // 仅 Common 按下进 down 态，Check/Radio 按住不变
-                SetState("down");
+                SetState(VisualState.Down);
         }
 
         public void OnPointerUp(PointerEventData eventData)
@@ -165,7 +201,7 @@ namespace NanamiUI
                 }
             }
             else if (HasRelatedController)
-                ControllerBinding.SetPage(relatedOwner, relatedControllerField, relatedPage);
+                ControllerBinding.SetPage(relatedOwner, relatedController, relatedPage);
             onClick.Invoke();
         }
 
@@ -182,31 +218,38 @@ namespace NanamiUI
         {
             RefreshTitle();
             // 复刻 GButton.SetCurrentState：按 grayed/selected/over 择页，不含瞬时按下态（按下由 OnPointerDown 单独处理）。
-            if (grayed && selected && SetState("selectedDisabled"))
+            if (grayed && selected && SetState(VisualState.SelectedDisabled))
                 return;
-            if (grayed && SetState("disabled"))
+            if (grayed && SetState(VisualState.Disabled))
                 return;
             if (selected)
             {
                 if (_over)
-                    SetState("selectedOver", "down");
+                {
+                    if (!SetState(VisualState.SelectedOver))
+                        SetState(VisualState.Down);
+                }
                 else
-                    SetState("down");
+                    SetState(VisualState.Down);
             }
             else
-                SetState(_over ? "over" : "up");
+                SetState(_over ? VisualState.Over : VisualState.Up);
         }
 
-        private bool SetState(params string[] pages)
+        protected bool SetState(VisualState state)
         {
-            foreach (var page in pages)
+            var (exists, page) = state switch
             {
-                if (!Enum.TryParse(page, out T value))
-                    continue;
-                controller.page = value;
-                return true;
-            }
-            return false;
+                VisualState.Up => (StatePages.HasUp, StatePages.Up),
+                VisualState.Down => (StatePages.HasDown, StatePages.Down),
+                VisualState.Over => (StatePages.HasOver, StatePages.Over),
+                VisualState.SelectedOver => (StatePages.HasSelectedOver, StatePages.SelectedOver),
+                VisualState.Disabled => (StatePages.HasDisabled, StatePages.Disabled),
+                _ => (StatePages.HasSelectedDisabled, StatePages.SelectedDisabled),
+            };
+            if (exists)
+                controller.page = page;
+            return exists;
         }
     }
 }

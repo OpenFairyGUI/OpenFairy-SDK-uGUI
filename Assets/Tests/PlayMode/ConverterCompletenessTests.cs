@@ -2,11 +2,11 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Xml.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using ZLinq;
 
 namespace NanamiUI.Tests
 {
@@ -50,7 +50,7 @@ namespace NanamiUI.Tests
                 if (prefab == null)
                     continue; // 未导出/无 prefab（依赖闭包之外）
 
-                var comp = prefab.GetComponents<NanamiUI.Component>().FirstOrDefault();
+                var comp = prefab.GetComponents<NanamiUI.Component>().AsValueEnumerable().FirstOrDefault();
                 var type = comp?.GetType();
                 var ok = ext switch
                 {
@@ -86,7 +86,7 @@ namespace NanamiUI.Tests
   </ComboBox>
 </component>");
 
-            var fairyXml = AppDomain.CurrentDomain.GetAssemblies()
+            var fairyXml = AppDomain.CurrentDomain.GetAssemblies().AsValueEnumerable()
                 .Select(assembly => assembly.GetType("NanamiUI.Editor.FairyXml"))
                 .FirstOrDefault(type => type != null);
             Assert.IsNotNull(fairyXml, "应能找到编辑器 XML 解析器");

@@ -15,11 +15,14 @@ namespace NanamiUI
         private RectTransform _agentRt;
         private GraphicRaycaster _raycaster;
         private object _sourceData;
+        private readonly List<RaycastResult> _results = new();
 
         public bool dragging => _agent != null && _agent.enabled;
 
         public void StartDrag(Canvas root, GraphicRaycaster raycaster, Sprite icon, object sourceData, PointerEventData e)
         {
+            if (dragging)
+                return;
             _sourceData = sourceData;
             _raycaster = raycaster;
             EnsureAgent(root);
@@ -43,9 +46,9 @@ namespace NanamiUI
                 _agent.enabled = false;
             if (_raycaster != null)
             {
-                var results = new List<RaycastResult>();
-                _raycaster.Raycast(e, results);
-                foreach (var r in results) // agent raycastTarget=false → 不自命中；向上找 DropTarget（复刻 DragDropManager 走 parent 链）
+                _results.Clear();
+                _raycaster.Raycast(e, _results);
+                foreach (var r in _results) // agent raycastTarget=false → 不自命中；向上找 DropTarget（复刻 DragDropManager 走 parent 链）
                 {
                     var target = r.gameObject.GetComponentInParent<DropTarget>();
                     if (target != null)
@@ -54,8 +57,18 @@ namespace NanamiUI
                         break;
                     }
                 }
+                _results.Clear();
             }
             _sourceData = null;
+            _raycaster = null;
+        }
+
+        public void Cancel()
+        {
+            if (_agent != null)
+                _agent.enabled = false;
+            _sourceData = null;
+            _raycaster = null;
         }
 
         private void EnsureAgent(Canvas root)

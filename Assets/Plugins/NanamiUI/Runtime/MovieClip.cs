@@ -1,5 +1,7 @@
 using System;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace NanamiUI
@@ -11,11 +13,13 @@ namespace NanamiUI
         public Sprite[] frames;
         public float interval = 0.1f;
         public float[] addDelays;
-        public bool playing = true;
         public bool swing;
         public float repeatDelay;
         public float timeScale = 1;
         public int frame;
+
+        [SerializeField, FormerlySerializedAs("playing")]
+        private bool _playing = true;
 
         [NonSerialized] public Action onPlayEnd;
 
@@ -27,6 +31,31 @@ namespace NanamiUI
         private int _endAt = -1;
         private int _times;
         private int _status; // 0 播放中，1 下一轮，2 结束中，3 已结束
+        private int _playVersion;
+
+        public bool playing
+        {
+            get => _playing;
+            set
+            {
+                if (_playing == value)
+                    return;
+                _playing = value;
+                RestartLoop();
+            }
+        }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            RestartLoop();
+        }
+
+        protected override void OnDisable()
+        {
+            _playVersion++;
+            base.OnDisable();
+        }
 
         public void SetFrame(int value)
         {
@@ -51,7 +80,8 @@ namespace NanamiUI
             _repeatedCount = 0;
             _frameElapsed = 0;
             SetFrame(start);
-            playing = true;
+            _playing = true;
+            RestartLoop();
         }
 
         public void Rewind()
@@ -61,12 +91,27 @@ namespace NanamiUI
             _reversed = false;
         }
 
-        private void Update()
+        private void RestartLoop()
         {
-            if (!playing || frames == null || frames.Length < 2 || _status == 3)
-                return;
+            var version = ++_playVersion;
+            if (Application.isPlaying && isActiveAndEnabled && _playing && frames is { Length: > 1 } && _status != 3)
+                Run(version).Forget();
+        }
 
-            _frameElapsed += Time.deltaTime * timeScale;
+        private async UniTask Run(int version)
+        {
+            while (true)
+            {
+                await UniTask.Yield(PlayerLoopTiming.Update);
+                if (this == null || version != _playVersion || !_playing || !isActiveAndEnabled || _status == 3)
+                    return;
+                Advance(Time.deltaTime * timeScale);
+            }
+        }
+
+        private void Advance(float deltaTime)
+        {
+            _frameElapsed += deltaTime;
             var tt = interval + addDelays[frame];
             if (frame == 0 && _repeatedCount > 0)
                 tt += repeatDelay;

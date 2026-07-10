@@ -1,37 +1,12 @@
-using System;
-
 namespace NanamiUI
 {
-    // 关联控制器驱动（复刻 FairyGUI relatedController）：把 owner 组件上名为 field 的 Controller<T> 结构设到第 page 页。
-    // Controller<T> 是泛型 struct，非泛型面（ButtonBase/测试）只能经反射设页——与 Migrate 烘焙控制器同一条路径。
-    public static class ControllerBinding
+    // 关联控制器驱动（复刻 FairyGUI relatedController）：codegen 为每个组件生成 index→Controller<T> 的静态 switch，
+    // 非泛型 ButtonBase 无需反射、装箱或字符串字段名即可换页。
+    internal static class ControllerBinding
     {
-        public static void SetPage(Component owner, string field, int page)
-        {
-            var fieldInfo = owner.GetType().GetField(field);
-            if (fieldInfo == null)
-                return;
-            var controller = fieldInfo.GetValue(owner); // 装箱 Controller<T>
-            var pageProp = controller.GetType().GetProperty("page");
-            var values = Enum.GetValues(pageProp.PropertyType);
-            if (page < 0 || page >= values.Length)
-                return;
-            var target = values.GetValue(page);
-            if (Equals(pageProp.GetValue(controller), target))
-                return; // 已在目标页：不重复跑 gears（复刻 Controller.selectedIndex 的同值早返回；不放进 page setter 是因烘焙需初次应用）
-            pageProp.SetValue(controller, target); // setter 内跑 gears
-            fieldInfo.SetValue(owner, controller); // 写回 struct 持久化 _page
-        }
+        public static void SetPage(Component owner, int controller, int page) =>
+            owner.SetControllerPage(controller, page);
 
-        // 当前页序号（-1 = 字段不存在），供 Check 按钮取消勾选时判断是否回对页。
-        public static int GetPage(Component owner, string field)
-        {
-            var fieldInfo = owner.GetType().GetField(field);
-            if (fieldInfo == null)
-                return -1;
-            var controller = fieldInfo.GetValue(owner);
-            var pageProp = controller.GetType().GetProperty("page");
-            return Array.IndexOf(Enum.GetValues(pageProp.PropertyType), pageProp.GetValue(controller));
-        }
+        public static int GetPage(Component owner, int controller) => owner.GetControllerPage(controller);
     }
 }

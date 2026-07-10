@@ -12,6 +12,7 @@ namespace NanamiUI
 
         private static Material _material;
         private readonly List<(Graphic graphic, Material original)> _restore = new();
+        private readonly List<Graphic> _graphics = new();
 
         protected override void OnEnable()
         {
@@ -22,11 +23,14 @@ namespace NanamiUI
             if (_material == null)
                 _material = new Material(shader);
             _restore.Clear();
-            foreach (var graphic in GetComponentsInChildren<Graphic>(true))
+            _graphics.Clear();
+            GetComponentsInChildren(true, _graphics);
+            foreach (var graphic in _graphics)
             {
                 _restore.Add((graphic, graphic.material));
                 graphic.material = _material;
             }
+            _graphics.Clear();
         }
 
         // 组件被禁用（如 GearLook 切页取消置灰）→ 还原各 Graphic 原材质。

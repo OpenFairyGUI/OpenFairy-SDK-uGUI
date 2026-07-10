@@ -4,6 +4,7 @@
     "references": [
         "NanamiUI.Runtime",
         "NanamiUI.TestSupport",
+        "ZLinq.Unity",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
@@ -12,7 +13,8 @@
     "allowUnsafeCode": false,
     "overrideReferences": true,
     "precompiledReferences": [
-        "nunit.framework.dll"
+        "nunit.framework.dll",
+        "ZLinq.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [

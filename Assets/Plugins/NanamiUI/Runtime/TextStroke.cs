@@ -1,5 +1,5 @@
-using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Pool;
 using UnityEngine.UI;
 
 namespace NanamiUI
@@ -10,28 +10,29 @@ namespace NanamiUI
         public float width = 1;
 
         private static readonly Vector2[] Directions = { new(-1, 0), new(1, 0), new(0, -1), new(0, 1) };
-        private static readonly List<UIVertex> Stream = new();
 
         public override void ModifyMesh(VertexHelper vh)
         {
             if (!IsActive())
                 return;
 
-            Stream.Clear();
-            vh.GetUIVertexStream(Stream);
+            var stream = ListPool<UIVertex>.Get();
+            var output = ListPool<UIVertex>.Get();
+            vh.GetUIVertexStream(stream);
             vh.Clear();
 
-            var output = new List<UIVertex>(Stream.Count * 5);
             foreach (var direction in Directions)
-                foreach (var vertex in Stream)
+                foreach (var vertex in stream)
                 {
                     var copy = vertex;
                     copy.position += (Vector3)(direction * width);
                     copy.color = color;
                     output.Add(copy);
                 }
-            output.AddRange(Stream);
+            output.AddRange(stream);
             vh.AddUIVertexTriangleStream(output);
+            ListPool<UIVertex>.Release(output);
+            ListPool<UIVertex>.Release(stream);
         }
     }
 }

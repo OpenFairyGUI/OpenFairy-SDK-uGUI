@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
 
@@ -17,6 +18,7 @@ namespace NanamiUI
 
         private ObjectPool<GameObject> _pool;
         private RectTransform _poolRoot;
+        private readonly List<ButtonBase> _buttons = new();
 
         public GameObject GetItem(RectTransform parent)
         {
@@ -77,9 +79,11 @@ namespace NanamiUI
             }
         }
 
-        private static void ResetButtons(GameObject item)
+        private void ResetButtons(GameObject item)
         {
-            foreach (var button in item.GetComponentsInChildren<ButtonBase>(true))
+            _buttons.Clear();
+            item.GetComponentsInChildren(true, _buttons);
+            foreach (var button in _buttons)
             {
                 button.onClick.RemoveAllListeners();
                 button.SetGrayed(false);

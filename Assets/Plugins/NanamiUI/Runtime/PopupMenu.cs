@@ -7,7 +7,7 @@ namespace NanamiUI
 {
     // 复刻 FairyGUI PopupMenu：内容 pane（背景 + 名为 "list" 的竖排列表），AddItem 建项，Show 经 Root 定位。瞬时无 tween。
     // itemPrefab 显式传入（避免为动态 list 重跑 Migrate 烘焙 ListSource；ComboBox/Window1 列表要通用化时再补 ListSource）。
-    public sealed class PopupMenu
+    public sealed class PopupMenu : IDisposable
     {
         public bool hideOnClickItem = true;
 
@@ -104,6 +104,14 @@ namespace NanamiUI
         }
 
         public void Hide() => Root.inst.HidePopup(_contentRt);
+
+        public void Dispose()
+        {
+            if (Root.inst != null)
+                Root.inst.HidePopup(_contentRt);
+            _itemPool.Clear();
+            UnityEngine.Object.Destroy(_content);
+        }
 
         private RectTransform PoolRoot
         {

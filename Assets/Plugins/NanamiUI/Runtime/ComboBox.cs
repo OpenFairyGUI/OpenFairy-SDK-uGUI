@@ -77,8 +77,7 @@ namespace NanamiUI
                 Build();
             if (_dropdownRt != null)
             {
-                if (Enum.TryParse<T>("down", out var down)) // 打开时按钮进 down 态（复刻 GComboBox）
-                    controller.page = down;
+                SetState(VisualState.Down); // 打开时按钮进 down 态（复刻 GComboBox）
                 Root.inst.ShowPopup(_dropdownRt, (RectTransform)transform, popupDirection, RefreshState); // 关闭（含外点）恢复态
             }
         }

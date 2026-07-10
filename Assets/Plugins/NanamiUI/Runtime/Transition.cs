@@ -1,5 +1,6 @@
 using System;
-using System.Linq;
+using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using DG.Tweening.Core.Easing;
 using UnityEngine;
@@ -7,6 +8,23 @@ using UnityEngine.UI;
 
 namespace NanamiUI
 {
+    internal readonly struct TransitionValue
+    {
+        private readonly Vector4 _value;
+        public readonly int Count;
+
+        public TransitionValue(Vector4 value, int count)
+        {
+            _value = value;
+            Count = count;
+        }
+
+        public float this[int index] => _value[index];
+
+        public static TransitionValue Lerp(TransitionValue start, TransitionValue end, float ratio) =>
+            new(Vector4.LerpUnclamped(start._value, end._value, ratio), start.Count);
+    }
+
     public enum TransitionItemType
     {
         XY,
@@ -40,16 +58,19 @@ namespace NanamiUI
         public float[] start;           // NaN = 保持当前值
         public float[] end;
         public string stringValue;
+        public int playTimes = 1;
         public AudioClip sound;
+        public float volume = 1;
         public Vector2 positionOffset;  // FairyGUI xy → anchoredPosition 的固定偏移（pivot/anchor/拉伸锚点修正）
         public float[] pathData;
 
-        [NonSerialized] public TransitionPath Path;
-        [NonSerialized] public bool Applied;
-        [NonSerialized] public bool Started;
-        [NonSerialized] public float[] ResolvedStart;
-        [NonSerialized] public float[] ResolvedEnd;
-        [NonSerialized] public Vector2 ShakeBase;
+        [NonSerialized] internal TransitionPath Path;
+        [NonSerialized] internal bool Applied;
+        [NonSerialized] internal bool Started;
+        [NonSerialized] internal TransitionValue ResolvedStart;
+        [NonSerialized] internal TransitionValue ResolvedEnd;
+        [NonSerialized] internal Vector2 ShakeBase;
+        [NonSerialized] internal UnityEngine.Component RuntimeTarget;
     }
 
     // 复刻 FairyGUI Transition：时间轴上的一组 item，逐帧求值。缓动直接用 DOTween 的 EaseManager
@@ -61,6 +82,7 @@ namespace NanamiUI
         public int autoPlayTimes = 1;
         public float autoPlayDelay;
         public TransitionItem[] items;
+        public AudioSource audioSource;
 
         private bool _playing;
         private bool _smoothStart;
@@ -70,6 +92,9 @@ namespace NanamiUI
         private Action _onComplete;
         private float _totalDuration;
         private bool _hasInfinite;
+        private int _playVersion;
+
+        private static readonly List<Transition> NestedTransitions = new();
 
         private void Start()
         {
@@ -92,6 +117,7 @@ namespace NanamiUI
 
         private void PlayFrom(int times, float delay, Action onComplete)
         {
+            var version = ++_playVersion;
             _playing = true;
             _smoothStart = true;
             _remainingTimes = times;
@@ -105,6 +131,7 @@ namespace NanamiUI
                 item.Started = false;
                 if (item.pathData is { Length: > 0 })
                     item.Path ??= new TransitionPath(item.pathData);
+                item.RuntimeTarget ??= ResolveTarget(item);
                 var tail = item.type == TransitionItemType.Shake ? item.start[1]
                     : !item.tween ? 0
                     : item.repeat < 0 ? float.PositiveInfinity
@@ -115,22 +142,32 @@ namespace NanamiUI
                     _totalDuration = Mathf.Max(_totalDuration, item.time + tail);
             }
             Step(0);
+            if (Application.isPlaying && _playing)
+                Run(version).Forget();
         }
 
-        public void Stop() => _playing = false;
-
-        private void Update()
+        public void Stop()
         {
-            if (!_playing)
-                return;
-            var deltaTime = Time.deltaTime;
-            if (_smoothStart)
+            _playing = false;
+            _playVersion++;
+        }
+
+        private async UniTask Run(int version)
+        {
+            while (true)
             {
-                // 复刻 GTweener 的 smoothStart：起播第一帧钳制 dt，吸收前置构建造成的帧尖峰
-                _smoothStart = false;
-                deltaTime = Mathf.Clamp(Time.unscaledDeltaTime, 0, Application.targetFrameRate > 0 ? 1f / Application.targetFrameRate : 0.016f);
+                await UniTask.Yield(PlayerLoopTiming.Update);
+                if (this == null || version != _playVersion || !_playing)
+                    return;
+                var deltaTime = Time.deltaTime;
+                if (_smoothStart)
+                {
+                    // 复刻 GTweener 的 smoothStart：起播第一帧钳制 dt，吸收前置构建造成的帧尖峰
+                    _smoothStart = false;
+                    deltaTime = Mathf.Clamp(Time.unscaledDeltaTime, 0, Application.targetFrameRate > 0 ? 1f / Application.targetFrameRate : 0.016f);
+                }
+                Step(deltaTime);
             }
-            Step(deltaTime);
         }
 
         public void Step(float deltaTime)
@@ -159,7 +196,9 @@ namespace NanamiUI
             else
             {
                 _playing = false;
-                _onComplete?.Invoke();
+                var onComplete = _onComplete;
+                _onComplete = null;
+                onComplete?.Invoke();
             }
         }
 
@@ -227,10 +266,7 @@ namespace NanamiUI
                 return;
             }
 
-            var value = new float[item.ResolvedStart.Length];
-            for (var i = 0; i < value.Length; i++)
-                value[i] = item.ResolvedStart[i] + (item.ResolvedEnd[i] - item.ResolvedStart[i]) * ratio;
-            ApplyValue(item, value);
+            ApplyValue(item, TransitionValue.Lerp(item.ResolvedStart, item.ResolvedEnd, ratio));
         }
 
         private void ApplyInstant(TransitionItem item)
@@ -243,7 +279,7 @@ namespace NanamiUI
                     break;
                 case TransitionItemType.Animation:
                 {
-                    var movieClip = rt.GetComponent<MovieClip>();
+                    var movieClip = (MovieClip)item.RuntimeTarget;
                     movieClip.playing = item.start[1] != 0;
                     if (item.start[0] >= 0)
                         movieClip.SetFrame((int)item.start[0]);
@@ -251,10 +287,10 @@ namespace NanamiUI
                 }
                 case TransitionItemType.Sound:
                     if (item.sound != null)
-                        AudioSource.PlayClipAtPoint(item.sound, Vector3.zero);
+                        audioSource.PlayOneShot(item.sound, item.volume);
                     break;
                 case TransitionItemType.Nested:
-                    Target(item).GetComponents<Transition>().First(transition => transition.transitionName == item.stringValue).Play();
+                    ((Transition)item.RuntimeTarget).Play(item.playTimes);
                     break;
                 case TransitionItemType.Pivot:
                 {
@@ -266,7 +302,7 @@ namespace NanamiUI
                     break;
                 }
                 case TransitionItemType.Text:
-                    rt.GetComponent<TextField>().text = item.stringValue;
+                    ((TextField)item.RuntimeTarget).text = item.stringValue;
                     break;
                 default:
                     ApplyValue(item, Resolve(item, item.start));
@@ -274,7 +310,7 @@ namespace NanamiUI
             }
         }
 
-        private void ApplyValue(TransitionItem item, float[] value)
+        private void ApplyValue(TransitionItem item, TransitionValue value)
         {
             var rt = Target(item);
             switch (item.type)
@@ -290,40 +326,32 @@ namespace NanamiUI
                     rt.localScale = new Vector3(value[0], value[1], 1);
                     break;
                 case TransitionItemType.Alpha:
-                {
-                    var group = rt.GetComponent<CanvasGroup>();
-                    if (group == null)
-                        group = rt.gameObject.AddComponent<CanvasGroup>();
-                    group.alpha = value[0];
+                    ((CanvasGroup)item.RuntimeTarget).alpha = value[0];
                     break;
-                }
                 case TransitionItemType.Rotation:
                     rt.localEulerAngles = new Vector3(0, 0, -value[0]);
                     break;
                 case TransitionItemType.Skew:
-                    if (rt.GetComponent<Graph>() is { } skewShape) // 目前仅 Shape 支持逐顶点 skew
-                    {
-                        skewShape.skew = new Vector2(value[0], value[1]);
-                        skewShape.SetVerticesDirty();
-                    }
+                    var skewShape = (Graph)item.RuntimeTarget; // 目前仅 Graph 支持逐顶点 skew
+                    skewShape.skew = new Vector2(value[0], value[1]);
+                    skewShape.SetVerticesDirty();
                     break;
                 case TransitionItemType.Color:
-                    rt.GetComponent<Graphic>().color = new Color(value[0], value[1], value[2], value.Length > 3 ? value[3] : 1);
+                    ((Graphic)item.RuntimeTarget).color = new Color(value[0], value[1], value[2], value.Count > 3 ? value[3] : 1);
                     break;
                 case TransitionItemType.ColorFilter:
                     // ColorAdjust 由 Migrate 烘焙在 ColorFilter 目标上。
-                    rt.GetComponent<ColorAdjust>().Set(value[0], value[1], value[2], value[3]);
+                    ((ColorAdjust)item.RuntimeTarget).Set(value[0], value[1], value[2], value[3]);
                     break;
             }
         }
 
-        private float[] Resolve(TransitionItem item, float[] values)
+        private TransitionValue Resolve(TransitionItem item, float[] values)
         {
-            var result = (float[])values.Clone();
-            for (var i = 0; i < result.Length; i++)
-                if (float.IsNaN(result[i]))
-                    result[i] = Current(item, i);
-            return result;
+            var result = Vector4.zero;
+            for (var i = 0; i < values.Length; i++)
+                result[i] = float.IsNaN(values[i]) ? Current(item, i) : values[i];
+            return new TransitionValue(result, values.Length);
         }
 
         private float Current(TransitionItem item, int index)
@@ -336,11 +364,42 @@ namespace NanamiUI
                     : -(rt.anchoredPosition.y - item.positionOffset.y),
                 TransitionItemType.Size => index == 0 ? rt.rect.width : rt.rect.height,
                 TransitionItemType.Scale => index == 0 ? rt.localScale.x : rt.localScale.y,
-                TransitionItemType.Alpha => rt.GetComponent<CanvasGroup>() is { } group ? group.alpha : 1,
+                TransitionItemType.Alpha => ((CanvasGroup)item.RuntimeTarget).alpha,
                 TransitionItemType.Rotation => -rt.localEulerAngles.z,
-                TransitionItemType.Skew => rt.GetComponent<Graph>() is { } shape ? (index == 0 ? shape.skew.x : shape.skew.y) : 0,
+                TransitionItemType.Skew => index == 0 ? ((Graph)item.RuntimeTarget).skew.x : ((Graph)item.RuntimeTarget).skew.y,
                 _ => 0,
             };
+        }
+
+        private UnityEngine.Component ResolveTarget(TransitionItem item)
+        {
+            var target = Target(item);
+            return item.type switch
+            {
+                TransitionItemType.Alpha => target.GetComponent<CanvasGroup>(),
+                TransitionItemType.Animation => target.GetComponent<MovieClip>(),
+                TransitionItemType.Nested => FindNested(target, item.stringValue),
+                TransitionItemType.Text => target.GetComponent<TextField>(),
+                TransitionItemType.Skew => target.GetComponent<Graph>(),
+                TransitionItemType.Color => target.GetComponent<Graphic>(),
+                TransitionItemType.ColorFilter => target.GetComponent<ColorAdjust>(),
+                _ => null,
+            };
+        }
+
+        private static Transition FindNested(RectTransform target, string name)
+        {
+            NestedTransitions.Clear();
+            target.GetComponents(NestedTransitions);
+            Transition result = null;
+            foreach (var transition in NestedTransitions)
+                if (transition.transitionName == name)
+                {
+                    result = transition;
+                    break;
+                }
+            NestedTransitions.Clear();
+            return result;
         }
 
         private RectTransform Target(TransitionItem item) =>

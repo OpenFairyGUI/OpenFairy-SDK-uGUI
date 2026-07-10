@@ -36,6 +36,13 @@ namespace NanamiUI
             Apply();
         }
 
+        protected override void OnDestroy()
+        {
+            if (_material != null)
+                Destroy(_material);
+            base.OnDestroy();
+        }
+
         private void Apply()
         {
             if (shader == null)

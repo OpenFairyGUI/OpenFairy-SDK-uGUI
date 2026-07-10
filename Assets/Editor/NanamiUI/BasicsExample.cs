@@ -1,8 +1,8 @@
 using System.IO;
-using System.Linq;
 using NanamiUI.Editor;
 using UnityEditor;
 using UnityEngine;
+using ZLinq;
 
 namespace NanamiUI.Example
 {
@@ -21,11 +21,11 @@ namespace NanamiUI.Example
             var main = PrefabUtility.LoadPrefabContents(MainPath);
             if (!main.TryGetComponent(out BasicsMain demo))
                 demo = main.AddComponent<BasicsMain>();
-            var prefabs = Directory.GetFiles(Root, "Demo_*.prefab")
+            var prefabs = Directory.GetFiles(Root, "Demo_*.prefab").AsValueEnumerable()
                 .Select(path => AssetDatabase.LoadAssetAtPath<GameObject>(path.Replace('\\', '/')))
                 .Where(prefab => prefab != null)
                 .ToArray();
-            demo.demoNames = prefabs.Select(prefab => prefab.name["Demo_".Length..]).ToArray();
+            demo.demoNames = prefabs.AsValueEnumerable().Select(prefab => prefab.name["Demo_".Length..]).ToArray();
             demo.demoPrefabs = prefabs;
             demo.changeSprite = AssetDatabase.LoadAssetAtPath<Sprite>($"{Root}/images/change.png");
             demo.windowAPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/WindowA.prefab");

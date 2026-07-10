@@ -1,6 +1,6 @@
-using System.Linq;
 using DG.Tweening;
 using UnityEngine;
+using ZLinq;
 
 namespace NanamiUI.Example
 {
@@ -56,6 +56,6 @@ namespace NanamiUI.Example
         protected override void OnHide() => Transition("t1")?.Stop();
 
         private NanamiUI.Transition Transition(string name) =>
-            go.GetComponents<NanamiUI.Transition>().FirstOrDefault(t => t.transitionName == name);
+            go.GetComponents<NanamiUI.Transition>().AsValueEnumerable().FirstOrDefault(t => t.transitionName == name);
     }
 }

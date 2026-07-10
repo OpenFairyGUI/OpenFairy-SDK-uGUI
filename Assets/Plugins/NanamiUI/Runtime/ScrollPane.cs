@@ -1,3 +1,4 @@
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
@@ -29,6 +30,7 @@ namespace NanamiUI
         private Vector2 _velocity;
         private Vector2 _lastPos;
         private bool _dragging;
+        private int _motionVersion;
 
         // 给已烘焙的滚动根（有名为 "viewport" 的 RectMask2D 子节点）挂上运行时滚动。已挂则直接返回（幂等）。返回 null 表示不是滚动结构。
         public static ScrollPane Attach(RectTransform scrollRoot)
@@ -121,6 +123,7 @@ namespace NanamiUI
             if (e.button != PointerEventData.InputButton.Left)
                 return;
             RefreshContent(); // 内容可能在 Attach 之后被 List.Fill 填充，起拖时重算滚动范围
+            _motionVersion++;
             _dragging = true;
             _velocity = Vector2.zero;
             _startContent = _content.anchoredPosition;
@@ -149,7 +152,13 @@ namespace NanamiUI
             onScroll.Invoke();
         }
 
-        public void OnEndDrag(PointerEventData e) => _dragging = false;
+        public void OnEndDrag(PointerEventData e)
+        {
+            if (!_dragging)
+                return;
+            _dragging = false;
+            RunMotion(++_motionVersion).Forget();
+        }
 
         public void OnScroll(PointerEventData e)
         {
@@ -163,7 +172,7 @@ namespace NanamiUI
             else if (max.x > 0)
                 pos.x = Mathf.Clamp(pos.x + e.scrollDelta.y * WheelStep, -max.x, 0);
             _content.anchoredPosition = pos;
-            _velocity = Vector2.zero;
+            StopMotion();
             UpdateGrips();
             onScroll.Invoke();
         }
@@ -180,7 +189,7 @@ namespace NanamiUI
             else
                 pos.y = percent * max.y;
             _content.anchoredPosition = pos;
-            _velocity = Vector2.zero;
+            StopMotion();
             UpdateGrips();
             onScroll.Invoke();
         }
@@ -196,7 +205,7 @@ namespace NanamiUI
             else
                 pos.y = Mathf.Clamp(pos.y + (forward ? _viewSize.y : -_viewSize.y), 0, max.y);
             _content.anchoredPosition = pos;
-            _velocity = Vector2.zero;
+            StopMotion();
             UpdateGrips();
             onScroll.Invoke();
         }
@@ -205,6 +214,7 @@ namespace NanamiUI
         public void ScrollToView(RectTransform target)
         {
             RefreshContent();
+            StopMotion();
             var max = MaxScroll;
             var top = -target.anchoredPosition.y;
             var pos = _content.anchoredPosition;
@@ -217,10 +227,24 @@ namespace NanamiUI
             UpdateGrips();
         }
 
-        private void Update()
+        private void StopMotion()
         {
-            if (_dragging)
-                return;
+            _motionVersion++;
+            _velocity = Vector2.zero;
+        }
+
+        private async UniTask RunMotion(int version)
+        {
+            while (true)
+            {
+                await UniTask.Yield(PlayerLoopTiming.Update);
+                if (this == null || version != _motionVersion || _dragging || !isActiveAndEnabled || !StepMotion())
+                    return;
+            }
+        }
+
+        private bool StepMotion()
+        {
             var pos = _content.anchoredPosition;
             var max = MaxScroll;
             var target = ClampToBounds(pos, max);
@@ -241,11 +265,12 @@ namespace NanamiUI
                     pos = ClampToBounds(pos, max);
             }
             else
-                return;
+                return false;
 
             _content.anchoredPosition = pos;
             UpdateGrips();
             onScroll.Invoke();
+            return true;
         }
 
         // 越界橡皮筋：超出 [min,max] 的部分按阻尼压缩。

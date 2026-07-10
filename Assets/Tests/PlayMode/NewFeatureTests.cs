@@ -1,11 +1,11 @@
 using System.Collections;
-using System.Linq;
 using NanamiUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
+using ZLinq;
 
 namespace NanamiUI.Tests
 {
@@ -16,7 +16,18 @@ namespace NanamiUI.Tests
         private enum RadioPage { up, down, over, selectedOver }
         private class TestButton : Button<RadioPage> { }
         private class TestCombo : ComboBox<RadioPage> { }
-        private class TestOwner : NanamiUI.Component { public Controller<RadioPage> m_ctrl; }
+        private class TestOwner : NanamiUI.Component
+        {
+            public Controller<RadioPage> m_ctrl;
+
+            protected override int GetControllerPage(int controller) => controller == 0 ? (int)m_ctrl.page : -1;
+
+            protected override void SetControllerPage(int controller, int page)
+            {
+                if (controller == 0)
+                    m_ctrl.page = (RadioPage)page;
+            }
+        }
 
         private NanamiPageRenderer _rig;
 
@@ -189,18 +200,24 @@ namespace NanamiUI.Tests
         public IEnumerator GearColor_applies_page_color()
         {
             var go = Child(_rig.CanvasRt, "gc", Vector2.zero, new Vector2(50, 50), true);
+            var stroke = go.gameObject.AddComponent<TextStroke>();
+            stroke.color = Color.black;
             var gear = new GearColor<RadioPage>
             {
                 target = go.gameObject,
                 pages = new[] { RadioPage.up, RadioPage.down },
                 values = new[] { Color.red, Color.green },
                 defaultValue = Color.white,
+                strokeValues = new[] { Color.blue, Color.yellow },
+                defaultStroke = Color.black,
             };
             gear.Apply(RadioPage.down);
             yield return null;
             Assert.AreEqual(Color.green, go.GetComponent<UnityEngine.UI.Image>().color, "GearColor 应把 down 页设为绿");
+            Assert.AreEqual(Color.yellow, stroke.color, "GearColor 应同步应用文字描边色");
             gear.Apply(RadioPage.over); // 不在 pages → default
             Assert.AreEqual(Color.white, go.GetComponent<UnityEngine.UI.Image>().color, "不在页列表应回退 default");
+            Assert.AreEqual(Color.black, stroke.color, "不在页列表时描边色也应回退 default");
         }
 
         [UnityTest]
@@ -219,6 +236,8 @@ namespace NanamiUI.Tests
                 defaultRotation = 0f,
                 grayed = new[] { false, false },
                 defaultGrayed = false,
+                touchables = new[] { true, false },
+                defaultTouchable = true,
             };
             gear.Apply(RadioPage.down);
             yield return null;
@@ -226,6 +245,7 @@ namespace NanamiUI.Tests
             var cg = go.GetComponent<CanvasGroup>();
             Assert.IsNotNull(cg, "GearLook 应加 CanvasGroup 传播组 alpha");
             Assert.AreEqual(0.3f, cg.alpha, 0.001f, "down 页组 alpha 应为 0.3");
+            Assert.IsFalse(cg.blocksRaycasts, "down 页 touchable=false 应关闭射线命中");
             Assert.AreEqual(1f, image.color.a, 0.001f, "子 Image 的 color.a 不应被覆写（CanvasGroup 乘算，非直改子色）");
         }
 
@@ -413,7 +433,7 @@ namespace NanamiUI.Tests
             Assert.AreEqual(0, hit.GetSiblingIndex(), "命中面应保持在最底层，不遮住列表项");
             Assert.GreaterOrEqual(hit.sizeDelta.y, 120f, "命中面高度应随重填后的内容刷新");
 
-            var button = content.GetComponentsInChildren<TestButton>(true).First();
+            var button = content.GetComponentsInChildren<TestButton>(true).AsValueEnumerable().First();
             button.OnPointerClick(new PointerEventData(EventSystem.current));
             Assert.IsTrue(button.selected, "ListSelection 重绑后应由列表选择逻辑选中项");
             Assert.AreEqual(0, clicked, "onClickItem 应按当前动态项索引触发一次");
@@ -436,13 +456,13 @@ namespace NanamiUI.Tests
 
             var fired = 0;
             NanamiUI.List.Fill(root, 2, (item, i) => item.GetComponent<TestButton>().onClick.AddListener(() => fired += i + 1));
-            var first = root.GetComponentsInChildren<TestButton>(false).OrderBy(button => button.transform.GetSiblingIndex()).ToArray();
+            var first = root.GetComponentsInChildren<TestButton>(false).AsValueEnumerable().OrderBy(button => button.transform.GetSiblingIndex()).ToArray();
             first[0].onClick.Invoke();
             Assert.AreEqual(1, fired, "第一次填充的 listener 应触发一次");
 
             fired = 0;
             NanamiUI.List.Fill(root, 2, (item, i) => item.GetComponent<TestButton>().onClick.AddListener(() => fired += 10 + i));
-            var second = root.GetComponentsInChildren<TestButton>(false).OrderBy(button => button.transform.GetSiblingIndex()).ToArray();
+            var second = root.GetComponentsInChildren<TestButton>(false).AsValueEnumerable().OrderBy(button => button.transform.GetSiblingIndex()).ToArray();
             CollectionAssert.AreEquivalent(first, second, "List.Fill 应复用整批 item，而不是销毁重建");
             Assert.AreEqual("__listPool", root.GetChild(root.childCount - 1).name, "池根应留在末尾，不污染可见 item 顺序");
 
@@ -469,7 +489,7 @@ namespace NanamiUI.Tests
                 var b = Child(ownerRt, "b" + i, new Vector2(i * 100, 0), new Vector2(90, 40), false).gameObject.AddComponent<TestButton>();
                 b.mode = ButtonMode.Radio;
                 b.relatedOwner = owner;
-                b.relatedControllerField = "m_ctrl";
+                b.relatedController = 0;
                 b.relatedPage = i;
                 buttons[i] = b;
                 // 同 Migrate 烘焙：每个关联按钮一个 GearButton，换页时同步组内选中态。
@@ -602,7 +622,7 @@ namespace NanamiUI.Tests
             var cb = Child(ownerRt, "cb", Vector2.zero, new Vector2(80, 40), false).gameObject.AddComponent<TestButton>();
             cb.mode = ButtonMode.Check;
             cb.relatedOwner = owner;
-            cb.relatedControllerField = "m_ctrl";
+            cb.relatedController = 0;
             cb.relatedPage = 1; // 勾选 → 控制器第 1 页（down）
             yield return null;
 
@@ -623,7 +643,7 @@ namespace NanamiUI.Tests
             var tab = Child(ownerRt, "tab", Vector2.zero, new Vector2(80, 40), false).gameObject.AddComponent<TestButton>();
             tab.mode = ButtonMode.Common; // Common tab：激活态由控制器 gears 驱动，不靠 selected
             tab.relatedOwner = owner;
-            tab.relatedControllerField = "m_ctrl";
+            tab.relatedController = 0;
             tab.relatedPage = 1;
             yield return null;
 

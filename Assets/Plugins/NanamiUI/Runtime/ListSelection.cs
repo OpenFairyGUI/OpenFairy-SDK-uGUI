@@ -23,7 +23,7 @@ namespace NanamiUI
 
         [System.NonSerialized] public UnityEvent<int> onClickItem = new();
 
-        private readonly List<(Transform Item, ButtonBase Button, UnityAction Action)> _items = new();
+        private readonly List<(Transform Item, ButtonBase Button, ListSelectionItem Relay)> _items = new();
 
         protected override void Start() => Rebind();
 
@@ -31,8 +31,7 @@ namespace NanamiUI
         public void Rebind()
         {
             foreach (var item in _items)
-                if (item.Button != null)
-                    item.Button.onClick.RemoveListener(item.Action);
+                item.Relay?.Unbind();
             _items.Clear();
             var content = List.Container((RectTransform)transform);
             for (var i = 0; i < content.childCount; i++)
@@ -41,15 +40,15 @@ namespace NanamiUI
                 if (child.name == ScrollPane.HitName || child.name == ListSource.PoolName)
                     continue;
                 var button = child.GetComponent<ButtonBase>();
-                UnityAction action = null;
+                ListSelectionItem relay = null;
                 if (button != null)
                 {
                     var index = _items.Count;
-                    action = () => Click(index);
+                    relay = child.GetComponent<ListSelectionItem>() ?? child.gameObject.AddComponent<ListSelectionItem>();
+                    relay.Bind(this, button, index);
                     button.changeStateOnClick = false; // 选择由本组件驱动，禁项本体自翻 selected（复刻 GList 关掉 item changeStateOnClick）
-                    button.onClick.AddListener(action);
                 }
-                _items.Add((child, button, action));
+                _items.Add((child, button, relay));
             }
         }
 
@@ -80,7 +79,7 @@ namespace NanamiUI
             }
         }
 
-        private void Click(int index)
+        internal void Click(int index)
         {
             var clicked = _items[index].Button;
             switch (selectionMode)
@@ -99,5 +98,34 @@ namespace NanamiUI
             }
             onClickItem.Invoke(index);
         }
+    }
+
+    // 运行时列表项点击中继：每个池化 item 只创建一次 UnityAction，Rebind 只更新 owner/index，不再逐项分配闭包。
+    internal sealed class ListSelectionItem : MonoBehaviour
+    {
+        private ListSelection _owner;
+        private ButtonBase _button;
+        private int _index;
+        private UnityAction _action;
+
+        internal void Bind(ListSelection owner, ButtonBase button, int index)
+        {
+            Unbind();
+            _owner = owner;
+            _button = button;
+            _index = index;
+            _action ??= Click;
+            _button.onClick.AddListener(_action);
+        }
+
+        internal void Unbind()
+        {
+            if (_button != null && _action != null)
+                _button.onClick.RemoveListener(_action);
+            _owner = null;
+            _button = null;
+        }
+
+        private void Click() => _owner.Click(_index);
     }
 }

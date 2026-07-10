@@ -2,10 +2,10 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Xml.Linq;
 using System.Xml.Serialization;
 using UnityEngine;
+using ZLinq;
 using Schema = NanamiUI.Editor.Schema;
 
 namespace NanamiUI.Editor
@@ -32,22 +32,22 @@ namespace NanamiUI.Editor
             var result = Activator.CreateInstance(type);
             foreach (var field in type.GetFields())
             {
-                if (field.GetCustomAttributes(typeof(XmlAttributeAttribute), true).FirstOrDefault() is XmlAttributeAttribute attribute)
+                if (field.GetCustomAttributes(typeof(XmlAttributeAttribute), true).AsValueEnumerable().FirstOrDefault() is XmlAttributeAttribute attribute)
                 {
                     if (xml.Attribute(attribute.AttributeName) is { } value)
                         field.SetValue(result, Convert(value.Value, field.FieldType));
                     continue;
                 }
 
-                var array = field.GetCustomAttributes(typeof(XmlArrayAttribute), true).FirstOrDefault() as XmlArrayAttribute;
+                var array = field.GetCustomAttributes(typeof(XmlArrayAttribute), true).AsValueEnumerable().FirstOrDefault() as XmlArrayAttribute;
                 if (array != null)
                 {
                     var container = xml.Element(array.ElementName);
-                    field.SetValue(result, ReadChildren(field, container?.Elements() ?? Enumerable.Empty<XElement>(), typeof(XmlArrayItemAttribute)));
+                    field.SetValue(result, ReadChildren(field, container?.Elements() ?? Array.Empty<XElement>(), typeof(XmlArrayItemAttribute)));
                     continue;
                 }
 
-                var elements = field.GetCustomAttributes(typeof(XmlElementAttribute), true).Cast<XmlElementAttribute>().ToArray();
+                var elements = field.GetCustomAttributes(typeof(XmlElementAttribute), true).AsValueEnumerable().Cast<XmlElementAttribute>().ToArray();
                 if (elements.Length == 0)
                     continue;
 
@@ -55,7 +55,7 @@ namespace NanamiUI.Editor
                     field.SetValue(result, ReadChildren(field, xml.Elements(), typeof(XmlElementAttribute)));
                 else
                 {
-                    var element = elements.FirstOrDefault(e => xml.Element(e.ElementName) != null);
+                    var element = elements.AsValueEnumerable().FirstOrDefault(e => xml.Element(e.ElementName) != null);
                     if (element != null)
                         field.SetValue(result, Read(SchemaType(element.Type, field.FieldType), xml.Element(element.ElementName)));
                 }
@@ -81,9 +81,9 @@ namespace NanamiUI.Editor
                     gear.Kind = (Schema.GearKind)ParseEnum(typeof(Schema.GearKind), xml.Name.LocalName);
                     break;
                 case Schema.Extension extension:
-                    extension.Items = extension.ItemNodes.Select(item => item.Title ?? "").ToArray();
-                    extension.Values = extension.ItemNodes.Any(item => item.Value != null)
-                        ? extension.ItemNodes.Select(item => item.Value ?? item.Title ?? "").ToArray()
+                    extension.Items = extension.ItemNodes.AsValueEnumerable().Select(item => item.Title ?? "").ToArray();
+                    extension.Values = extension.ItemNodes.AsValueEnumerable().Any(item => item.Value != null)
+                        ? extension.ItemNodes.AsValueEnumerable().Select(item => item.Value ?? item.Title ?? "").ToArray()
                         : Array.Empty<string>();
                     break;
             }
@@ -92,10 +92,10 @@ namespace NanamiUI.Editor
         private static Array ReadChildren(System.Reflection.FieldInfo field, IEnumerable<XElement> elements, Type attributeType)
         {
             var itemType = field.FieldType.GetElementType();
-            var bindings = ChildBindings(field, attributeType, itemType).ToArray();
-            var items = elements.Select(element =>
+            var bindings = ChildBindings(field, attributeType, itemType);
+            var items = elements.AsValueEnumerable().Select(element =>
             {
-                var binding = bindings.FirstOrDefault(binding => binding.ElementName == element.Name.LocalName);
+                var binding = bindings.AsValueEnumerable().FirstOrDefault(binding => binding.ElementName == element.Name.LocalName);
                 return binding.Type == null ? null : Read(binding.Type, element);
             }).Where(item => item != null).ToArray();
             var array = Array.CreateInstance(itemType, items.Length);
@@ -104,15 +104,19 @@ namespace NanamiUI.Editor
             return array;
         }
 
-        private static IEnumerable<(string ElementName, Type Type)> ChildBindings(System.Reflection.FieldInfo field, Type attributeType, Type itemType)
+        private static (string ElementName, Type Type)[] ChildBindings(System.Reflection.FieldInfo field, Type attributeType, Type itemType)
         {
             if (attributeType == typeof(XmlArrayItemAttribute))
                 return field.GetCustomAttributes(typeof(XmlArrayItemAttribute), true)
+                    .AsValueEnumerable()
                     .Cast<XmlArrayItemAttribute>()
-                    .Select(attribute => (attribute.ElementName, SchemaType(attribute.Type, itemType)));
+                    .Select(attribute => (attribute.ElementName, SchemaType(attribute.Type, itemType)))
+                    .ToArray();
             return field.GetCustomAttributes(typeof(XmlElementAttribute), true)
+                .AsValueEnumerable()
                 .Cast<XmlElementAttribute>()
-                .Select(attribute => (attribute.ElementName, SchemaType(attribute.Type, itemType)));
+                .Select(attribute => (attribute.ElementName, SchemaType(attribute.Type, itemType)))
+                .ToArray();
         }
 
         private static Type SchemaType(Type type, Type fallback) =>
@@ -153,7 +157,7 @@ namespace NanamiUI.Editor
         private static object ParseEnum(Type type, string value)
         {
             foreach (var field in type.GetFields())
-                if (field.GetCustomAttributes(typeof(XmlEnumAttribute), true).FirstOrDefault() is XmlEnumAttribute xmlEnum && xmlEnum.Name == value)
+                if (field.GetCustomAttributes(typeof(XmlEnumAttribute), true).AsValueEnumerable().FirstOrDefault() is XmlEnumAttribute xmlEnum && xmlEnum.Name == value)
                     return Enum.Parse(type, field.Name);
             // XML 词表的标点风格（left-left / multiple_singleclick）折叠成成员名，忽略大小写（titleType="valueAndmax" 等杂写）。
             return Enum.Parse(type, value.Replace("-", "").Replace("_", ""), true);
@@ -168,7 +172,7 @@ namespace NanamiUI.Editor
         private static (string Id, string Name)[] ParsePages(string value)
         {
             var parts = value.Split(',');
-            return Enumerable.Range(0, parts.Length / 2).Select(i => (parts[i * 2], parts[i * 2 + 1])).ToArray();
+            return ValueEnumerable.Range(0, parts.Length / 2).Select(i => (parts[i * 2], parts[i * 2 + 1])).ToArray();
         }
     }
 }

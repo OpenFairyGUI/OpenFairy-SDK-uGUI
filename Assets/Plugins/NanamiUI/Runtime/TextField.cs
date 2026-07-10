@@ -60,6 +60,9 @@ namespace NanamiUI
         private readonly List<Quad> _quads = new();
         private readonly List<(int Image, Vector2 Position)> _placements = new();
         private readonly List<(Rect Rect, string Href)> _links = new(); // 排版坐标（左上 y-down），供点击命中
+        private readonly List<Run> _runs = new();
+        private readonly Stack<Run> _runStack = new();
+        private readonly StringBuilder _buffer = new();
 
         public void OnPointerClick(PointerEventData eventData)
         {
@@ -100,7 +103,9 @@ namespace NanamiUI
             var idx = tag.IndexOf("href", StringComparison.Ordinal);
             if (idx < 0)
                 return "";
-            var quote = tag.IndexOfAny(new[] { '\'', '"' }, idx);
+            var single = tag.IndexOf('\'', idx);
+            var doubleQuote = tag.IndexOf('"', idx);
+            var quote = single < 0 ? doubleQuote : doubleQuote < 0 ? single : Mathf.Min(single, doubleQuote);
             if (quote < 0)
                 return "";
             var end = tag.IndexOf(tag[quote], quote + 1);
@@ -191,31 +196,21 @@ namespace NanamiUI
 
         private List<Run> Parse()
         {
-            var runs = new List<Run>();
+            _runs.Clear();
+            _runStack.Clear();
+            _buffer.Clear();
             var current = new Run { Size = fontSize, Style = fontStyle, Underline = underlined, Image = -1 };
-            SetColors(ref current, new[] { (Color32)color });
+            SetColor(ref current, color);
             // 复刻 FairyGUI ParseText：归一 \r\n → \n，制表符按 4 空格宽展开。
             var source = (text ?? "").Replace("\r\n", "\n").Replace("\r", "\n").Replace("\t", "    ");
             if (!ubb && !html)
             {
                 current.Text = source;
-                runs.Add(current);
-                return runs;
+                _runs.Add(current);
+                return _runs;
             }
 
-            var stack = new Stack<Run>();
-            var buffer = new StringBuilder();
             var imageIndex = 0;
-
-            void Flush()
-            {
-                if (buffer.Length == 0)
-                    return;
-                var run = current;
-                run.Text = buffer.ToString();
-                runs.Add(run);
-                buffer.Clear();
-            }
 
             var value = source;
             for (var i = 0; i < value.Length; i++)
@@ -230,93 +225,102 @@ namespace NanamiUI
                         var close = value.IndexOf("[/img]", end, System.StringComparison.Ordinal);
                         if (close < 0) // 无闭合：按原文输出（复刻 UBBParser 对残缺标签的容错），不能让 i 倒退
                         {
-                            buffer.Append(ch);
+                            _buffer.Append(ch);
                             continue;
                         }
-                        Flush();
-                        runs.Add(new Run { Image = imageIndex++ });
+                        Flush(current);
+                        _runs.Add(new Run { Image = imageIndex++ });
                         i = close + 5;
                         continue;
                     }
-                    if (tag != null && HandleTag(tag, ref current, stack, Flush))
+                    if (tag != null && HandleTag(tag, ref current))
                     {
                         i = end;
                         continue;
                     }
-                    buffer.Append(ch);
+                    _buffer.Append(ch);
                 }
                 else if (html && ch == '<')
                 {
                     var end = value.IndexOf('>', i);
                     if (end < 0) // 无闭合：按原文输出（复刻 HtmlParser 对残缺标签的容错）
                     {
-                        buffer.Append(ch);
+                        _buffer.Append(ch);
                         continue;
                     }
                     var tag = value[(i + 1)..end].Trim();
                     if (tag.StartsWith("img"))
                     {
-                        Flush();
-                        runs.Add(new Run { Image = imageIndex++ });
+                        Flush(current);
+                        _runs.Add(new Run { Image = imageIndex++ });
                     }
                     else if (tag.StartsWith("a"))
                     {
                         // FairyGUI HtmlParseOptions 默认链接样式：#3A67CC + 下划线。
-                        Flush();
-                        stack.Push(current);
-                        SetColors(ref current, new[] { new Color32(0x3A, 0x67, 0xCC, 0xFF) });
+                        Flush(current);
+                        _runStack.Push(current);
+                        SetColor(ref current, new Color32(0x3A, 0x67, 0xCC, 0xFF));
                         current.Underline = true;
                         current.Href = ParseHref(tag);
                     }
                     else if (tag.StartsWith("font"))
                     {
-                        Flush();
-                        stack.Push(current);
+                        Flush(current);
+                        _runStack.Push(current);
                         if (AttrValue(tag, "color") is { } col)
-                            SetColors(ref current, new[] { ParseColor(col) });
+                            SetColor(ref current, ParseColor(col));
                         if (AttrValue(tag, "size") is { } sz && int.TryParse(sz, out var size))
                             current.Size = size;
                     }
                     else if (tag is "b" or "i" or "u")
                     {
-                        Flush();
-                        stack.Push(current);
+                        Flush(current);
+                        _runStack.Push(current);
                         if (tag == "b") current.Style |= FontStyle.Bold;
                         else if (tag == "i") current.Style |= FontStyle.Italic;
                         else current.Underline = true;
                     }
                     else if (tag is "/a" or "/font" or "/b" or "/i" or "/u")
                     {
-                        Flush();
-                        if (stack.Count > 0)
-                            current = stack.Pop();
+                        Flush(current);
+                        if (_runStack.Count > 0)
+                            current = _runStack.Pop();
                     }
                     else if (tag is "br" or "br/")
-                        buffer.Append('\n');
+                        _buffer.Append('\n');
                     i = end;
                 }
                 else
-                    buffer.Append(ch);
+                    _buffer.Append(ch);
             }
-            Flush();
-            return runs;
+            Flush(current);
+            return _runs;
         }
 
-        private bool HandleTag(string tag, ref Run current, Stack<Run> stack, System.Action flush)
+        private void Flush(Run current)
+        {
+            if (_buffer.Length == 0)
+                return;
+            current.Text = _buffer.ToString();
+            _runs.Add(current);
+            _buffer.Clear();
+        }
+
+        private bool HandleTag(string tag, ref Run current)
         {
             switch (tag)
             {
                 case "b":
                 case "i":
-                    flush();
-                    stack.Push(current);
+                    Flush(current);
+                    _runStack.Push(current);
                     var italic = tag == "i" ? FontStyle.Italic : FontStyle.Normal;
                     var bold = tag == "b" ? FontStyle.Bold : FontStyle.Normal;
                     current.Style |= bold | italic;
                     return true;
                 case "u":
-                    flush();
-                    stack.Push(current);
+                    Flush(current);
+                    _runStack.Push(current);
                     current.Underline = true;
                     return true;
                 case "/b":
@@ -325,49 +329,46 @@ namespace NanamiUI
                 case "/size":
                 case "/color":
                 case "/url":
-                    flush();
-                    if (stack.Count > 0)
-                        current = stack.Pop();
+                    Flush(current);
+                    if (_runStack.Count > 0)
+                        current = _runStack.Pop();
                     return true;
             }
             if (tag.StartsWith("url"))
             {
                 // [url=href] 超链接（复刻 UBBParser）：默认样式 #3A67CC + 下划线，命中回调同 <a>。
-                flush();
-                stack.Push(current);
-                SetColors(ref current, new[] { new Color32(0x3A, 0x67, 0xCC, 0xFF) });
+                Flush(current);
+                _runStack.Push(current);
+                SetColor(ref current, new Color32(0x3A, 0x67, 0xCC, 0xFF));
                 current.Underline = true;
                 current.Href = tag.StartsWith("url=") ? tag[4..].Trim('\'', '"') : "";
                 return true;
             }
             if (tag.StartsWith("size="))
             {
-                flush();
-                stack.Push(current);
+                Flush(current);
+                _runStack.Push(current);
                 current.Size = int.Parse(tag[5..]);
                 return true;
             }
             if (tag.StartsWith("color="))
             {
-                flush();
-                stack.Push(current);
+                Flush(current);
+                _runStack.Push(current);
                 var parts = tag[6..].Split(',');
-                var colors = new Color32[parts.Length];
-                for (var i = 0; i < parts.Length; i++)
-                    colors[i] = ParseColor(parts[i]);
-                SetColors(ref current, colors);
+                current.TL = ParseColor(parts[0]);
+                current.BL = parts.Length > 1 ? ParseColor(parts[1]) : current.TL;
+                current.TR = parts.Length > 2 ? ParseColor(parts[2]) : current.TL;
+                current.BR = parts.Length > 3 ? ParseColor(parts[3]) : parts.Length > 2 ? current.TR : current.BL;
                 return true;
             }
             return false;
         }
 
         // FillVertexColors 语义：2 色为纵向渐变，4 色为四角 [左上,左下,右上,右下]。
-        private static void SetColors(ref Run run, Color32[] colors)
+        private static void SetColor(ref Run run, Color32 color)
         {
-            run.TL = colors[0];
-            run.BL = colors.Length > 1 ? colors[1] : colors[0];
-            run.TR = colors.Length > 2 ? colors[2] : colors[0];
-            run.BR = colors.Length > 3 ? colors[3] : colors.Length > 2 ? colors[2] : run.BL;
+            run.TL = run.BL = run.TR = run.BR = color;
         }
 
         private static Color32 ParseColor(string value)
@@ -378,11 +379,24 @@ namespace NanamiUI
 
         // --- 排版 ---
 
-        private struct Segment
+        private struct Character
         {
             public Run Run;
-            public string Text;
+            public char Value;
         }
+
+        private struct Line
+        {
+            public int Start;
+            public int Count;
+            public float Baseline;
+            public float Height;
+            public float Width;
+        }
+
+        private readonly List<Character> _pendingCharacters = new();
+        private readonly List<Character> _characters = new();
+        private readonly List<Line> _lines = new();
 
         private void Layout()
         {
@@ -400,57 +414,73 @@ namespace NanamiUI
             var rect = rectTransform.rect;
             var wrap = horizontalOverflow == HorizontalWrapMode.Wrap;
             var rectWidth = rect.width - 4;
-            var lines = BreakLines(runs, wrap, rectWidth);
+            BreakLines(runs, wrap, rectWidth);
 
             var hAlign = (int)alignment % 3;
             var vAlign = (int)alignment / 3;
             var lineSpacing = leading - 1; // TextField: 实际行距 = lineSpacing - 1
-            var lineMetrics = new List<(float Baseline, float Height, float Width)>();
             var textHeight = 4f;
-            foreach (var line in lines)
-            {
-                var metrics = MeasureLine(line);
-                lineMetrics.Add(metrics);
-                textHeight += metrics.Height;
-            }
-            textHeight += (lines.Count - 1) * lineSpacing;
+            foreach (var line in _lines)
+                textHeight += line.Height;
+            textHeight += (_lines.Count - 1) * lineSpacing;
 
             var y = 2f + (vAlign == 1 ? (int)(Mathf.Max(0, rect.height - textHeight) / 2)
                 : vAlign == 2 ? Mathf.Max(0, rect.height - textHeight) : 0);
 
-            for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+            for (var lineIndex = 0; lineIndex < _lines.Count; lineIndex++)
             {
-                var (baseline, height, width) = lineMetrics[lineIndex];
-                if (verticalOverflow == VerticalWrapMode.Truncate && lineIndex > 0 && y + height > rect.height - 2)
+                var line = _lines[lineIndex];
+                if (verticalOverflow == VerticalWrapMode.Truncate && lineIndex > 0 && y + line.Height > rect.height - 2)
                     break;
 
-                var indent = hAlign == 1 ? (int)((rectWidth - width) / 2) : hAlign == 2 ? rectWidth - width : 0;
+                var indent = hAlign == 1 ? (int)((rectWidth - line.Width) / 2) : hAlign == 2 ? rectWidth - line.Width : 0;
                 var x = 2f + Mathf.Max(0, indent);
-                var baselineY = y + baseline;
+                var baselineY = y + line.Baseline;
+                var runStart = x;
+                var activeRun = default(Run);
+                var hasActiveRun = false;
 
-                foreach (var segment in lines[lineIndex])
+                for (var i = line.Start; i < line.Start + line.Count; i++)
                 {
-                    if (segment.Run.Image >= 0)
+                    var character = _characters[i];
+                    if (character.Run.Image >= 0)
                     {
-                        var sprite = imageSprites[segment.Run.Image];
-                        _placements.Add((segment.Run.Image, new Vector2(x + 1, baselineY - sprite.rect.height * 0.8f)));
+                        if (hasActiveRun)
+                        {
+                            FinishRun(activeRun, runStart, x, y, line.Height, baselineY);
+                            hasActiveRun = false;
+                        }
+                        var sprite = imageSprites[character.Run.Image];
+                        _placements.Add((character.Run.Image, new Vector2(x + 1, baselineY - sprite.rect.height * 0.8f)));
                         x += sprite.rect.width + 2 + letterSpacing;
                         continue;
                     }
 
-                    var underlineStart = x;
-                    foreach (var ch in segment.Text)
-                        x += DrawChar(ch, segment.Run, x, baselineY, y);
-                    if (segment.Run.Underline)
-                        DrawUnderline(segment.Run, underlineStart, x, baselineY);
-                    if (segment.Run.Href != null && x > underlineStart)
-                        _links.Add((new Rect(underlineStart, y, x - underlineStart, height), segment.Run.Href));
+                    if (!hasActiveRun || !activeRun.Equals(character.Run))
+                    {
+                        if (hasActiveRun)
+                            FinishRun(activeRun, runStart, x, y, line.Height, baselineY);
+                        activeRun = character.Run;
+                        runStart = x;
+                        hasActiveRun = true;
+                    }
+                    x += DrawChar(character.Value, character.Run, x, baselineY);
                 }
-                y += height + lineSpacing;
+                if (hasActiveRun)
+                    FinishRun(activeRun, runStart, x, y, line.Height, baselineY);
+                y += line.Height + lineSpacing;
             }
         }
 
-        private float DrawChar(char ch, Run run, float x, float baselineY, float lineY)
+        private void FinishRun(Run run, float from, float to, float lineY, float lineHeight, float baselineY)
+        {
+            if (run.Underline)
+                DrawUnderline(run, from, to, baselineY);
+            if (run.Href != null && to > from)
+                _links.Add((new Rect(from, lineY, to - from, lineHeight), run.Href));
+        }
+
+        private float DrawChar(char ch, Run run, float x, float baselineY)
         {
             if (bitmapFont != null)
             {
@@ -514,14 +544,15 @@ namespace NanamiUI
             return font.GetCharacterInfo(ch, out var info, run.Size, run.Style) ? info.advance + letterSpacing : 0;
         }
 
-        private (float Baseline, float Height, float Width) MeasureLine(List<Segment> line)
+        private (float Baseline, float Height, float Width) MeasureLine(int start, int count)
         {
             float baseline = 0, descent = 0, width = 0;
-            foreach (var segment in line)
+            for (var i = start; i < start + count; i++)
             {
-                if (segment.Run.Image >= 0)
+                var character = _characters[i];
+                if (character.Run.Image >= 0)
                 {
-                    var size = imageSprites[segment.Run.Image].rect.size;
+                    var size = imageSprites[character.Run.Image].rect.size;
                     baseline = Mathf.Max(baseline, size.y * 0.8f);
                     descent = Mathf.Max(descent, size.y * 0.2f);
                     width += size.x + 2 + letterSpacing;
@@ -530,17 +561,19 @@ namespace NanamiUI
                 float glyphBaseline, glyphHeight;
                 if (bitmapFont != null)
                 {
-                    glyphBaseline = glyphHeight = LineHeight(segment.Text);
+                    glyphHeight = bitmapFont.TryGetGlyph(character.Value, out var glyph)
+                        ? Mathf.Max(bitmapFont.size, glyph.lineHeight)
+                        : bitmapFont.size;
+                    glyphBaseline = glyphHeight;
                 }
                 else
                 {
-                    glyphBaseline = Mathf.RoundToInt(segment.Run.Size);
-                    glyphHeight = Mathf.RoundToInt(segment.Run.Size * 1.25f);
+                    glyphBaseline = Mathf.RoundToInt(character.Run.Size);
+                    glyphHeight = Mathf.RoundToInt(character.Run.Size * 1.25f);
                 }
                 baseline = Mathf.Max(baseline, glyphBaseline);
                 descent = Mathf.Max(descent, glyphHeight - glyphBaseline);
-                foreach (var ch in segment.Text)
-                    width += CharWidth(ch, segment.Run);
+                width += CharWidth(character.Value, character.Run);
             }
             if (baseline == 0)
             {
@@ -550,58 +583,25 @@ namespace NanamiUI
             return (baseline, baseline + descent, width);
         }
 
-        private float LineHeight(string value)
-        {
-            float height = bitmapFont.size;
-            foreach (var ch in value)
-                if (bitmapFont.TryGetGlyph(ch, out var glyph))
-                    height = Mathf.Max(height, glyph.lineHeight);
-            return height;
-        }
-
         // 复刻 TextField.BuildLines：字符加入后超宽才换行；仅空格后的词整体回退（wordLen<20），否则只移当前字符。
-        private List<List<Segment>> BreakLines(List<Run> runs, bool wrap, float rectWidth)
+        private void BreakLines(List<Run> runs, bool wrap, float rectWidth)
         {
-            var lines = new List<List<Segment>>();
-            var current = new List<(Run Run, char Ch)>();
+            _pendingCharacters.Clear();
+            _characters.Clear();
+            _lines.Clear();
             var x = 0f;
             var wordPossible = false;
             var wordLen = 0;
-
-            void Append(List<Segment> line, Run run, char ch)
-            {
-                if (run.Image >= 0)
-                {
-                    line.Add(new Segment { Run = run });
-                    return;
-                }
-                if (line.Count > 0 && line[^1].Text != null && line[^1].Run.Equals(run))
-                    line[^1] = new Segment { Run = run, Text = line[^1].Text + ch };
-                else
-                    line.Add(new Segment { Run = run, Text = ch.ToString() });
-            }
-
-            void Commit(int count)
-            {
-                var line = new List<Segment>();
-                for (var i = 0; i < count; i++)
-                    Append(line, current[i].Run, current[i].Ch);
-                lines.Add(line);
-                current.RemoveRange(0, count);
-                x = 0;
-                foreach (var (run, ch) in current)
-                    x += run.Image >= 0 ? CharWidth('\0', run) : CharWidth(ch, run);
-            }
 
             foreach (var run in runs)
             {
                 if (run.Image >= 0)
                 {
-                    current.Add((run, '\0'));
+                    _pendingCharacters.Add(new Character { Run = run });
                     x += CharWidth('\0', run);
                     wordPossible = false;
-                    if (wrap && x > rectWidth && current.Count > 1)
-                        Commit(current.Count - 1);
+                    if (wrap && x > rectWidth && _pendingCharacters.Count > 1)
+                        CommitLine(_pendingCharacters.Count - 1, ref x);
                     continue;
                 }
 
@@ -609,7 +609,7 @@ namespace NanamiUI
                 {
                     if (ch == '\n')
                     {
-                        Commit(current.Count);
+                        CommitLine(_pendingCharacters.Count, ref x);
                         wordPossible = false;
                         continue;
                     }
@@ -629,21 +629,40 @@ namespace NanamiUI
                         wordPossible = true;
                     }
 
-                    current.Add((run, ch));
+                    _pendingCharacters.Add(new Character { Run = run, Value = ch });
                     x += CharWidth(ch, run);
 
                     if (wrap && x > rectWidth)
                     {
-                        if (wordPossible && wordLen < 20 && current.Count > 2)
-                            Commit(current.Count - wordLen);
-                        else if (current.Count > 1)
-                            Commit(current.Count - 1);
+                        if (wordPossible && wordLen < 20 && _pendingCharacters.Count > 2)
+                            CommitLine(_pendingCharacters.Count - wordLen, ref x);
+                        else if (_pendingCharacters.Count > 1)
+                            CommitLine(_pendingCharacters.Count - 1, ref x);
                         wordPossible = false;
                     }
                 }
             }
-            Commit(current.Count);
-            return lines;
+            CommitLine(_pendingCharacters.Count, ref x);
+        }
+
+        private void CommitLine(int count, ref float width)
+        {
+            var start = _characters.Count;
+            for (var i = 0; i < count; i++)
+                _characters.Add(_pendingCharacters[i]);
+            var metrics = MeasureLine(start, count);
+            _lines.Add(new Line
+            {
+                Start = start,
+                Count = count,
+                Baseline = metrics.Baseline,
+                Height = metrics.Height,
+                Width = metrics.Width,
+            });
+            _pendingCharacters.RemoveRange(0, count);
+            width = 0;
+            foreach (var character in _pendingCharacters)
+                width += CharWidth(character.Value, character.Run);
         }
     }
 }

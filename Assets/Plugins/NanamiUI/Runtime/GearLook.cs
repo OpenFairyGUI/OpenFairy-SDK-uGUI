@@ -13,9 +13,15 @@ namespace NanamiUI
         public float defaultRotation;
         public bool[] grayed;
         public bool defaultGrayed;
+        public bool[] touchables;
+        public bool defaultTouchable = true;
 
         [NonSerialized] private Tweener _tweener;
         [NonSerialized] private IDisplayGear _lockedDisplay;
+        [NonSerialized] private CanvasGroup _group;
+        [NonSerialized] private Grayed _grayedEffect;
+        [NonSerialized] private ButtonBase _button;
+        [NonSerialized] private bool _effectsResolved;
 
         // 杀 tween 并释放本 gear 持有的 display lock（DOTween.Kill 不触发 OnComplete，故显式释放，避免锁泄漏）。
         private void KillTween()
@@ -32,25 +38,36 @@ namespace NanamiUI
         // 组透明度按 CanvasGroup.alpha 乘算传播（复刻 FairyGUI 组 alpha），不覆盖各子物体 authored 的 color.a。
         private CanvasGroup Group()
         {
-            var group = target.GetComponent<CanvasGroup>();
-            return group != null ? group : target.AddComponent<CanvasGroup>();
+            if (_group == null)
+                _group = target.GetComponent<CanvasGroup>() ?? target.AddComponent<CanvasGroup>();
+            return _group;
         }
 
         private void ApplyGrayed(bool isGrayed)
         {
             // Grayed 由 Migrate 烘焙在 target 上，只切 enabled（OnDisable 还原原材质）。
-            if (target.TryGetComponent(out Grayed effect))
-                effect.enabled = isGrayed;
+            if (!_effectsResolved)
+            {
+                target.TryGetComponent(out _grayedEffect);
+                target.TryGetComponent(out _button);
+                _effectsResolved = true;
+            }
+            if (_grayedEffect != null)
+                _grayedEffect.enabled = isGrayed;
             // 传播到按钮：置 grayed → 进 disabled 页并拦截点击（复刻 GButton.HandleGrayedChanged），否则灰显却仍可点。
-            if (target.TryGetComponent(out ButtonBase button))
-                button.SetGrayed(isGrayed);
+            if (_button != null)
+                _button.SetGrayed(isGrayed);
         }
+
+        private bool Touchable(int index) => touchables == null || (index >= 0 ? touchables[index] : defaultTouchable);
 
         public override void Apply(T page)
         {
             KillTween();
             var index = Array.IndexOf(pages, page);
-            Group().alpha = index >= 0 ? alphas[index] : defaultAlpha;
+            var group = Group();
+            group.alpha = index >= 0 ? alphas[index] : defaultAlpha;
+            group.blocksRaycasts = Touchable(index);
             ((RectTransform)target.transform).localEulerAngles = new Vector3(0, 0, -(index >= 0 ? rotations[index] : defaultRotation));
             ApplyGrayed(index >= 0 ? grayed[index] : defaultGrayed);
         }
@@ -62,6 +79,7 @@ namespace NanamiUI
             var rotation = -(index >= 0 ? rotations[index] : defaultRotation);
             var rt = (RectTransform)target.transform;
             var group = Group();
+            group.blocksRaycasts = Touchable(index); // touchable 是离散态，直接切换
             ApplyGrayed(index >= 0 ? grayed[index] : defaultGrayed); // grayed 是离散态，直接切换
             KillTween();
             var startAlpha = group.alpha;

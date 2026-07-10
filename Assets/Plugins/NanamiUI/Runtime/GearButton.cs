@@ -7,10 +7,14 @@ namespace NanamiUI
     [Serializable]
     public class GearButton<T> : Gear<T> where T : struct, Enum
     {
+        [NonSerialized] private ButtonBase _button;
+
         public override void Apply(T page)
         {
-            if (target.TryGetComponent(out ButtonBase button) && button.Mode != ButtonMode.Common)
-                button.Selected = Array.IndexOf(pages, page) >= 0;
+            if (_button == null)
+                target.TryGetComponent(out _button);
+            if (_button != null && _button.Mode != ButtonMode.Common)
+                _button.Selected = Array.IndexOf(pages, page) >= 0;
         }
     }
 }

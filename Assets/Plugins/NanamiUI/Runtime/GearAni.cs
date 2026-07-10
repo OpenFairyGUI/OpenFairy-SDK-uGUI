@@ -10,10 +10,12 @@ namespace NanamiUI
         public int defaultFrame;
         public bool defaultPlaying = true;
 
+        [NonSerialized] private MovieClip _movieClip;
+
         public override void Apply(T page)
         {
             var index = Array.IndexOf(pages, page);
-            var movieClip = target.GetComponent<MovieClip>();
+            var movieClip = _movieClip ??= target.GetComponent<MovieClip>();
             movieClip.playing = index >= 0 ? playings[index] : defaultPlaying;
             movieClip.SetFrame(index >= 0 ? frames[index] : defaultFrame);
         }
