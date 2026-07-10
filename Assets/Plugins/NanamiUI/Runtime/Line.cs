@@ -5,7 +5,7 @@ using UnityEngine.UI;
 namespace NanamiUI
 {
     // 顶点生成复刻 FairyGUI LineMesh：沿 GPath 按弧长铺带状网格，支持宽度曲线、圆头、渐变、fillStart/End。
-    // 几何在 FairyGUI y 向下空间算，AddVert 时翻转到 uGUI 局部坐标（同 Shape）。
+    // 几何在 FairyGUI y 向下空间算，AddVert 时翻转到 uGUI 局部坐标（同 Graph）。
     public class Line : MaskableGraphic
     {
         public float lineWidth = 2;

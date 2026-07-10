@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.Sprites;
 using UnityEngine.UI;
@@ -93,10 +94,14 @@ namespace NanamiUI
             float su = (outer.z - outer.x) / sw, sv = (outer.w - outer.y) / sh;
             float ua = outer.x, ub = outer.x + bd.x * su, uc = outer.z - bd.z * su, ud = outer.z;
             float va = outer.w, vb = outer.w - bd.w * sv, vc = outer.y + bd.y * sv, vd = outer.y;
-            var us = flipX ? new[] { ud, uc, ub, ua } : new[] { ua, ub, uc, ud };
-            var vs = flipY ? new[] { vd, vc, vb, va } : new[] { va, vb, vc, vd };
-            var xs = new[] { x0, x1, x2, x3 };
-            var ys = new[] { y0, y1, y2, y3 };
+            Span<float> us = stackalloc float[4];
+            Span<float> vs = stackalloc float[4];
+            if (flipX) { us[0] = ud; us[1] = uc; us[2] = ub; us[3] = ua; }
+            else { us[0] = ua; us[1] = ub; us[2] = uc; us[3] = ud; }
+            if (flipY) { vs[0] = vd; vs[1] = vc; vs[2] = vb; vs[3] = va; }
+            else { vs[0] = va; vs[1] = vb; vs[2] = vc; vs[3] = vd; }
+            Span<float> xs = stackalloc float[] { x0, x1, x2, x3 };
+            Span<float> ys = stackalloc float[] { y0, y1, y2, y3 };
 
             Color32 c = color;
             for (var r = 0; r < 4; r++)

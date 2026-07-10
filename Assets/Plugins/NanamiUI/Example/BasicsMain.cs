@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
@@ -86,27 +87,21 @@ namespace NanamiUI.Example
             for (var i = _container.childCount - 1; i >= 0; i--)
                 Destroy(_container.GetChild(i).gameObject);
 
-            var prefab = Prefab(name);
-            var go = prefab != null ? Instantiate(prefab, _container, false) : Placeholder(name);
+            var go = Instantiate(Prefab(name), _container, false);
             Place((RectTransform)go.transform);
             // Button demo 的 tab/radio 组现由烘焙的关联控制器（<Button controller=..>）运行时自处理，无需胶水。
-            if (name == "Graph")
-                PlayGraph(go);
-            else if (name == "Depth")
-                PlayDepth(go);
-            else if (name == "Drag&Drop")
-                PlayDragDrop(go);
-            else if (name == "Window")
-                PlayWindow(go);
-            else if (name == "Popup")
-                PlayPopup(go);
-            else if (name == "ProgressBar")
-                StartCoroutine(PlayProgressBar(go));
-            else if (name == "Text")
-                PlayText(go);
-            else if (name == "Grid")
-                PlayGrid(go);
-            // ComboBox 现由烘焙的 NanamiUI.ComboBox<T> 运行时自处理（点击弹下拉、选项设标题），无需胶水。
+            // ComboBox 同理（点击弹下拉、选项设标题）。
+            switch (name)
+            {
+                case "Graph": PlayGraph(go); break;
+                case "Depth": PlayDepth(go); break;
+                case "Drag&Drop": PlayDragDrop(go); break;
+                case "Window": PlayWindow(go); break;
+                case "Popup": PlayPopup(go); break;
+                case "ProgressBar": PlayProgressBar(go).Forget(); break;
+                case "Text": PlayText(go); break;
+                case "Grid": PlayGrid(go); break;
+            }
         }
 
         // 复刻 FairyGUI PlayGrid：把两个列表用平台名+随机数据填满；滚动由烘焙的 ScrollPaneHost 自挂。
@@ -116,7 +111,7 @@ namespace NanamiUI.Example
             var names = System.Enum.GetNames(typeof(RuntimePlatform));
             var colors = new[] { Color.yellow, Color.red, Color.white, Color.cyan };
 
-            NanamiUI.List.Fill((RectTransform)((UnityEngine.Component)Get(demo, "m_list1")).transform, names.Length, (item, i) =>
+            ((UnityEngine.Component)Get(demo, "m_list1")).GetComponent<NanamiUI.ListSource>().Fill(names.Length, (item, i) =>
             {
                 var comp = ItemComp(item, "UI.Basics.GridItem");
                 SetText(comp, "m_t0", (i + 1).ToString());
@@ -124,7 +119,7 @@ namespace NanamiUI.Example
                 if (Get(comp, "m_t2") is NanamiUI.TextField t2)
                     t2.color = colors[UnityEngine.Random.Range(0, colors.Length)];
             });
-            NanamiUI.List.Fill((RectTransform)((UnityEngine.Component)Get(demo, "m_list2")).transform, names.Length, (item, i) =>
+            ((UnityEngine.Component)Get(demo, "m_list2")).GetComponent<NanamiUI.ListSource>().Fill(names.Length, (item, i) =>
             {
                 var comp = ItemComp(item, "UI.Basics.GridItem2");
                 SetText(comp, "m_t1", names[i]);
@@ -142,17 +137,15 @@ namespace NanamiUI.Example
         }
 
         // 复刻 FairyGUI PlayProgressBar：每帧把每个进度条 value +1、越过 max 回 0（FairyGUI 用 0.001s Timer ≈ 每帧）。
-        private System.Collections.IEnumerator PlayProgressBar(GameObject go)
+        private static async UniTaskVoid PlayProgressBar(GameObject go)
         {
             var bars = go.GetComponentsInChildren<NanamiUI.ProgressBar>();
             while (go)
             {
                 foreach (var bar in bars)
                     if (bar)
-                    {
                         bar.value = bar.value + 1 > bar.max ? 0 : bar.value + 1;
-                    }
-                yield return null;
+                await UniTask.Yield();
             }
         }
 
@@ -239,7 +232,7 @@ namespace NanamiUI.Example
 
             a.gameObject.AddComponent<NanamiUI.Draggable>();
 
-            var bIcon = (Sprite)b.GetType().GetProperty("Icon").GetValue(b);
+            var bIcon = (Sprite)b.GetType().GetProperty("icon").GetValue(b);
             var bDrag = b.gameObject.AddComponent<NanamiUI.Draggable>();
             bDrag.onDragStart = e =>
             {
@@ -247,8 +240,8 @@ namespace NanamiUI.Example
                 return true; // PreventDefault：b 本体不动，改拖 agent
             };
 
-            c.GetType().GetProperty("Icon").SetValue(c, null);
-            c.gameObject.AddComponent<NanamiUI.DropTarget>().onDrop = data => c.GetType().GetProperty("Icon").SetValue(c, (Sprite)data);
+            c.GetType().GetProperty("icon").SetValue(c, null);
+            c.gameObject.AddComponent<NanamiUI.DropTarget>().onDrop = data => c.GetType().GetProperty("icon").SetValue(c, (Sprite)data);
 
             var dDrag = d.gameObject.AddComponent<NanamiUI.Draggable>();
             var n7Rt = (RectTransform)n7.transform;
@@ -257,17 +250,15 @@ namespace NanamiUI.Example
 
         // 复刻 FairyGUI BasicsMain.PlayGraph：把静态烘焙的图形在运行时改成扇形/带贴图梯形/三条折线，
         // 其中 line 的 fillEnd 5 秒线性扫入（设置逻辑抽到 GraphDemo，与截图对比工具共用）。
-        private void PlayGraph(GameObject go) => StartCoroutine(FillTween(GraphDemo.Setup(go, changeSprite)));
+        private void PlayGraph(GameObject go) => FillTween(GraphDemo.Setup(go, changeSprite)).Forget();
 
-        private static System.Collections.IEnumerator FillTween(Line line)
+        private static async UniTaskVoid FillTween(Line line)
         {
-            var t = 0f;
-            while (t < 5f && line)
+            for (var t = 0f; t < 5f && line; t += Time.deltaTime)
             {
-                t += Time.deltaTime;
                 line.fillEnd = Mathf.Clamp01(t / 5f);
                 line.SetVerticesDirty();
-                yield return null;
+                await UniTask.Yield();
             }
             if (line)
             {
@@ -278,23 +269,8 @@ namespace NanamiUI.Example
 
         private GameObject Prefab(string name)
         {
-            for (var i = 0; i < demoNames.Length; i++)
-                if (demoNames[i] == name)
-                    return demoPrefabs[i];
-            return null;
-        }
-
-        private GameObject Placeholder(string name)
-        {
-            var go = new GameObject("Demo_" + name, typeof(RectTransform), typeof(TextField));
-            go.transform.SetParent(_container, false);
-            var text = go.GetComponent<TextField>();
-            text.text = "Not implemented: " + name;
-            text.fontSize = 28;
-            text.color = Color.white;
-            text.alignment = TextAnchor.MiddleCenter;
-            ((RectTransform)go.transform).sizeDelta = new Vector2(1136, 570);
-            return go;
+            var i = Array.IndexOf(demoNames, name);
+            return i >= 0 ? demoPrefabs[i] : null;
         }
 
         private void SetPage(string page)

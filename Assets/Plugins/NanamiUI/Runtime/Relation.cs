@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -146,8 +148,30 @@ namespace NanamiUI
                 }
         }
 
-        protected override void OnEnable() => Record();
+        // 集中驱动：单个循环遍历所有活跃 Relation，替代每实例每帧一次 LateUpdate 的 native→managed 派发底噪。
+        private static readonly List<Relation> Active = new();
+        private static bool _running;
 
-        private void LateUpdate() => Sync();
+        protected override void OnEnable()
+        {
+            Record();
+            Active.Add(this);
+            if (!_running && Application.isPlaying)
+                RunLoop().Forget();
+        }
+
+        protected override void OnDisable() => Active.Remove(this);
+
+        private static async UniTask RunLoop()
+        {
+            _running = true;
+            while (Active.Count > 0)
+            {
+                await UniTask.Yield(PlayerLoopTiming.PostLateUpdate);
+                for (var i = Active.Count - 1; i >= 0; i--) // 逆序：Sync 连锁触发的 OnDisable 移除不打乱遍历
+                    Active[i].Sync();
+            }
+            _running = false;
+        }
     }
 }

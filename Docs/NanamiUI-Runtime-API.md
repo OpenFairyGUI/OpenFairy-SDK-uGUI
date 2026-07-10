@@ -8,690 +8,346 @@
 
 1. 通过 `Tools/NanamiUI/Migrate` 生成 prefab 和 C# 组件类。
 2. 在生成类字段上访问子控件，例如 `m_btn_OK`、`m_title`。
-3. 用 `ButtonBase`、`Text`、`Slider`、`ProgressBar`、`Transition` 等基础运行时类型驱动 UI。
-4. 弹窗、窗口、拖拽需要先创建 `GRoot` 覆盖层。
+
+NanamiUI 是 bake-first 的 FairyGUI→uGUI Runtime SDK：绝大多数结构、样式与交互在 Migrate 期烘进 prefab，
+运行时 API 只覆盖 FairyGUI 中本就属于"运行时"的部分（选中态、动效播放、窗口/弹窗、拖拽、动态列表）。
+命名约定：类型 = FairyGUI 控件去 `G` 前缀；公共属性 camelCase（与 uGUI/FairyGUI 一致）；方法 PascalCase。
+标注为"烘焙接线"的字段是 `[SerializeField] internal`，由 Migrate 写入，不属用户 API。
 
 ## Component / Controller / Gear
 
 ```csharp
-namespace NanamiUI
+public class Component : UIBehaviour          // 生成的自定义组件基类（codegen 为每个组件生成子类，子物体引用字段 m_ 前缀）
+public struct Controller<T> where T : struct, Enum
 {
-    // 生成组件的默认基类。
-    public class Component : UIBehaviour
-    {
-    }
-
-    // 生成组件中的 controller 字段。T 是生成类内的 page enum。
-    [Serializable]
-    public struct Controller<T> where T : struct, Enum
-    {
-        public Gear<T>[] gears;
-
-        // 设置 page 会应用所有 gear；运行时 tween gear 会播放动画。
-        public T page { get; set; }
-    }
-
-    [Serializable]
-    public abstract class Gear<T> where T : struct, Enum
-    {
-        public GameObject target;
-        public T[] pages;
-
-        public bool tween;
-        public float duration;
-        public Ease ease;
-        public float delay;
-
-        public abstract void Apply(T page);
-        public virtual void Apply(T page, bool animate);
-    }
-
-    public interface IDisplayGear
-    {
-        bool On { get; }
-        int Condition { get; }
-        GameObject Target { get; }
-        void AddLock();
-        void ReleaseLock();
-    }
-
-    [Serializable]
-    public class GearDisplay<T> : Gear<T>, IDisplayGear where T : struct, Enum
-    {
-        public int condition;
-        public IDisplayGear partner;
-        public bool on;
-
-        public bool On { get; }
-        public int Condition { get; }
-        public GameObject Target { get; }
-
-        public void AddLock();
-        public void ReleaseLock();
-        public override void Apply(T page);
-    }
-
-    [Serializable]
-    public class GearXY<T> : Gear<T> where T : struct, Enum
-    {
-        public Vector2[] values;
-        public Vector2 defaultValue;
-
-        public override void Apply(T page);
-        public override void Apply(T page, bool animate);
-    }
-
-    [Serializable]
-    public class GearSize<T> : Gear<T> where T : struct, Enum
-    {
-        public Vector2[] sizes;
-        public Vector2 defaultSize;
-        public Vector2[] scales;
-        public Vector2 defaultScale;
-
-        public override void Apply(T page);
-        public override void Apply(T page, bool animate);
-    }
-
-    [Serializable]
-    public class GearLook<T> : Gear<T> where T : struct, Enum
-    {
-        public float[] alphas;
-        public float defaultAlpha;
-        public float[] rotations;
-        public float defaultRotation;
-        public bool[] grayed;
-        public bool defaultGrayed;
-
-        public override void Apply(T page);
-        public override void Apply(T page, bool animate);
-    }
-
-    [Serializable] public class GearColor<T> : Gear<T> where T : struct, Enum
-    {
-        public Color[] values;
-        public Color defaultValue;
-        public override void Apply(T page);
-    }
-
-    [Serializable] public class GearText<T> : Gear<T> where T : struct, Enum
-    {
-        public string[] values;
-        public string defaultValue;
-        public override void Apply(T page);
-    }
-
-    [Serializable] public class GearIcon<T> : Gear<T> where T : struct, Enum
-    {
-        public Sprite[] values;
-        public Sprite defaultValue;
-        public override void Apply(T page);
-    }
-
-    [Serializable] public class GearFontSize<T> : Gear<T> where T : struct, Enum
-    {
-        public int[] values;
-        public int defaultValue;
-        public override void Apply(T page);
-    }
-
-    [Serializable] public class GearAni<T> : Gear<T> where T : struct, Enum
-    {
-        public int[] frames;
-        public bool[] playings;
-        public int defaultFrame;
-        public bool defaultPlaying;
-        public override void Apply(T page);
-    }
+    public T page;                            // 切页即应用全部 gears（运行时带缓动，复刻 HandleControllerChanged 的 display-lock 顺序）
+    public Gear<T>[] gears;
+}
+public abstract class Gear<T> where T : struct, Enum
+{
+    public GameObject target;
+    public T[] pages;
+    public bool tween; public float duration; public Ease ease; public float delay;
 }
 ```
 
-## Buttons / ComboBox
+Controller 不生成单独类：组件类里生成同名 enum + `Controller<该enum>` 字段。
+Gear 子类：`GearDisplay`（含 `DisplayCondition` And/Or 组合与 display lock）、`GearXY`、`GearSize`、`GearLook`、
+`GearColor`、`GearAni`、`GearFontSize`、`GearText`、`GearIcon`、`GearButton`（关联控制器换页反向同步按钮选中态）。
+均由 Migrate 烘焙，一般无需手动构造。
+
+## Button / ButtonBase
 
 ```csharp
-namespace NanamiUI
+public enum ButtonMode { Common, Check, Radio }
+
+public abstract class ButtonBase : Component   // 非泛型面：不知道控制器 enum T 的代码经它操作按钮
 {
-    public enum ButtonMode
-    {
-        Common,
-        Check,
-        Radio,
-    }
+    public UnityEvent onClick;
+    public UnityEvent onChanged;               // 仅用户点击翻转 Check/Radio 时发（复刻 GButton.onChanged）
+    public ButtonMode mode;
+    public string selectedTitle;
+    public bool changeStateOnClick;            // 列表项交给 ListSelection 管选择时为 false
+    public string title { get; set; }
+    public Sprite icon { get; set; }
+    public bool selected { get; set; }         // 复刻 GButton.selected：Common 忽略；驱动关联控制器（tab/radio 组）
+    public bool grayed { get; set; }           // 置灰进 disabled 页并拦截交互
+}
 
-    // 非泛型按钮面，方便业务代码不关心生成 enum。
-    public abstract class ButtonBase : Component
-    {
-        public UnityEvent onClick;
-        public abstract string Title { get; set; }
-    }
-
-    // FairyGUI GButton 对应物。T 是按钮 controller 的 page enum。
-    public abstract class Button<T> : ButtonBase,
-        IPointerDownHandler,
-        IPointerUpHandler,
-        IPointerEnterHandler,
-        IPointerExitHandler,
-        IPointerClickHandler
-        where T : struct, Enum
-    {
-        public Controller<T> controller;
-        public Text titleText;
-        public Loader iconLoader;
-        public ButtonMode mode;
-        public bool selected;
-        public bool grayed;
-        public string selectedTitle;
-
-        public override string Title { get; set; }
-        public Sprite Icon { get; set; }
-
-        public void OnPointerDown(PointerEventData eventData);
-        public void OnPointerUp(PointerEventData eventData);
-        public void OnPointerEnter(PointerEventData eventData);
-        public void OnPointerExit(PointerEventData eventData);
-        public virtual void OnPointerClick(PointerEventData eventData);
-        public void RefreshState();
-    }
-
-    // FairyGUI GComboBox 对应物。点击按钮后用 GRoot 显示 dropdownPrefab。
-    public abstract class ComboBox<T> : Button<T> where T : struct, Enum
-    {
-        public string[] items;
-        public GameObject dropdownPrefab;
-        public int selectedIndex;
-        public UnityEvent onChanged;
-
-        public override void OnPointerClick(PointerEventData eventData);
-    }
+public abstract class Button<T> : ButtonBase, ... where T : struct, Enum
+{
+    public Controller<T> controller;           // "button" 控制器（up/down/over/…页）
 }
 ```
 
-## Progress / Slider
+按钮关联控制器（tab/radio 组）由 Migrate 从 `<Button controller=.. page=..>` 烘焙，点击/程序化 `selected` 均会换页，
+换页（含程序化）经 GearButton 反向同步整组选中态。
+
+## Label
 
 ```csharp
-namespace NanamiUI
+public class Label : Component
 {
-    public enum ProgressTitleType
-    {
-        Percent,
-        ValueAndMax,
-        Value,
-        Max,
-    }
-
-    public class ProgressBar : Component
-    {
-        public float value;
-        public float max;
-        public float min;
-        public ProgressTitleType titleType;
-        public bool reverse;
-
-        public Text title;
-        public RectTransform bar;
-        public RectTransform barV;
-        public MovieClip ani;
-
-        public float barMaxWidthDelta;
-        public float barMaxHeightDelta;
-        public float barStartX;
-        public float barStartY;
-
-        public void Apply();
-    }
-
-    public class Slider : Component, IPointerDownHandler, IDragHandler
-    {
-        public float value;
-        public float max;
-        public float min;
-        public ProgressTitleType titleType;
-
-        public Text title;
-        public RectTransform bar;
-        public RectTransform barV;
-        public RectTransform grip;
-
-        public float barMaxWidthDelta;
-        public float barMaxHeightDelta;
-
-        public void Apply();
-        public void OnPointerDown(PointerEventData eventData);
-        public void OnDrag(PointerEventData eventData);
-    }
+    public string title { get; set; }
+    public Sprite icon { get; set; }
 }
 ```
 
-## Text / Text Effects
+## ComboBox
 
 ```csharp
-namespace NanamiUI
+public interface IComboBox                     // 非泛型面
 {
-    // 继承 UnityEngine.UI.Text，并复刻 FairyGUI 文本排版、UBB 链接、图片字和位图字体。
-    public class Text : UnityEngine.UI.Text, IPointerClickHandler
-    {
-        public static string defaultFont;
+    string[] items { get; set; }               // setter 标脏，下次打开重建下拉（复刻 _itemsUpdated）
+    string[] values { get; set; }
+    int selectedIndex { get; set; }            // 程序化赋值只刷标题，不发 onChanged
+    string text { get; set; }                  // 标题直通
+    string value { get; set; }                 // 按 values 反查，找不到回退首项
+}
 
-        public string fontNames;
-        public int leading;
-        public bool ubb;
-        public bool html;
-        public bool underlined;
-        public BitmapFont bitmapFont;
-        public Sprite[] imageSprites;
-
-        public Action<string> onClickLink { get; set; }
-
-        public override Texture mainTexture { get; }
-
-        public void OnPointerClick(PointerEventData eventData);
-        public void WarmUp();
-        public void RebuildImages();
-    }
-
-    public class TextStroke : BaseMeshEffect
-    {
-        public Color color;
-        public float width;
-
-        public override void ModifyMesh(VertexHelper vh);
-    }
-
-    public class TextShadow : BaseMeshEffect
-    {
-        public Color color;
-        public Vector2 offset;
-
-        public override void ModifyMesh(VertexHelper vh);
-    }
+public abstract class ComboBox<T> : Button<T>, IComboBox where T : struct, Enum
+{
+    public int visibleItemCount;               // 下拉同屏项数，超出裁剪并滚动
+    public PopupDirection popupDirection;      // 默认 Auto：贴屏幕底时上翻
+    // onChanged 复用 ButtonBase 的事件（FairyGUI 同一事件通道）；仅点选下拉项触发（含重选当前项）
 }
 ```
 
-## Image / Loader / Shape / Line
+点击弹下拉、外点关闭、`visibleItemCount` 裁剪滚动均已烘焙自足；无 `Root` 时首次弹下拉会自建覆盖层。
+
+## ProgressBar / Slider
 
 ```csharp
-namespace NanamiUI
+public enum ProgressTitleType { Percent, ValueAndMax, Value, Max }
+
+public class ProgressBar : Component
 {
-    public class MovieClip : Image
-    {
-        public Sprite[] frames;
-        public float interval;
-        public float[] addDelays;
-        public bool playing;
-        public int frame;
+    public float value, max, min;              // setter 即刷视觉
+    public ProgressTitleType titleType;
+    public bool reverse;
+    public void TweenValue(float target, float duration, Ease ease = Ease.Linear);
+}
 
-        public void SetFrame(int value);
-    }
-
-    public class Loader : MovieClip
-    {
-        public enum FillType
-        {
-            None,
-            Scale,
-            ScaleMatchHeight,
-            ScaleMatchWidth,
-            ScaleFree,
-            ScaleNoBorder,
-        }
-
-        public FillType fill;
-        public int align;   // 0 left, 1 center, 2 right
-        public int vAlign;  // 0 top, 1 middle, 2 bottom
-    }
-
-    public class FlipImage : Image
-    {
-        public bool flipX;
-        public bool flipY;
-    }
-
-    public class Shape : MaskableGraphic
-    {
-        public enum Kind
-        {
-            Rect,
-            RoundedRect,
-            Ellipse,
-            Polygon,
-            RegularPolygon,
-        }
-
-        public Kind kind;
-        public float lineSize;
-        public Color lineColor;
-        public float[] corners;
-        public Vector2[] points;
-        public int sides;
-        public float startAngle;
-        public float[] distances;
-        public Vector2 skew;
-
-        public float startDegree;
-        public float endDegree;
-
-        public bool usePercentPositions;
-        public Vector2[] texcoords;
-        public Sprite texture;
-
-        public override Texture mainTexture { get; }
-    }
-
-    public class Line : MaskableGraphic
-    {
-        public float lineWidth;
-        public AnimationCurve lineWidthCurve;
-        public Gradient gradient;
-        public bool roundEdge;
-        public float fillStart;
-        public float fillEnd;
-        public float pointDensity;
-        public Sprite sprite;
-
-        public override Texture mainTexture { get; }
-        public void SetPath(IReadOnlyList<TransitionPath.PathPoint> pts);
-    }
+public class Slider : Component, IPointerDownHandler
+{
+    public float value, max, min;
+    public bool wholeNumbers, changeOnClick, reverse;
+    public ProgressTitleType titleType;
+    public UnityEvent onChanged;               // 用户交互改值时发（程序化赋值不发）
+    public UnityEvent onGripTouchBegin, onGripTouchEnd;
 }
 ```
 
-## List / ScrollPane
+grip 拖动、轨道点按跳值（changeOnClick）、Filled-Image bar 均已烘焙。
+
+## TextField / TextInput / 文字效果
 
 ```csharp
-namespace NanamiUI
+public class TextField : UnityEngine.UI.Text, IPointerClickHandler
 {
-    public sealed class ListSource : MonoBehaviour
-    {
-        public GameObject itemPrefab;
-        public Vector2 itemSize;
-        public float lineGap;
-        public float colGap;
-        public string layout;
-    }
-
-    public static class GList
-    {
-        public static RectTransform Container(RectTransform list);
-        public static void Fill(RectTransform list, int count, Action<GameObject, int> setup);
-    }
-
-    // 简化 ScrollPane：支持拖动滚动，不含惯性、回弹、虚拟化。
-    public sealed class ScrollPane : UIBehaviour, IBeginDragHandler, IDragHandler
-    {
-        public static ScrollPane Attach(RectTransform scrollRoot);
-
-        public void OnBeginDrag(PointerEventData e);
-        public void OnDrag(PointerEventData e);
-    }
+    public static string defaultFont;          // 无烘焙字体时的回退（烘焙工程用 fontNames，无需设置）
+    public int leading, letterSpacing;
+    public bool ubb, html, underlined;
+    public Sprite[] imageSprites;              // 富文本 [img]/<img> 按出现序号绑定的图片（Migrate 烘焙，换图直接改数组）
+    public Action<string> onClickLink { get; set; }  // <a href>/[url=..] 点击回调；赋值自动开 raycastTarget
 }
+
+public class TextInput : Component             // 基于 uGUI InputField
+{
+    public string text { get; set; }           // 程序化赋值不发 onChanged（SetTextWithoutNotify）
+    public bool password { get; set; }
+    public int maxLength { get; set; }
+    public bool editable { get; set; }         // false = readOnly（可聚焦），非禁用
+    public UnityEvent<string> onChanged;
+    public UnityEvent<string> onSubmit;        // 仅回车（ISubmitHandler），失焦不误触发
+}
+
+public class TextShadow : MonoBehaviour        // FairyGUI 阴影/描边（Migrate 烘焙）
+public class TextStroke : MonoBehaviour
 ```
 
-## Popup / Window / GRoot
+`TextField` 在 `OnPopulateMesh` 复刻 FairyGUI 排版公式，带排版缓存：文本/字号/尺寸不变时不重排版，
+纯色 tween 只回填顶点色。
+
+## Image / Loader / MovieClip / Graph / Line
 
 ```csharp
-namespace NanamiUI
+public class Image : UnityEngine.UI.Image      // 平铺相位、九宫格翻转对齐 FairyGUI
 {
-    public enum PopupDirection
-    {
-        Auto,
-        Up,
-        Down,
-    }
+    public bool flipX, flipY;
+}
 
-    // 顶层覆盖层，承载 popup 和 window。
-    public sealed class GRoot : MonoBehaviour
-    {
-        public static GRoot inst { get; }
+public class MovieClip : UnityEngine.UI.Image  // 逐帧动画
+{
+    public Sprite[] frames;
+    public float interval, repeatDelay, timeScale;
+    public float[] addDelays;
+    public bool swing;
+    public bool playing { get; set; }
+    public int frame { get; set; }             // setter 即刷帧并钳进有效范围
+    public UnityEvent onPlayEnd;
+    public void SetPlaySettings(int start = 0, int end = -1, int times = 0, int endAt = -1);
+    public void Rewind();
+}
 
-        public RectTransform rect;
-        public Vector2 Size { get; }
-        public bool HasAnyPopup { get; }
-        public int ActiveWindowCount { get; }
+public class Loader : MovieClip                // 静态内容也用它（帧数 1）；fill/align 复刻 GLoader
+{
+    public FillType fill;                      // None/Scale/ScaleMatchHeight/ScaleMatchWidth/ScaleFree/ScaleNoBorder
+    public AlignType align;                    // Left/Center/Right
+    public VertAlignType vAlign;               // Top/Middle/Bottom
+}
 
-        public static GRoot Create(RectTransform designRoot);
+public class Graph : MaskableGraphic          // GGraph：Rect/RoundedRect/Ellipse/Polygon/RegularPolygon
+{
+    public Kind kind;
+    public float lineSize; public Color lineColor;
+    public float[] corners; public Vector2[] points; public int sides; public float startAngle; public float[] distances;
+    public Vector2 skew;
+    public float startDegree, endDegree;       // 椭圆扇形
+    public bool usePercentPositions; public Vector2[] texcoords; public Sprite texture; // 带贴图多边形
+}
 
-        public void Center(RectTransform obj);
-        public void ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto);
-        public void TogglePopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto);
-        public void HidePopup(RectTransform popup = null);
-        public Vector2 RootTopLeft(RectTransform node);
+public class Line : MaskableGraphic           // Graph demo 的折线渲染 helper（lineWidth/gradient/fillEnd/SetPath）
+```
 
-        public void ShowWindow(Window win);
-        public void HideWindowImmediately(Window win);
-        public void BringToFront(Window win);
-    }
+## List / ListSelection / ScrollPane
 
-    public sealed class PopupBlocker : UIBehaviour, IPointerClickHandler
-    {
-        public void OnPointerClick(PointerEventData eventData);
-    }
+```csharp
+public enum ListLayoutType { SingleColumn, SingleRow, FlowHorizontal, FlowVertical, Pagination }
 
-    public sealed class PopupMenu
-    {
-        public bool hideOnClickItem;
-        public RectTransform ContentPane { get; }
+public sealed class ListSource : MonoBehaviour // 列表动态实例化描述（Migrate 烘焙 itemPrefab/itemSize/gap/layout）
+{
+    public void Fill(int count, Action<GameObject, int> setup, bool rebindSelection = true);
+    // 池化复用项、按 layout 排布、刷新 ScrollPane 内容边界并重绑 ListSelection（复刻 GList numItems+itemRenderer 简版）
+}
 
-        public PopupMenu(GameObject contentPrefab, GameObject itemPrefab);
-        public void AddItem(string caption, Action callback);
-        public void Show(RectTransform target = null, PopupDirection dir = PopupDirection.Auto);
-        public void Hide();
-    }
+public static class List
+{
+    public static RectTransform Container(RectTransform list); // 项所在容器（viewport/content > viewport > list）
+}
 
-    // 轻量窗口类，不是 MonoBehaviour。
-    public class Window
-    {
-        public GameObject prefab;
-        public bool inited { get; }
-        public RectTransform Root { get; }
+public enum ListSelectionMode { Single, Multiple, MultipleSingleClick, None }
 
-        public void Show();
-        public void Hide();
-        public void HideImmediately();
+public sealed class ListSelection : UIBehaviour
+{
+    public ListSelectionMode selectionMode;
+    public UnityEvent<int> onClickItem;        // 点任意项（含非按钮项）发索引
+    public int selectedIndex { get; set; }     // set 排它选中；-1 清空
+    public void ClearSelection();
+    public List<int> GetSelection();           // Multiple 模式读全部选中索引
+    public void Rebind();                      // Fill 后自动调；手动改 content 后可再调
+}
 
-        protected void Center();
-        protected void BindCloseButton();
-        protected static void SetPivotKeepPosition(RectTransform rt, Vector2 pivot);
-
-        protected virtual void OnInit();
-        protected virtual void OnShown();
-        protected virtual void OnHide();
-        protected virtual void DoShowAnimation();
-        protected virtual void DoHideAnimation();
-    }
+public sealed class ScrollPane : UIBehaviour, ...
+{
+    public bool bounceEffect, mouseWheelEnabled;
+    public UnityEvent onScroll;
+    public float percX { get; set; }           // 滚动位置比例（0 顶/左），setter 直接跳转
+    public float percY { get; set; }
+    public void RefreshContent();              // 手动改 content 后重算滚动范围
+    public void ScrollToView(RectTransform target); // 仅竖直
+    public static ScrollPane Attach(RectTransform scrollRoot); // 一般无需手调：ScrollPaneHost 自挂
 }
 ```
+
+`overflow=scroll` 组件由烘焙的 `ScrollPaneHost` 运行时自挂 `ScrollPane`（拖动/滚轮/滚动条/惯性回弹开箱即用）。
+无虚拟化、无分页吸附。
+
+## Root / Window / PopupMenu
+
+```csharp
+public enum PopupDirection { Auto, Up, Down }
+
+public sealed class Root : MonoBehaviour       // 顶层覆盖层（GRoot）：承载 window/popup，设计坐标（左上原点 y-down）
+{
+    public static Root inst { get; }
+    public static Root Create(RectTransform designRoot); // 幂等；传画布根或设计根
+    public Vector2 size { get; }
+    public Color modalColor;
+    public bool hasAnyPopup { get; }
+    public bool hasModalWindow { get; }
+    public int activeWindowCount { get; }
+    public void Center(RectTransform obj);
+    public void ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = Auto, Action onClose = null);
+    public void ShowPopupAt(RectTransform popup, Vector2 designPos, PopupDirection dir = Down); // 指针处弹出用
+    public void TogglePopup(RectTransform popup, RectTransform target = null, PopupDirection dir = Auto);
+    public void HidePopup(RectTransform popup = null);  // null = 收起全部
+    public Vector2 ScreenToDesign(Vector2 screen, Camera camera);
+    public Vector2 RootTopLeft(RectTransform node);
+    public void ShowWindow(Window win); public void HideWindowImmediately(Window win); public void BringToFront(Window win);
+}
+
+public class Window                            // 复刻 FairyGUI Window：包一个 content prefab
+{
+    public GameObject prefab;                  // 调用方赋值
+    public bool modal;                         // 模态层插到最上层模态窗之下（复刻 AdjustModalLayer）
+    public bool inited { get; }
+    public RectTransform contentPane { get; }  // 实例化后的内容根（未 init 为 null）
+    public void Show(); public void Hide(); public void HideImmediately();
+    // 可覆盖：OnInit/OnShown/OnHide/DoShowAnimation/DoHideAnimation
+    // OnInit 默认绑 closeButton→Hide、dragArea→整窗拖动（提到最前）
+}
+
+public sealed class PopupMenu : IDisposable
+{
+    public bool hideOnClickItem;
+    public RectTransform ContentPane { get; }
+    public PopupMenu(GameObject contentPrefab, GameObject itemPrefab);
+    public ButtonBase AddItem(string caption, Action callback); // 返回项按钮，可直接设 grayed/selected/icon
+    public void ClearItems();
+    public void Show(RectTransform target = null, PopupDirection dir = Auto);
+    public void ShowAtPointer(PointerEventData e, PopupDirection dir = Auto); // 右键在指针处弹出
+    public void Hide(); public void Dispose();
+}
+```
+
+外点关闭用透明 blocker（表现为模态，避开新 Input System 下旧 Input 的异常）。
 
 ## Drag / Drop / Depth / Relation
 
 ```csharp
-namespace NanamiUI
+public sealed class Draggable : UIBehaviour, ...
 {
-    public sealed class Draggable : UIBehaviour,
-        IBeginDragHandler,
-        IDragHandler,
-        IEndDragHandler
-    {
-        public Rect? dragBounds; // parent-local, FairyGUI y-down
-        public Func<PointerEventData, bool> onDragStart;
-        public Action onDragMove;
-        public Action onDragEnd;
-        public static Draggable dragging;
+    public Rect? dragBounds;                   // parent-local、y-down（本 SDK 语义，非 GRoot-local）
+    public Func<PointerEventData, bool> onDragStart;  // 返回 true = PreventDefault，改走 DragDropManager agent
+    public Action onDragMove, onDragEnd;
+    public static Draggable dragging;
+}
 
-        public void OnBeginDrag(PointerEventData e);
-        public void OnDrag(PointerEventData e);
-        public void OnEndDrag(PointerEventData e);
-    }
+public sealed class DropTarget : UIBehaviour, IDropHandler { public Action<object> onDrop; }
 
-    public sealed class DropTarget : UIBehaviour
-    {
-        public Action<object> onDrop;
-    }
+public class DragDropManager                   // 复刻 FairyGUI DragDropManager（icon agent 拖到 DropTarget）
+{
+    public static DragDropManager inst;
+    public void StartDrag(Canvas canvas, GraphicRaycaster raycaster, Sprite icon, object data, PointerEventData e);
+    public void Cancel();
+}
 
-    public sealed class DragDropManager
-    {
-        public static DragDropManager inst { get; }
-        public bool dragging { get; }
+public static class Depth                      // 复刻 GObject.sortingOrder 兄弟序
+{
+    public static void SetSortingOrder(RectTransform child, int order);
+    public static int SortIndex(RectTransform parent, int order, Transform ignore = null);
+    public static Graph CreateRect(RectTransform parent, Vector2 fairyXY, float w, float h, int lineSize, Color line, Color fill, int order);
+}
 
-        public void StartDrag(Canvas root, GraphicRaycaster raycaster, Sprite icon, object sourceData, PointerEventData e);
-        public void MoveAgent(PointerEventData e);
-        public void Drop(PointerEventData e);
-    }
-
-    public static class Depth
-    {
-        public static int SortIndex(RectTransform parent, int order, Transform ignore = null);
-        public static void SetSortingOrder(RectTransform child, int order);
-        public static Shape CreateRect(RectTransform parent, Vector2 fairyXY, float w, float h, int lineSize, Color line, Color fill, int order);
-    }
-
-    public class Relation : UIBehaviour
-    {
-        public RectTransform target;
-        public string[] sidePairs;
-        public Vector2 lastTopLeft;
-        public Vector2 lastSize;
-
-        public static Vector2 TopLeft(RectTransform rt);
-        public void Record();
-        public void Sync();
-    }
+public class Relation : UIBehaviour            // 指向兄弟的关联（Migrate 烘焙），集中循环逐帧增量跟随
+{
+    public RectTransform target;
+    public RelationSide[] sidePairs;           // FairyGUI RelationType 全词表
 }
 ```
+
+容器关联在烘焙期已映射为 uGUI 锚点，无运行时组件。
 
 ## Transition
 
 ```csharp
-namespace NanamiUI
+public class Transition : MonoBehaviour        // 复刻 FairyGUI Transition 时间轴
 {
-    public enum TransitionItemType
-    {
-        XY,
-        Size,
-        Scale,
-        Pivot,
-        Alpha,
-        Rotation,
-        Color,
-        Animation,
-        Visible,
-        Sound,
-        Nested,
-        Shake,
-        ColorFilter,
-        Text,
-    }
-
-    [Serializable]
-    public class TransitionItem
-    {
-        public float time;
-        public RectTransform target; // null means transition root
-        public TransitionItemType type;
-
-        public bool tween;
-        public float duration;
-        public Ease ease;
-        public int repeat; // -1 means infinite
-        public bool yoyo;
-
-        public float[] start;
-        public float[] end;
-        public string stringValue;
-        public AudioClip sound;
-        public Vector2 positionOffset;
-        public float[] pathData;
-    }
-
-    public class Transition : MonoBehaviour
-    {
-        public string transitionName;
-        public bool autoPlay;
-        public int autoPlayTimes;
-        public float autoPlayDelay;
-        public TransitionItem[] items;
-
-        public void Play(int times = 1, float delay = 0, Action onComplete = null);
-        public void Stop();
-        public void Step(float deltaTime);
-    }
-
-    public class TransitionPath
-    {
-        public readonly struct PathPoint
-        {
-            public readonly int Type; // 0 CRSpline, 1 Bezier, 2 CubicBezier, 3 Straight
-            public readonly Vector2 Pos;
-            public readonly Vector2 C1;
-            public readonly Vector2 C2;
-
-            public PathPoint(Vector2 pos, int type = 0, Vector2 c1 = default, Vector2 c2 = default);
-        }
-
-        public TransitionPath(float[] tokens);
-        public TransitionPath(IReadOnlyList<PathPoint> pts);
-
-        public float Length { get; }
-        public int SegmentCount { get; }
-
-        public float GetSegmentLength(int i);
-        public void GetPointsInSegment(int segIndex, float t0, float t1, List<Vector2> points, List<float> ts, float pointDensity);
-        public Vector2 GetPointAt(float t);
-    }
+    public string transitionName;
+    public bool autoPlay; public int autoPlayTimes; public float autoPlayDelay;
+    public TransitionItem[] items;             // Migrate 烘焙
+    public bool playing { get; }
+    public void Play(int times = 1, float delay = 0, Action onComplete = null);
+    public void PlayReverse(int times = 1, float delay = 0, Action onComplete = null);
+    public UniTask PlayAsync(int times = 1, float delay = 0); // 播完或被打断后完成
+    public void Stop();                        // 复刻 Stop() 默认 setToComplete：item 落终态（倒放落起态），Shake 归位
 }
 ```
 
-## Config / Resources / Effects
+item 类型：XY/Size/Scale/Pivot/Alpha/Rotation/Color/Animation/Visible/Sound/Nested/Shake/ColorFilter/Text/Skew，
+支持曲线路径（`TransitionPath`，`CurveType` CRSpline/Bezier/CubicBezier/Straight）。
+
+## 其它
 
 ```csharp
-namespace NanamiUI
+public class ColorAdjust : UIBehaviour         // ColorFilter 4x5 颜色矩阵（亮度/对比/饱和/色相），Migrate 烘焙 shader
 {
-    [CreateAssetMenu(fileName = "NanamiUISettings", menuName = "NanamiUI/Settings")]
-    public class NanamiUISettings : ScriptableObject
-    {
-        public string defaultFont;
-        public string buttonSound;
-        public string[] packages;
-    }
-
-    public class BitmapFont : ScriptableObject
-    {
-        [Serializable]
-        public struct Glyph
-        {
-            public int code;
-            public Rect uv;
-            public float x;
-            public float y;
-            public float width;
-            public float height;
-            public int advance;
-            public int lineHeight;
-        }
-
-        public int size;
-        public bool canTint;
-        public Texture2D texture;
-        public Glyph[] glyphs;
-
-        public bool TryGetGlyph(char ch, out Glyph glyph);
-    }
-
-    public class ColorAdjust : UIBehaviour
-    {
-        public float brightness;
-        public float contrast;
-        public float saturation;
-        public float hue;
-
-        public void Set(float brightnessValue, float contrastValue, float saturationValue, float hueValue);
-    }
-
-    public class Grayed : UIBehaviour
-    {
-    }
-
-    public sealed class SortObject : UIBehaviour
-    {
-        public int order;
-    }
+    public void Set(float brightness, float contrast, float saturation, float hue);
 }
+public class Grayed : MonoBehaviour            // 灰度材质（Migrate 烘焙，运行时只切 enabled）
+public sealed class ScrollPaneHost : MonoBehaviour   // 烘焙接线：Start 自挂 ScrollPane
+public sealed class InputSubmit : MonoBehaviour      // 烘焙接线：InputField 的 Enter 提交中继
+public sealed class SortObject : MonoBehaviour       // sortingOrder 记录
+public class NanamiUISettings : ScriptableObject     // 工程配置（defaultFont 等），放 SDK 外（Assets/）
 ```

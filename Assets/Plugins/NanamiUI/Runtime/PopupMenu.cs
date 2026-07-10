@@ -59,7 +59,7 @@ namespace NanamiUI
             _content.SetActive(false);
         }
 
-        // 返回项按钮：调用方可直接设 grayed/selected(勾选)/Icon 等，无需再包一层 SetItemXxx。
+        // 返回项按钮：调用方可直接设 grayed/selected(勾选)/icon 等，无需再包一层 SetItemXxx。
         public ButtonBase AddItem(string caption, Action callback)
         {
             var index = _count++;
@@ -71,7 +71,7 @@ namespace NanamiUI
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
             rt.anchoredPosition = new Vector2(0, -index * _itemSize.y);
             var button = itemGo.GetComponent<ButtonBase>();
-            button.Title = caption;
+            button.title = caption;
             button.onClick.AddListener(() =>
             {
                 if (hideOnClickItem)
@@ -134,8 +134,8 @@ namespace NanamiUI
             if (item.GetComponent<ButtonBase>() is { } button)
             {
                 button.onClick.RemoveAllListeners();
-                button.SetGrayed(false);
-                button.Selected = false;
+                button.grayed = false;
+                button.selected = false;
                 button.changeStateOnClick = true;
             }
         }

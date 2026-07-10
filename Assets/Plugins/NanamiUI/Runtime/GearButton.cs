@@ -13,8 +13,8 @@ namespace NanamiUI
         {
             if (_button == null)
                 target.TryGetComponent(out _button);
-            if (_button != null && _button.Mode != ButtonMode.Common)
-                _button.Selected = Array.IndexOf(pages, page) >= 0;
+            if (_button != null && _button.mode != ButtonMode.Common)
+                _button.selected = Array.IndexOf(pages, page) >= 0;
         }
     }
 }

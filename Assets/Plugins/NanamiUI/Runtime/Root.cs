@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using ZLinq;
 
 namespace NanamiUI
 {
@@ -29,7 +30,7 @@ namespace NanamiUI
 
         public Color modalColor = new(0, 0, 0, 0.4f);
 
-        public Vector2 Size => rect.rect.size;
+        public Vector2 size => rect.rect.size;
 
         // 把覆盖层建到 designRoot 所在画布上、与 designRoot 同坐标区，自带高 sortingOrder 的
         // Canvas + GraphicRaycaster 渲染在页面之上并复用场景 EventSystem。
@@ -61,23 +62,14 @@ namespace NanamiUI
             obj.SetParent(rect, false);
             obj.anchorMin = obj.anchorMax = obj.pivot = new Vector2(0, 1);
             var s = obj.rect.size;
-            var r = Size;
+            var r = size;
             obj.anchoredPosition = new Vector2(Mathf.Round((r.x - s.x) / 2), -Mathf.Round((r.y - s.y) / 2));
         }
 
-        public bool HasAnyPopup => _popups.Count > 0;
+        public bool hasAnyPopup => _popups.Count > 0;
 
-        public int ActiveWindowCount
-        {
-            get
-            {
-                var n = 0;
-                foreach (var w in _windows)
-                    if (w.Root != null && w.Root.gameObject.activeSelf)
-                        n++;
-                return n;
-            }
-        }
+        public int activeWindowCount =>
+            _windows.AsValueEnumerable().Count(w => w.contentPane != null && w.contentPane.gameObject.activeSelf);
 
         public void ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto, System.Action onClose = null)
         {
@@ -158,30 +150,30 @@ namespace NanamiUI
         private Vector2 GetPopupPosition(RectTransform popup, RectTransform target, PopupDirection dir)
         {
             var popupSize = popup.rect.size;
-            var root = Size;
-            Vector2 pos, size;
+            var root = size;
+            Vector2 pos, targetSize;
             if (target != null)
             {
                 pos = RootTopLeft(target);
-                size = target.rect.size;
+                targetSize = target.rect.size;
             }
             else
             {
                 pos = RootTopLeft(popup); // 无 target：用 popup 当前位置作起点（demo 右键在指针处，见 glue 直接定位）
-                size = Vector2.zero;
+                targetSize = Vector2.zero;
             }
 
             var xx = pos.x;
             if (xx + popupSize.x > root.x)
-                xx = xx + size.x - popupSize.x;
-            var yy = pos.y + size.y;
+                xx = xx + targetSize.x - popupSize.x;
+            var yy = pos.y + targetSize.y;
             if ((dir == PopupDirection.Auto && yy + popupSize.y > root.y) || dir == PopupDirection.Up)
             {
                 yy = pos.y - popupSize.y - 1;
                 if (yy < 0)
                 {
                     yy = 0;
-                    xx += size.x / 2;
+                    xx += targetSize.x / 2;
                 }
             }
             return new Vector2(Mathf.Round(xx), Mathf.Round(yy));
@@ -203,12 +195,12 @@ namespace NanamiUI
             if (!_windows.Contains(win))
                 _windows.Add(win);
             win.EnsureInited(rect);
-            win.Root.SetParent(rect, false);
-            win.Root.SetAsLastSibling();
+            win.contentPane.SetParent(rect, false);
+            win.contentPane.SetAsLastSibling();
             // 复刻 GRoot.ShowWindow：已有模态层时，非模态窗插到模态层之下（不越过模态窗）。
             if (!win.modal && _modalLayer != null && _modalLayer.activeSelf)
-                win.Root.SetSiblingIndex(_modalLayer.transform.GetSiblingIndex());
-            win.Root.gameObject.SetActive(true);
+                win.contentPane.SetSiblingIndex(_modalLayer.transform.GetSiblingIndex());
+            win.contentPane.gameObject.SetActive(true);
             win.DoShow();
             RefreshModal();
         }
@@ -216,19 +208,19 @@ namespace NanamiUI
         public void HideWindowImmediately(Window win)
         {
             _windows.Remove(win);
-            if (win.Root != null)
-                win.Root.gameObject.SetActive(false);
+            if (win.contentPane != null)
+                win.contentPane.gameObject.SetActive(false);
             RefreshModal();
         }
 
         public void BringToFront(Window win)
         {
-            if (win.Root != null)
-                win.Root.SetAsLastSibling();
+            if (win.contentPane != null)
+                win.contentPane.SetAsLastSibling();
             RefreshModal();
         }
 
-        public bool HasModalWindow => TopModalWindow() != null;
+        public bool hasModalWindow => TopModalWindow() != null;
 
         // 按显示序（兄弟序）从上往下找最上层激活的模态窗（复刻 GRoot.AdjustModalLayer 的扫描方向）。
         private Window TopModalWindow()
@@ -237,7 +229,7 @@ namespace NanamiUI
             {
                 var child = rect.GetChild(i);
                 foreach (var w in _windows)
-                    if (w.modal && w.Root == child && child.gameObject.activeSelf)
+                    if (w.modal && w.contentPane == child && child.gameObject.activeSelf)
                         return w;
             }
             return null;
@@ -265,7 +257,7 @@ namespace NanamiUI
             _modalLayer.GetComponent<UnityEngine.UI.Image>().color = modalColor; // 可接收射线，拦截下层
             _modalLayer.SetActive(true);
             _modalLayer.transform.SetAsLastSibling(); // 先移到末尾，再插到模态窗位（窗口序号不受移除影响）
-            _modalLayer.transform.SetSiblingIndex(top.Root.GetSiblingIndex());
+            _modalLayer.transform.SetSiblingIndex(top.contentPane.GetSiblingIndex());
         }
     }
 

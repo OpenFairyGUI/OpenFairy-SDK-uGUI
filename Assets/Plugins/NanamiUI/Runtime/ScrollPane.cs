@@ -24,6 +24,7 @@ namespace NanamiUI
 
         private RectTransform _viewport;
         private RectTransform _content;
+        private RectTransform _hit;
         private RectTransform _vtBar, _vtGrip, _hzBar, _hzGrip;
         private Vector2 _contentSize, _viewSize;
         private Vector2 _startContent, _startPointer;
@@ -31,6 +32,19 @@ namespace NanamiUI
         private Vector2 _lastPos;
         private bool _dragging;
         private int _motionVersion;
+
+        // 复刻 ScrollPane.percX/percY：滚动位置比例（0 顶/左，1 底/右）。setter 直接跳转（不带惯性）。
+        public float percX
+        {
+            get => MaxScroll.x > 0 ? Mathf.Clamp01(-_content.anchoredPosition.x / MaxScroll.x) : 0;
+            set => SetPercent(true, value);
+        }
+
+        public float percY
+        {
+            get => MaxScroll.y > 0 ? Mathf.Clamp01(_content.anchoredPosition.y / MaxScroll.y) : 0;
+            set => SetPercent(false, value);
+        }
 
         // 给已烘焙的滚动根（有名为 "viewport" 的 RectMask2D 子节点）挂上运行时滚动。已挂则直接返回（幂等）。返回 null 表示不是滚动结构。
         public static ScrollPane Attach(RectTransform scrollRoot)
@@ -49,9 +63,8 @@ namespace NanamiUI
             content.SetParent(viewport, false);
             content.anchorMin = content.anchorMax = content.pivot = new Vector2(0, 1);
             content.anchoredPosition = Vector2.zero;
-            for (var i = viewport.childCount - 1; i >= 0; i--)
-                if (viewport.GetChild(i) != content)
-                    viewport.GetChild(i).SetParent(content, false);
+            while (viewport.GetChild(0) != content) // 正向搬移保持兄弟序（渲染/射线顺序），content 是最后一个子物体
+                viewport.GetChild(0).SetParent(content, false);
 
             var pane = scrollRoot.gameObject.AddComponent<ScrollPane>();
             pane._viewport = viewport;
@@ -104,25 +117,27 @@ namespace NanamiUI
 
         private void EnsureHit()
         {
-            var hit = _content.Find(HitName) as RectTransform;
-            if (hit == null)
+            if (_hit == null && (_hit = _content.Find(HitName) as RectTransform) == null)
             {
                 var go = new GameObject(HitName, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
-                hit = (RectTransform)go.transform;
-                hit.SetParent(_content, false);
+                _hit = (RectTransform)go.transform;
+                _hit.SetParent(_content, false);
                 go.GetComponent<UnityEngine.UI.Image>().color = new Color(0, 0, 0, 0);
             }
-            hit.anchorMin = hit.anchorMax = hit.pivot = new Vector2(0, 1);
-            hit.sizeDelta = Vector2.Max(_contentSize, _viewSize);
-            hit.anchoredPosition = Vector2.zero;
-            hit.SetAsFirstSibling();
+            _hit.anchorMin = _hit.anchorMax = _hit.pivot = new Vector2(0, 1);
+            var size = Vector2.Max(_contentSize, _viewSize);
+            if (_hit.sizeDelta != size)
+                _hit.sizeDelta = size;
+            _hit.anchoredPosition = Vector2.zero;
+            if (_hit.GetSiblingIndex() != 0)
+                _hit.SetAsFirstSibling();
         }
 
         public void OnBeginDrag(PointerEventData e)
         {
             if (e.button != PointerEventData.InputButton.Left)
                 return;
-            RefreshContent(); // 内容可能在 Attach 之后被 List.Fill 填充，起拖时重算滚动范围
+            RefreshContent(); // 内容可能在 Attach 之后被 ListSource.Fill 填充，起拖时重算滚动范围
             _motionVersion++;
             _dragging = true;
             _velocity = Vector2.zero;
@@ -164,7 +179,7 @@ namespace NanamiUI
         {
             if (!mouseWheelEnabled)
                 return;
-            RefreshContent(); // 内容可能在 Attach 后被 List.Fill 填充，滚轮前重算范围
+            RefreshContent(); // 内容可能在 Attach 后被 ListSource.Fill 填充，滚轮前重算范围
             var max = MaxScroll;
             var pos = _content.anchoredPosition;
             if (max.y > 0)
@@ -178,9 +193,9 @@ namespace NanamiUI
         }
 
         // 拖动滚动条 grip：percent 为沿轨道的比例（0 顶/左），映射到内容位置。
+        // 内容边界由调用方保证已刷新（grip 拖动会话在 OnPointerDown 刷一次，不逐帧重算）。
         internal void SetPercent(bool horizontal, float percent)
         {
-            RefreshContent();
             var max = MaxScroll;
             var pos = _content.anchoredPosition;
             percent = Mathf.Clamp01(percent);
@@ -344,6 +359,7 @@ namespace NanamiUI
         {
             if (e.button != PointerEventData.InputButton.Left)
                 return;
+            _pane.RefreshContent(); // 拖动会话起点刷一次内容边界，SetPercent 不逐帧重算
             RectTransformUtility.ScreenPointToLocalPointInRectangle(_bar, e.position, e.pressEventCamera, out var local);
             _dragOffset = local - GripTopLeft();
         }

@@ -16,15 +16,12 @@ namespace NanamiUI.Example
         protected override void OnShown()
         {
             // 填 WindowA 里的列表（按 ListSource 找，不依赖名字）为 6 项（复刻 Window1.OnShown）。
-            foreach (var src in go.GetComponentsInChildren<NanamiUI.ListSource>())
-            {
-                NanamiUI.List.Fill((RectTransform)src.transform, 6, (item, i) =>
+            if (contentPane.GetComponentInChildren<NanamiUI.ListSource>() is { } src)
+                src.Fill(6, (item, i) =>
                 {
                     if (item.GetComponent<NanamiUI.ButtonBase>() is { } button)
-                        button.Title = i.ToString();
+                        button.title = i.ToString();
                 });
-                break;
-            }
         }
     }
 
@@ -56,6 +53,6 @@ namespace NanamiUI.Example
         protected override void OnHide() => Transition("t1")?.Stop();
 
         private NanamiUI.Transition Transition(string name) =>
-            go.GetComponents<NanamiUI.Transition>().AsValueEnumerable().FirstOrDefault(t => t.transitionName == name);
+            contentPane.GetComponents<NanamiUI.Transition>().AsValueEnumerable().FirstOrDefault(t => t.transitionName == name);
     }
 }

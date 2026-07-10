@@ -17,6 +17,9 @@ namespace NanamiUI
         public float hue;
         public Shader shader; // Migrate 烘焙
 
+        private static readonly int ColorMatrixId = Shader.PropertyToID("_ColorMatrix");
+        private static readonly int ColorOffsetId = Shader.PropertyToID("_ColorOffset");
+
         private Material _material;
         private readonly float[] _matrix = new float[20];
         private readonly float[] _tmp = new float[20];
@@ -65,8 +68,8 @@ namespace NanamiUI
             matrix.SetRow(1, new Vector4(_matrix[5], _matrix[6], _matrix[7], _matrix[8]));
             matrix.SetRow(2, new Vector4(_matrix[10], _matrix[11], _matrix[12], _matrix[13]));
             matrix.SetRow(3, new Vector4(_matrix[15], _matrix[16], _matrix[17], _matrix[18]));
-            _material.SetMatrix("_ColorMatrix", matrix);
-            _material.SetVector("_ColorOffset", new Vector4(_matrix[4], _matrix[9], _matrix[14], _matrix[19]));
+            _material.SetMatrix(ColorMatrixId, matrix);
+            _material.SetVector(ColorOffsetId, new Vector4(_matrix[4], _matrix[9], _matrix[14], _matrix[19]));
         }
 
         private void AdjustBrightness(float value)

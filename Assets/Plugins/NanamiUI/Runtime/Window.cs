@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using ZLinq;
 
 namespace NanamiUI
 {
@@ -12,20 +13,18 @@ namespace NanamiUI
         public bool modal;             // true：窗口下方铺半透明模态层，拦截下层点击（复刻 Window.modal）
         public bool inited { get; private set; }
 
-        protected GameObject go;
-        protected RectTransform contentPane;
+        // 复刻 Window.contentPane：实例化后的窗口内容根（未 init 时为 null）。
+        public RectTransform contentPane { get; private set; }
 
-        public RectTransform Root => go != null ? (RectTransform)go.transform : null;
-
-        public void Show() => NanamiUI.Root.inst.ShowWindow(this);
+        public void Show() => Root.inst.ShowWindow(this);
         public void Hide()
         {
-            if (go != null && go.activeSelf)
+            if (contentPane != null && contentPane.gameObject.activeSelf)
                 DoHideAnimation();
         }
         public void HideImmediately()
         {
-            NanamiUI.Root.inst.HideWindowImmediately(this);
+            Root.inst.HideWindowImmediately(this);
             OnHide();
         }
 
@@ -33,8 +32,7 @@ namespace NanamiUI
         {
             if (inited)
                 return;
-            go = Object.Instantiate(prefab, parent, false);
-            contentPane = (RectTransform)go.transform;
+            contentPane = (RectTransform)Object.Instantiate(prefab, parent, false).transform;
             contentPane.anchorMin = contentPane.anchorMax = contentPane.pivot = new Vector2(0, 1);
             contentPane.localScale = Vector3.one;
             inited = true;
@@ -47,20 +45,14 @@ namespace NanamiUI
         protected void Center()
         {
             var s = contentPane.rect.size;
-            var r = NanamiUI.Root.inst.Size;
+            var r = Root.inst.size;
             contentPane.anchoredPosition = new Vector2(Mathf.Round((r.x - s.x) / 2), -Mathf.Round((r.y - s.y) / 2));
         }
 
         // 找到关闭按钮（frame 下名为 closeButton 的 ButtonBase）并接 Hide。
-        protected void BindCloseButton()
-        {
-            foreach (var button in contentPane.GetComponentsInChildren<ButtonBase>(true))
-                if (button.name == "closeButton")
-                {
-                    button.onClick.AddListener(Hide);
-                    return;
-                }
-        }
+        protected void BindCloseButton() =>
+            contentPane.GetComponentsInChildren<ButtonBase>(true).AsValueEnumerable()
+                .FirstOrDefault(b => b.name == "closeButton")?.onClick.AddListener(Hide);
 
         // 找到 frame 下的 dragArea 并让拖它移动整个窗口（复刻 Window.dragArea + StartDrag）。dragArea 常是空 graph，补透明射线面。
         protected void BindDragArea()
@@ -118,7 +110,7 @@ namespace NanamiUI
         private Vector2 _start;
         private Vector2 _startPointer;
         private bool _dragging;
-        private RectTransform Content => window.Root;
+        private RectTransform Content => window.contentPane;
 
         public void OnBeginDrag(PointerEventData e)
         {

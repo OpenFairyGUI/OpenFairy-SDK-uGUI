@@ -5,6 +5,7 @@ using DG.Tweening;
 using DG.Tweening.Core.Easing;
 using UnityEngine;
 using UnityEngine.UI;
+using ZLinq;
 
 namespace NanamiUI
 {
@@ -146,10 +147,40 @@ namespace NanamiUI
                 Run(version).Forget();
         }
 
+        public bool playing => _playing;
+
+        // await 版 Play：播完或被 Stop/新播放打断后完成。
+        public async UniTask PlayAsync(int times = 1, float delay = 0)
+        {
+            Play(times, delay);
+            var version = _playVersion;
+            await UniTask.WaitWhile(() => this != null && version == _playVersion && _playing);
+        }
+
+        // 复刻 FairyGUI Stop() 默认 setToComplete：未完成 item 落到终态（倒放落回起态）。
+        // Shake 必须归位——否则下次 Play 把偏移位当新基准，反复播放/停止位置越漂越远。
         public void Stop()
         {
+            if (!_playing)
+                return;
             _playing = false;
             _playVersion++;
+            _onComplete = null;
+            foreach (var item in items)
+                if (item.type is TransitionItemType.Sound or TransitionItemType.Nested)
+                {
+                    if (item.Applied && item.type == TransitionItemType.Nested)
+                        ((Transition)item.RuntimeTarget).Stop();
+                    item.Applied = true; // 停止时不补播声音、不启动未到点的嵌套
+                }
+            // 倒放逆序求值：终态以时间轴最早的 item 为准。无限循环 item 无终态（对齐 FairyGUI ToComplete）。
+            var effectiveTime = _reversed ? 0 : _totalDuration;
+            for (var i = 0; i < items.Length; i++)
+            {
+                var item = items[_reversed ? items.Length - 1 - i : i];
+                if (!item.tween || item.repeat >= 0)
+                    Evaluate(item, effectiveTime - item.time);
+            }
         }
 
         private async UniTask Run(int version)
@@ -178,9 +209,14 @@ namespace NanamiUI
 
             // 倒放：把全局时间沿时间轴翻转，各 item 收到递减的 local，从末态求值回到起态。
             // 钳到 ≥0，保证收尾时 time=0 的 item 落在 local=0（= start 值），而非负 local 被提前 return 卡在中途。
+            // 倒放按数组逆序求值：同帧触发多个瞬时 item 时按时间轴倒序生效（items 按 time 升序烘焙）。
             var effectiveTime = _reversed ? Mathf.Max(0, _totalDuration - _time) : _time;
-            foreach (var item in items)
-                Evaluate(item, effectiveTime - item.time);
+            if (_reversed)
+                for (var i = items.Length - 1; i >= 0; i--)
+                    Evaluate(items[i], effectiveTime - items[i].time);
+            else
+                foreach (var item in items)
+                    Evaluate(item, effectiveTime - item.time);
 
             if (_hasInfinite || _time < _totalDuration)
                 return;
@@ -204,34 +240,46 @@ namespace NanamiUI
 
         private void Evaluate(TransitionItem item, float local)
         {
-            if (local < 0)
-                return;
-
             if (item.type == TransitionItemType.Shake)
             {
+                // 抖动窗口 [0, duration)：正放 local 递增（幅度衰减），倒放 local 递减（同一幅度曲线倒序）。
+                // 窗口结束（正放上穿 duration / 倒放下穿 0）必须归位 ShakeBase，否则反复播放位置越漂越远。
+                var duration = item.start[1];
+                if (item.Applied || (_reversed ? local >= duration : local < 0))
+                    return;
                 var rt = Target(item);
                 if (!item.Started)
                 {
                     item.Started = true;
                     item.ShakeBase = rt.anchoredPosition;
                 }
-                if (local < item.start[1])
-                    rt.anchoredPosition = item.ShakeBase + UnityEngine.Random.insideUnitCircle * (item.start[0] * (1 - local / item.start[1]));
-                else if (!item.Applied)
+                if (_reversed ? local <= 0 : local >= duration)
                 {
                     item.Applied = true;
                     rt.anchoredPosition = item.ShakeBase;
                 }
+                else
+                    rt.anchoredPosition = item.ShakeBase + UnityEngine.Random.insideUnitCircle * (item.start[0] * (1 - local / duration));
                 return;
             }
 
             if (!item.tween)
             {
-                if (item.Applied)
+                // 瞬时 item：正放在时间轴到达 item.time（local 上穿 0）时触发，倒放在翻转时间轴下穿 item.time 时触发。
+                if (item.Applied || (_reversed ? local > 0 : local < 0))
                     return;
                 item.Applied = true;
                 ApplyInstant(item);
                 return;
+            }
+
+            if (local < 0)
+            {
+                if (!_reversed || !item.Started || item.Applied)
+                    return;
+                // 倒放下穿 item 起点：帧步长可能跳过 local==0，补一次精确起态。
+                item.Applied = true;
+                local = 0;
             }
 
             if (!item.Started)
@@ -282,7 +330,7 @@ namespace NanamiUI
                     var movieClip = (MovieClip)item.RuntimeTarget;
                     movieClip.playing = item.start[1] != 0;
                     if (item.start[0] >= 0)
-                        movieClip.SetFrame((int)item.start[0]);
+                        movieClip.frame = (int)item.start[0];
                     break;
                 }
                 case TransitionItemType.Sound:
@@ -290,8 +338,14 @@ namespace NanamiUI
                         audioSource.PlayOneShot(item.sound, item.volume);
                     break;
                 case TransitionItemType.Nested:
-                    ((Transition)item.RuntimeTarget).Play(item.playTimes);
+                {
+                    var nested = (Transition)item.RuntimeTarget;
+                    if (_reversed)
+                        nested.PlayReverse(item.playTimes);
+                    else
+                        nested.Play(item.playTimes);
                     break;
+                }
                 case TransitionItemType.Pivot:
                 {
                     // 保持 rect 不动地改 pivot
@@ -391,13 +445,7 @@ namespace NanamiUI
         {
             NestedTransitions.Clear();
             target.GetComponents(NestedTransitions);
-            Transition result = null;
-            foreach (var transition in NestedTransitions)
-                if (transition.transitionName == name)
-                {
-                    result = transition;
-                    break;
-                }
+            var result = NestedTransitions.AsValueEnumerable().FirstOrDefault(t => t.transitionName == name);
             NestedTransitions.Clear();
             return result;
         }

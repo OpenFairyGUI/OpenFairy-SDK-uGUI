@@ -275,6 +275,8 @@ namespace NanamiUI
                 _vh.AddTriangle(baseIndex + SectorCenterTriangles[i], baseIndex + SectorCenterTriangles[i + 1], baseIndex + SectorCenterTriangles[i + 2]);
         }
 
+        private static readonly System.Collections.Generic.List<int> RestIndices = new();
+
         private void FillPolygon()
         {
             var numVertices = points.Length;
@@ -297,7 +299,9 @@ namespace NanamiUI
                     AddVert(px, py, color);
             }
 
-            var rest = new System.Collections.Generic.List<int>();
+            // Skew transition 每帧重建网格：静态复用（同 FairyGUI PolygonMesh.sRestIndices；OnPopulateMesh 单线程安全）。
+            var rest = RestIndices;
+            rest.Clear();
             for (var i = 0; i < numVertices; i++)
                 rest.Add(i);
 

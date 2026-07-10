@@ -17,7 +17,7 @@ namespace NanamiUI
             var index = Array.IndexOf(pages, page);
             var movieClip = _movieClip ??= target.GetComponent<MovieClip>();
             movieClip.playing = index >= 0 ? playings[index] : defaultPlaying;
-            movieClip.SetFrame(index >= 0 ? frames[index] : defaultFrame);
+            movieClip.frame = index >= 0 ? frames[index] : defaultFrame;
         }
     }
 }

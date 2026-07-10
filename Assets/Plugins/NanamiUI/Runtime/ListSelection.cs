@@ -27,7 +27,7 @@ namespace NanamiUI
 
         protected override void Start() => Rebind();
 
-        // 扫描 content 里的项接线（List.Fill 动态填充后可再调）；索引 = 项在 content 里的次序（含非按钮项）。
+        // 扫描 content 里的项接线（ListSource.Fill 动态填充后可再调）；索引 = 项在 content 里的次序（含非按钮项）。
         public void Rebind()
         {
             foreach (var item in _items)
@@ -68,15 +68,28 @@ namespace NanamiUI
                 }
         }
 
+        // 复刻 GList.selectedIndex：get 取第一个选中项；set 排它选中该项（-1 = 清空）。
         public int selectedIndex
         {
-            get
+            get => _items.FindIndex(item => item.Button != null && item.Button.selected);
+            set
             {
                 for (var i = 0; i < _items.Count; i++)
-                    if (_items[i].Button != null && _items[i].Button.Selected)
-                        return i;
-                return -1;
+                    if (_items[i].Button is { } button)
+                        button.selected = i == value;
             }
+        }
+
+        public void ClearSelection() => selectedIndex = -1;
+
+        // 复刻 GList.GetSelection：当前全部选中项索引（Multiple 模式可多个）。
+        public List<int> GetSelection()
+        {
+            var result = new List<int>();
+            for (var i = 0; i < _items.Count; i++)
+                if (_items[i].Button is { selected: true })
+                    result.Add(i);
+            return result;
         }
 
         internal void Click(int index)
@@ -87,13 +100,13 @@ namespace NanamiUI
                 case ListSelectionMode.None:
                     break;
                 case ListSelectionMode.MultipleSingleClick:
-                    clicked.Selected = !clicked.Selected; // 每次点击切换
+                    clicked.selected = !clicked.selected; // 每次点击切换
                     break;
                 case ListSelectionMode.Single:
                 case ListSelectionMode.Multiple: // 无修饰键点击与 Single 一致：排它选中
                     foreach (var item in _items)
                         if (item.Button != null)
-                            item.Button.Selected = ReferenceEquals(item.Button, clicked);
+                            item.Button.selected = ReferenceEquals(item.Button, clicked);
                     break;
             }
             onClickItem.Invoke(index);

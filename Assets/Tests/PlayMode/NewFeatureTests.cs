@@ -20,9 +20,9 @@ namespace NanamiUI.Tests
         {
             public Controller<RadioPage> m_ctrl;
 
-            protected override int GetControllerPage(int controller) => controller == 0 ? (int)m_ctrl.page : -1;
+            protected internal override int GetControllerPage(int controller) => controller == 0 ? (int)m_ctrl.page : -1;
 
-            protected override void SetControllerPage(int controller, int page)
+            protected internal override void SetControllerPage(int controller, int page)
             {
                 if (controller == 0)
                     m_ctrl.page = (RadioPage)page;
@@ -147,14 +147,14 @@ namespace NanamiUI.Tests
             mc.addDelays = new float[mc.frames.Length];
 
             mc.playing = false;
-            mc.SetFrame(2);
-            Assert.AreSame(mc.frames[2], mc.sprite, "SetFrame 应把 sprite 设为对应帧");
+            mc.frame = 2;
+            Assert.AreSame(mc.frames[2], mc.sprite, "frame setter 应把 sprite 设为对应帧");
 
-            mc.SetFrame(100); // 越界应钳到末帧，frame 字段也钳住（否则自播 Update 会越界索引 addDelays[frame]）
-            Assert.AreEqual(2, mc.frame, "SetFrame 越界应把 frame 钳到末帧");
+            mc.frame = 100; // 越界应钳到末帧（否则自播 Advance 会越界索引 addDelays[frame]）
+            Assert.AreEqual(2, mc.frame, "frame 越界应钳到末帧");
 
             // 自播：从第 0 帧起，跑若干真实帧应离开第 0 帧（interval 略大于单帧 dt，先 0→1 再循环，轮询捕捉过渡）。
-            mc.SetFrame(0);
+            mc.frame = 0;
             mc.interval = 0.02f;
             mc.playing = true;
             var advanced = false;
@@ -184,7 +184,7 @@ namespace NanamiUI.Tests
             mc.interval = 0.005f;
 
             var ended = false;
-            mc.onPlayEnd = () => ended = true;
+            mc.onPlayEnd.AddListener(() => ended = true);
             mc.SetPlaySettings(0, 2, 1, 0); // 播 0→2 一次，结束停在第 0 帧
             for (var i = 0; i < 80 && !ended; i++)
                 yield return null;
@@ -319,7 +319,7 @@ namespace NanamiUI.Tests
         }
 
         [UnityTest]
-        public IEnumerator InputText_exposes_password_maxlength_editable()
+        public IEnumerator TextInput_exposes_password_maxlength_editable()
         {
             var go = new GameObject("input", typeof(RectTransform), typeof(CanvasRenderer));
             ((RectTransform)go.transform).SetParent(_rig.CanvasRt, false);
@@ -424,11 +424,11 @@ namespace NanamiUI.Tests
             ScrollPane.Attach(root);
             yield return null;
 
-            NanamiUI.List.Fill(root, 3, (item, _) => item.GetComponent<TestButton>().mode = ButtonMode.Check);
+            source.Fill(3, (item, _) => item.GetComponent<TestButton>().mode = ButtonMode.Check);
             selection.Rebind(); // 第二次重绑不应留下重复 listener
             var content = viewport.Find("content") as RectTransform;
             var hit = content.GetChild(0) as RectTransform;
-            Assert.IsNotNull(hit, "List.Fill 不应删除 ScrollPane 的透明命中面");
+            Assert.IsNotNull(hit, "ListSource.Fill 不应删除 ScrollPane 的透明命中面");
             Assert.AreEqual("__scrollHit", hit.name, "ScrollPane 的保留命中面应仍在 content 内");
             Assert.AreEqual(0, hit.GetSiblingIndex(), "命中面应保持在最底层，不遮住列表项");
             Assert.GreaterOrEqual(hit.sizeDelta.y, 120f, "命中面高度应随重填后的内容刷新");
@@ -455,15 +455,15 @@ namespace NanamiUI.Tests
             source.layout = ListLayoutType.SingleColumn;
 
             var fired = 0;
-            NanamiUI.List.Fill(root, 2, (item, i) => item.GetComponent<TestButton>().onClick.AddListener(() => fired += i + 1));
+            source.Fill(2, (item, i) => item.GetComponent<TestButton>().onClick.AddListener(() => fired += i + 1));
             var first = root.GetComponentsInChildren<TestButton>(false).AsValueEnumerable().OrderBy(button => button.transform.GetSiblingIndex()).ToArray();
             first[0].onClick.Invoke();
             Assert.AreEqual(1, fired, "第一次填充的 listener 应触发一次");
 
             fired = 0;
-            NanamiUI.List.Fill(root, 2, (item, i) => item.GetComponent<TestButton>().onClick.AddListener(() => fired += 10 + i));
+            source.Fill(2, (item, i) => item.GetComponent<TestButton>().onClick.AddListener(() => fired += 10 + i));
             var second = root.GetComponentsInChildren<TestButton>(false).AsValueEnumerable().OrderBy(button => button.transform.GetSiblingIndex()).ToArray();
-            CollectionAssert.AreEquivalent(first, second, "List.Fill 应复用整批 item，而不是销毁重建");
+            CollectionAssert.AreEquivalent(first, second, "ListSource.Fill 应复用整批 item，而不是销毁重建");
             Assert.AreEqual("__listPool", root.GetChild(root.childCount - 1).name, "池根应留在末尾，不污染可见 item 顺序");
 
             second[0].onClick.Invoke();

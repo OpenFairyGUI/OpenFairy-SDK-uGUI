@@ -21,23 +21,22 @@ namespace NanamiUI
         public UnityEvent onChanged = new(); // 复刻 GButton.onChanged：仅用户点击翻转 Check/Radio 时发
 
         public ButtonMode mode;
-        public bool selected;
-        public bool grayed;
         public string selectedTitle;
-        public TextField titleText;
-        public Loader iconLoader;
-
-        public Component relatedOwner;
-        public int relatedController = -1;
-        public int relatedPage = -1;
         public bool changeStateOnClick = true; // 复刻 GButton：列表项交给 ListSelection 管选择时置 false，禁本体自翻 selected
+
+        // 烘焙接线（Migrate 写入），不属用户 API 面。
+        [SerializeField] internal TextField titleText;
+        [SerializeField] internal Loader iconLoader;
+        [SerializeField] internal Component relatedOwner;
+        [SerializeField] internal int relatedController = -1;
+        [SerializeField] internal int relatedPage = -1;
+        [SerializeField] internal bool _selected; // Migrate 烘焙直写（绕过 setter 的关联控制器逻辑）
+        [SerializeField] internal bool _grayed;
 
         [SerializeField]
         private string _title;
 
-        public ButtonMode Mode => mode;
-
-        public string Title
+        public string title
         {
             get => _title;
             set
@@ -47,7 +46,7 @@ namespace NanamiUI
             }
         }
 
-        public Sprite Icon
+        public Sprite icon
         {
             get => iconLoader.sprite;
             set
@@ -59,18 +58,18 @@ namespace NanamiUI
 
         // 复刻 GButton.selected 的 setter：Common 忽略选中态、同值早返回；
         // 选中把关联控制器设到本页，Check 取消且当前正在本页则回对页（2 页控制器的 oppositePageId）。
-        public bool Selected
+        public bool selected
         {
-            get => selected;
+            get => _selected;
             set
             {
-                if (mode == ButtonMode.Common || selected == value)
+                if (mode == ButtonMode.Common || _selected == value)
                     return;
-                selected = value;
+                _selected = value;
                 RefreshState();
                 if (HasRelatedController && Application.isPlaying) // 烘焙期选中态由控制器初始页经 GearButton 驱动，不反向写页
                 {
-                    if (selected)
+                    if (_selected)
                         ControllerBinding.SetPage(relatedOwner, relatedController, relatedPage);
                     else if (mode == ButtonMode.Check && ControllerBinding.GetPage(relatedOwner, relatedController) == relatedPage)
                         ControllerBinding.SetPage(relatedOwner, relatedController, relatedPage == 0 ? 1 : 0);
@@ -78,14 +77,18 @@ namespace NanamiUI
             }
         }
 
-        // 复刻 GButton.HandleGrayedChanged：置灰后进 disabled/selectedDisabled 页并拦截交互（grayed 守卫在各 handler 里）。
-        public void SetGrayed(bool value)
+        // 复刻 GButton.grayed（HandleGrayedChanged）：置灰后进 disabled/selectedDisabled 页并拦截交互（守卫在各 handler 里）。
+        public bool grayed
         {
-            grayed = value;
-            RefreshState();
+            get => _grayed;
+            set
+            {
+                _grayed = value;
+                RefreshState();
+            }
         }
 
-        public bool HasRelatedController =>
+        internal bool HasRelatedController =>
             relatedOwner != null && relatedController >= 0 && relatedPage >= 0;
 
         public abstract void RefreshState();
@@ -141,39 +144,36 @@ namespace NanamiUI
 
         private bool _down, _over;
 
+        // grayed 只拦视觉/动作，指针状态照常维护——否则灰显期间移入移出后 _down/_over 残留，恢复时状态画错。
         public void OnPointerDown(PointerEventData eventData)
         {
-            if (eventData.button != PointerEventData.InputButton.Left || grayed) // 复刻 GButton.__touchBegin：仅左键
+            if (eventData.button != PointerEventData.InputButton.Left) // 复刻 GButton.__touchBegin：仅左键
                 return;
             _down = true;
-            if (mode == ButtonMode.Common) // 仅 Common 按下进 down 态，Check/Radio 按住不变
+            if (!grayed && mode == ButtonMode.Common) // 仅 Common 按下进 down 态，Check/Radio 按住不变
                 SetState(VisualState.Down);
         }
 
         public void OnPointerUp(PointerEventData eventData)
         {
-            if (eventData.button != PointerEventData.InputButton.Left || grayed)
+            if (eventData.button != PointerEventData.InputButton.Left)
                 return;
             _down = false;
-            if (mode == ButtonMode.Common)
+            if (!grayed && mode == ButtonMode.Common)
                 RefreshState();
         }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (grayed)
-                return;
             _over = true;
-            if (!_down)
+            if (!grayed && !_down)
                 RefreshState();
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            if (grayed)
-                return;
             _over = false;
-            if (!_down)
+            if (!grayed && !_down)
                 RefreshState();
         }
 
@@ -186,7 +186,7 @@ namespace NanamiUI
             {
                 if (changeStateOnClick)
                 {
-                    Selected = !selected;
+                    selected = !selected;
                     onChanged.Invoke();
                 }
             }
@@ -196,7 +196,7 @@ namespace NanamiUI
                 {
                     if (!HasRelatedController)
                         DeselectSiblings(); // 无关联控制器的 radio 组回退：同父兄弟互斥
-                    Selected = true;
+                    selected = true;
                     onChanged.Invoke();
                 }
             }
@@ -210,8 +210,8 @@ namespace NanamiUI
             var parent = transform.parent;
             for (var i = 0; i < parent.childCount; i++)
                 if (parent.GetChild(i).GetComponent<ButtonBase>() is { } sibling
-                    && !ReferenceEquals(sibling, this) && sibling.Mode == ButtonMode.Radio && sibling.Selected)
-                    sibling.Selected = false;
+                    && !ReferenceEquals(sibling, this) && sibling.mode == ButtonMode.Radio && sibling.selected)
+                    sibling.selected = false;
         }
 
         public override void RefreshState()

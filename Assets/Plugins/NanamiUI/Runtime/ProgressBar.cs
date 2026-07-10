@@ -14,17 +14,18 @@ namespace NanamiUI
     }
 
     // ProgressBar 与 Slider 共用的标题格式化（复刻 FairyGUI GProgressBar/GSlider 的 titleType 分支）。
-    public static class ProgressTitle
+    // 显式 ToString：int+string 的 Concat 会装箱，TweenValue 期间每帧调用。
+    internal static class ProgressTitle
     {
         public static string Format(ProgressTitleType type, float value, float min, float max)
         {
             var percent = Mathf.Clamp01((value - min) / (max - min));
             return type switch
             {
-                ProgressTitleType.Percent => Mathf.FloorToInt(percent * 100) + "%",
-                ProgressTitleType.ValueAndMax => Mathf.Round(value) + "/" + Mathf.Round(max),
-                ProgressTitleType.Value => "" + Mathf.Round(value),
-                _ => "" + Mathf.Round(max),
+                ProgressTitleType.Percent => Mathf.FloorToInt(percent * 100).ToString() + "%",
+                ProgressTitleType.ValueAndMax => Mathf.RoundToInt(value).ToString() + "/" + Mathf.RoundToInt(max).ToString(),
+                ProgressTitleType.Value => Mathf.RoundToInt(value).ToString(),
+                _ => Mathf.RoundToInt(max).ToString(),
             };
         }
     }
@@ -36,14 +37,16 @@ namespace NanamiUI
         [SerializeField, FormerlySerializedAs("min")] private float _min;
         public ProgressTitleType titleType;
         public bool reverse;
-        public TextField title;
-        public RectTransform bar;
-        public RectTransform barV;
-        public MovieClip ani;
-        public float barMaxWidthDelta;
-        public float barMaxHeightDelta;
-        public float barStartX;
-        public float barStartY;
+
+        // 烘焙接线（Migrate 写入）。
+        [SerializeField] internal TextField title;
+        [SerializeField] internal RectTransform bar;
+        [SerializeField] internal RectTransform barV;
+        [SerializeField] internal MovieClip ani;
+        [SerializeField] internal float barMaxWidthDelta;
+        [SerializeField] internal float barMaxHeightDelta;
+        [SerializeField] internal float barStartX;
+        [SerializeField] internal float barStartY;
 
         [System.NonSerialized] private Tweener _tweener;
         [System.NonSerialized] private UnityEngine.UI.Image _barImage;
@@ -96,7 +99,7 @@ namespace NanamiUI
             }, 1f, duration).SetEase(ease).SetLink(gameObject).OnComplete(() => _tweener = null);
         }
 
-        public void Apply()
+        internal void Apply()
         {
             var percent = Mathf.Clamp01((value - min) / (max - min));
             if (title != null)
@@ -120,7 +123,7 @@ namespace NanamiUI
                     barV.anchoredPosition = new Vector2(barV.anchoredPosition.x, -(barStartY + (fullHeight - h)));
             }
             if (ani != null)
-                ani.SetFrame(Mathf.RoundToInt(percent * 100));
+                ani.frame = Mathf.RoundToInt(percent * 100);
         }
 
         private bool SetFillAmount(RectTransform barRt, ref UnityEngine.UI.Image image, float percent)

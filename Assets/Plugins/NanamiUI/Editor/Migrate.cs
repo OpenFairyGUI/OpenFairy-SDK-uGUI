@@ -516,7 +516,19 @@ namespace NanamiUI.Editor
                     var view = BuildScrollView(root, xml, rt.sizeDelta);
                     foreach (var (_, childGo) in children)
                         if (childGo.transform.parent == rt)
-                            childGo.transform.SetParent(view.Viewport, false);
+                        {
+                            var childRt = (RectTransform)childGo.transform;
+                            var stretch = childRt.anchorMax - childRt.anchorMin; // 容器关联映射出的拉伸锚点份额
+                            childRt.SetParent(view.Viewport, false);
+                            if (stretch != Vector2.zero)
+                            {
+                                // offset 按组件根尺寸算，锚点分数进 viewport 后 referencing 更窄的 rect（缩进了 margin+滚动条），
+                                // 拉伸子物体静置尺寸会被削。按差额补回：左/上边不动，右/下边外扩，保持 authored 尺寸。
+                                var d = Vector2.Scale(stretch, rt.sizeDelta - view.ViewportSize);
+                                childRt.offsetMax += new Vector2(d.x, 0);
+                                childRt.offsetMin -= new Vector2(0, d.y);
+                            }
+                        }
                     SetGrips(view, ContentBounds(children));
                     AddScrollHost(root, view); // 运行时自挂 ScrollPane，转换后无需胶水即可滚动
                 }
@@ -758,6 +770,7 @@ namespace NanamiUI.Editor
             {
                 var kind = gearXml.Kind;
                 var controller = controllers[gearXml.Controller];
+                DropStalePages(controller, gearXml); // pages 与各 kind 分支的 values 平行，须在解析前同步剔除陈旧槽
                 var gearType = (kind switch
                 {
                     Schema.GearKind.Display or Schema.GearKind.Display2 => typeof(GearDisplay<>),
@@ -847,7 +860,7 @@ namespace NanamiUI.Editor
                 else if (kind == Schema.GearKind.Display2)
                 {
                     display2 = gear;
-                    gearType.GetField("condition").SetValue(gear, gearXml.Condition);
+                    gearType.GetField("condition").SetValue(gear, (DisplayCondition)gearXml.Condition);
                 }
                 controller.Gears.Add(gear);
             }
@@ -874,16 +887,35 @@ namespace NanamiUI.Editor
             controllerType.GetProperty("page").SetValue(data.Value, data.PageValues[data.Selected]);
         }
 
+        // gear 的 pages 引用控制器已删的陈旧页 id 时，把该槽连同平行的 values 槽一并剔除——
+        // 留 default(T)（= 枚举第 0 页）会让切到第 0 页时误命中陈旧槽、应用已删页的值。
+        private static void DropStalePages(ControllerData controller, Schema.Gear gearXml)
+        {
+            if (gearXml.Pages is not { } ids)
+                return;
+            var parts = ids.Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.AsValueEnumerable().All(id => Array.IndexOf(controller.PageIds, id) >= 0))
+                return;
+            var values = gearXml.Values?.Split('|');
+            var keptIds = new List<string>();
+            var keptValues = values != null ? new List<string>() : null;
+            for (var i = 0; i < parts.Length; i++)
+                if (Array.IndexOf(controller.PageIds, parts[i]) >= 0)
+                {
+                    keptIds.Add(parts[i]);
+                    keptValues?.Add(i < values.Length ? values[i] : "-");
+                }
+            gearXml.Pages = string.Join(",", keptIds);
+            if (keptValues != null)
+                gearXml.Values = string.Join("|", keptValues);
+        }
+
         private static Array PageValues(ControllerData controller, string ids)
         {
-            var parts = ids?.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+            var parts = ids?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
             var values = Array.CreateInstance(controller.PageType, parts.Length);
             for (var i = 0; i < parts.Length; i++)
-            {
-                var idx = Array.IndexOf(controller.PageIds, parts[i]);
-                if (idx >= 0) // 跳过控制器已不存在的陈旧页 id（编辑器残留），避免越界；该槽留 default 页
-                    values.SetValue(controller.PageValues[idx], i);
-            }
+                values.SetValue(controller.PageValues[Array.IndexOf(controller.PageIds, parts[i])], i);
             return values;
         }
 
@@ -920,14 +952,14 @@ namespace NanamiUI.Editor
             if (button == null)
                 return; // 非 button 项（plain component/label 作 list item）：无按钮面可配，跳过
             if (buttonXml.Title is { } title)
-                button.Title = title;
+                button.title = title;
             if (buttonXml.SelectedTitle is { } selectedTitle)
                 button.selectedTitle = selectedTitle;
             if (buttonXml.Icon is { } icon)
-                button.Icon = LoadSprite(icon, packageId);
+                button.icon = LoadSprite(icon, packageId);
             if (buttonXml.Mode is { } mode)
                 button.mode = mode;
-            button.selected = buttonXml.Checked && button.mode != ButtonMode.Common; // 复刻 GButton.selected：Common 忽略选中态
+            button._selected = buttonXml.Checked && button.mode != ButtonMode.Common; // 烘焙直写（复刻 GButton.selected：Common 忽略选中态），不触发关联控制器
             button.RefreshState();
         }
 
@@ -1079,20 +1111,20 @@ namespace NanamiUI.Editor
 
         private static void ConfigureComboBox(GameObject go, Schema.Extension xml, string packageId)
         {
-            var combo = go.GetComponent<ButtonBase>();
-            if (combo == null)
+            if (go.GetComponent<ButtonBase>() is not { } combo || combo is not IComboBox)
                 return;
+            const System.Reflection.BindingFlags Any = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
             var type = combo.GetType();
             if (xml.Dropdown is { } dropdown && TryResolve(dropdown, packageId, out var dropRes))
-                type.GetField("dropdownPrefab").SetValue(combo, LoadPrefab(dropRes));
-            type.GetField("visibleItemCount").SetValue(combo, xml.VisibleItemCount);
+                type.GetField("dropdownPrefab", Any).SetValue(combo, LoadPrefab(dropRes));
+            type.GetField("visibleItemCount", Any).SetValue(combo, xml.VisibleItemCount);
             var items = xml.Items;
             if (items.Length > 0)
             {
-                type.GetField("items").SetValue(combo, items);
+                type.GetField("_items", Any).SetValue(combo, items);
                 if (xml.Values.Length > 0)
-                    type.GetField("values").SetValue(combo, xml.Values);
-                type.GetProperty("Title").SetValue(combo, items[0]); // 默认选中项 0
+                    type.GetField("_values", Any).SetValue(combo, xml.Values);
+                combo.title = items[0]; // 默认选中项 0
             }
         }
 
@@ -1110,15 +1142,17 @@ namespace NanamiUI.Editor
             var rt = (RectTransform)go.transform;
             if (element.Rotation is { } rotation)
                 rt.localEulerAngles = new Vector3(0, 0, -rotation);
-            if (element.Alpha is { } alpha)
-                foreach (var graphic in go.GetComponentsInChildren<Graphic>(true))
-                {
-                    var color = graphic.color;
-                    color.a *= alpha;
-                    graphic.color = color;
-                }
-            if (!element.Touchable)
-                go.AddComponent<CanvasGroup>().blocksRaycasts = false;
+            // authored alpha 烘进 CanvasGroup（FairyGUI object.alpha 语义）：GearLook/Transition 的 alpha 也走同一通道
+            // 且是绝对值——若乘进各子 Graphic 颜色，会与 gear/动效通道相乘（0.5 页值显示成 0.25）。
+            if (element.Alpha != null || !element.Touchable)
+            {
+                if (!go.TryGetComponent(out CanvasGroup group))
+                    group = go.AddComponent<CanvasGroup>();
+                if (element.Alpha is { } alpha)
+                    group.alpha = alpha;
+                if (!element.Touchable)
+                    group.blocksRaycasts = false;
+            }
             if (element.Grayed)
             {
                 var button = go.GetComponent<ButtonBase>();
@@ -1134,7 +1168,7 @@ namespace NanamiUI.Editor
                 {
                     go.AddComponent<Grayed>().shader = GrayscaleShader;
                     if (button != null)
-                        button.SetGrayed(true);
+                        button.grayed = true;
                 }
             }
         }
@@ -1468,8 +1502,7 @@ namespace NanamiUI.Editor
                                         item.volume = float.Parse(soundParts[1], CultureInfo.InvariantCulture);
                                     if (transition.audioSource == null)
                                     {
-                                        var source = root.GetComponent<AudioSource>();
-                                        if (source == null)
+                                        if (!root.TryGetComponent(out AudioSource source))
                                             source = root.AddComponent<AudioSource>();
                                         source.playOnAwake = false;
                                         transition.audioSource = source;
@@ -2029,7 +2062,6 @@ namespace NanamiUI.Editor
         {
             public string vertical;
             public string horizontal;
-            public string defaultDisplay;
         }
     }
 }

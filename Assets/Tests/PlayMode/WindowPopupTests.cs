@@ -88,14 +88,14 @@ namespace NanamiUI.Tests
             Assert.AreEqual(60f, pm.ContentPane.anchoredPosition.x, 1.5f);
             Assert.AreEqual(-96f, pm.ContentPane.anchoredPosition.y, 1.5f);
             Assert.AreEqual(92f, pm.ContentPane.rect.height, 1.5f);
-            Assert.IsTrue(_gr.HasAnyPopup);
+            Assert.IsTrue(_gr.hasAnyPopup);
 
             // 点第一项：回调触发 + 菜单收起（hideOnClickItem）。直接调 handler。
             var item = pm.ContentPane.Find("list").GetChild(0);
             ((IPointerClickHandler)item.GetComponent<IPointerClickHandler>()).OnPointerClick(new PointerEventData(EventSystem.current));
             yield return null;
             Assert.AreEqual(1, clicked, "点菜单项应触发其回调");
-            Assert.IsFalse(_gr.HasAnyPopup, "hideOnClickItem 应在点项后收起菜单");
+            Assert.IsFalse(_gr.hasAnyPopup, "hideOnClickItem 应在点项后收起菜单");
         }
 
         [UnityTest]
@@ -128,19 +128,19 @@ namespace NanamiUI.Tests
             Canvas.ForceUpdateCanvases();
             yield return null;
 
-            Assert.IsNotNull(win.Root);
-            Assert.IsTrue(win.Root.gameObject.activeSelf);
-            Assert.AreEqual(368f, win.Root.anchoredPosition.x, 1.5f);  // (1136-400)/2
-            Assert.AreEqual(-120f, win.Root.anchoredPosition.y, 1.5f); // -(640-400)/2
+            Assert.IsNotNull(win.contentPane);
+            Assert.IsTrue(win.contentPane.gameObject.activeSelf);
+            Assert.AreEqual(368f, win.contentPane.anchoredPosition.x, 1.5f);  // (1136-400)/2
+            Assert.AreEqual(-120f, win.contentPane.anchoredPosition.y, 1.5f); // -(640-400)/2
 
             // 点关闭按钮 → Hide（默认无动效 → HideImmediately）
             ButtonBase close = null;
-            foreach (var b in win.Root.GetComponentsInChildren<ButtonBase>(true))
+            foreach (var b in win.contentPane.GetComponentsInChildren<ButtonBase>(true))
                 if (b.name == "closeButton") { close = b; break; }
             Assert.IsNotNull(close, "应找到 closeButton");
             close.onClick.Invoke();
             yield return null;
-            Assert.IsFalse(win.Root.gameObject.activeSelf, "关闭后 window 应隐藏");
+            Assert.IsFalse(win.contentPane.gameObject.activeSelf, "关闭后 window 应隐藏");
         }
 
         [UnityTest]
@@ -151,15 +151,15 @@ namespace NanamiUI.Tests
             Canvas.ForceUpdateCanvases();
             yield return null;
 
-            Assert.IsTrue(_gr.HasModalWindow, "模态窗打开时应报告有模态窗");
+            Assert.IsTrue(_gr.hasModalWindow, "模态窗打开时应报告有模态窗");
             var layer = FindDeep(_gr.rect, "ModalLayer");
             Assert.IsNotNull(layer, "应创建模态层");
             Assert.IsTrue(layer.gameObject.activeSelf, "模态层应激活");
-            Assert.Less(layer.GetSiblingIndex(), win.Root.GetSiblingIndex(), "模态层应铺在窗口之下");
+            Assert.Less(layer.GetSiblingIndex(), win.contentPane.GetSiblingIndex(), "模态层应铺在窗口之下");
 
             win.HideImmediately();
             yield return null;
-            Assert.IsFalse(_gr.HasModalWindow, "关窗后无模态窗");
+            Assert.IsFalse(_gr.hasModalWindow, "关窗后无模态窗");
             Assert.IsFalse(layer.gameObject.activeSelf, "关窗后模态层应隐藏");
         }
 

@@ -15,14 +15,16 @@ namespace NanamiUI
         public bool changeOnClick = true; // FairyGUI GSlider 默认 true：点 bar 直接跳值；点 grip 则相对拖动、不跳
         public bool reverse;              // 复刻 GSlider._reverse：填充方向反向、拖动增量反号
         public ProgressTitleType titleType;
-        public TextField title;
-        public RectTransform bar;
-        public RectTransform barV;
-        public RectTransform grip;
-        public float barMaxWidthDelta;
-        public float barMaxHeightDelta;
-        public float barStartX;
-        public float barStartY;
+
+        // 烘焙接线（Migrate 写入）。
+        [SerializeField] internal TextField title;
+        [SerializeField] internal RectTransform bar;
+        [SerializeField] internal RectTransform barV;
+        [SerializeField] internal RectTransform grip;
+        [SerializeField] internal float barMaxWidthDelta;
+        [SerializeField] internal float barMaxHeightDelta;
+        [SerializeField] internal float barStartX;
+        [SerializeField] internal float barStartY;
         public UnityEvent onChanged = new();
         public UnityEvent onGripTouchBegin = new(); // 复刻 GSlider.onGripTouchBegin/End（由 grip 上的 SliderGrip 发）
         public UnityEvent onGripTouchEnd = new();
@@ -66,7 +68,7 @@ namespace NanamiUI
             }
         }
 
-        public void Apply()
+        internal void Apply()
         {
             var percent = Mathf.Clamp01((value - min) / (max - min));
             if (title != null)

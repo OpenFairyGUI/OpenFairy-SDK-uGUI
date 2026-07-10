@@ -4,6 +4,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using ZLinq;
 
 namespace NanamiUI
 {
@@ -39,7 +40,7 @@ namespace NanamiUI
 
         private static readonly Dictionary<string, Font> Fonts = new();
 
-        private struct Run
+        private struct Run : IEquatable<Run>
         {
             public string Text;
             public int Image;
@@ -48,6 +49,15 @@ namespace NanamiUI
             public bool Underline;
             public string Href;
             public Color32 TL, BL, TR, BR;
+
+            // 显式实现：ValueType.Equals(object) 会逐字符装箱 + 反射比较，而本比较跑在排版的逐字符循环里。
+            // Text/Href 按引用比较即可——同一 run 的所有字符共享同一实例。
+            public bool Equals(Run other) =>
+                ReferenceEquals(Text, other.Text) && Image == other.Image && Size == other.Size
+                && Style == other.Style && Underline == other.Underline && ReferenceEquals(Href, other.Href)
+                && Eq(TL, other.TL) && Eq(BL, other.BL) && Eq(TR, other.TR) && Eq(BR, other.BR);
+
+            private static bool Eq(Color32 a, Color32 b) => a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
         }
 
         private struct Quad
@@ -126,17 +136,31 @@ namespace NanamiUI
                     Fonts[names] = osFont = Font.CreateDynamicFontFromOSFont(names.Split(','), 16);
                 font = osFont;
             }
+            Font.textureRebuilt += OnFontRebuilt;
             base.OnEnable();
+        }
+
+        protected override void OnDisable()
+        {
+            Font.textureRebuilt -= OnFontRebuilt;
+            base.OnDisable();
+        }
+
+        // 动态字体图集重建后字形 UV 全部失效，缓存的排版必须作废。
+        private void OnFontRebuilt(Font rebuilt)
+        {
+            if (rebuilt == font)
+                _layoutValid = false;
         }
 
         protected override void OnPopulateMesh(VertexHelper toFill)
         {
             toFill.Clear();
-            Layout();
+            EnsureLayout();
+            var rect = rectTransform.rect;
             foreach (var quad in _quads)
             {
                 var v = toFill.currentVertCount;
-                var rect = rectTransform.rect;
                 toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMin, rect.yMax - quad.Rect.yMax), quad.BL, quad.UvBL);
                 toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMin, rect.yMax - quad.Rect.yMin), quad.TL, quad.UvTL);
                 toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMax, rect.yMax - quad.Rect.yMin), quad.TR, quad.UvTR);
@@ -144,6 +168,49 @@ namespace NanamiUI
                 toFill.AddTriangle(v, v + 1, v + 2);
                 toFill.AddTriangle(v, v + 2, v + 3);
             }
+        }
+
+        // 排版缓存（对齐 FairyGUI 的 _textChanged 门控）：GearColor/Transition 的纯着色 tween 每帧令 vertices dirty，
+        // 但文本/尺寸/字体没变就不重解析重排版——无 UBB 色标时只回填 quad 颜色，有色标才全量重排。
+        private bool _layoutValid;
+        private bool _hasColorTags;
+        private string _layoutText;
+        private Color _layoutColor;
+        private Vector2 _layoutRectSize;
+        private int _layoutFontSize;
+        private int _layoutLeading;
+        private int _layoutLetterSpacing;
+        private FontStyle _layoutStyle;
+        private TextAnchor _layoutAlignment;
+        private HorizontalWrapMode _layoutHOverflow;
+        private VerticalWrapMode _layoutVOverflow;
+        private Font _layoutFont;
+
+        private void EnsureLayout()
+        {
+            var rectSize = rectTransform.rect.size;
+            if (_layoutValid && ReferenceEquals(_layoutText, text) && _layoutRectSize == rectSize
+                && _layoutFontSize == fontSize && _layoutStyle == fontStyle && _layoutAlignment == alignment
+                && _layoutHOverflow == horizontalOverflow && _layoutVOverflow == verticalOverflow
+                && _layoutLeading == leading && _layoutLetterSpacing == letterSpacing
+                && ReferenceEquals(_layoutFont, font))
+            {
+                if (_layoutColor == color)
+                    return;
+                if (!_hasColorTags) // 全部 quad 都用基础色：原地回填颜色，免重排版
+                {
+                    _layoutColor = color;
+                    Color32 c = color;
+                    for (var i = 0; i < _quads.Count; i++)
+                    {
+                        var quad = _quads[i];
+                        quad.TL = quad.BL = quad.TR = quad.BR = c;
+                        _quads[i] = quad;
+                    }
+                    return;
+                }
+            }
+            Layout();
         }
 
         // 提前请求全部字符，避免动态字体图集在渲染同帧内扩容导致已生成网格失效。
@@ -196,6 +263,7 @@ namespace NanamiUI
 
         private List<Run> Parse()
         {
+            _hasColorTags = false;
             _runs.Clear();
             _runStack.Clear();
             _buffer.Clear();
@@ -222,7 +290,7 @@ namespace NanamiUI
                     var tag = end > i ? value[(i + 1)..end] : null;
                     if (tag == "img")
                     {
-                        var close = value.IndexOf("[/img]", end, System.StringComparison.Ordinal);
+                        var close = value.IndexOf("[/img]", end, StringComparison.Ordinal);
                         if (close < 0) // 无闭合：按原文输出（复刻 UBBParser 对残缺标签的容错），不能让 i 倒退
                         {
                             _buffer.Append(ch);
@@ -259,6 +327,7 @@ namespace NanamiUI
                         // FairyGUI HtmlParseOptions 默认链接样式：#3A67CC + 下划线。
                         Flush(current);
                         _runStack.Push(current);
+                        _hasColorTags = true;
                         SetColor(ref current, new Color32(0x3A, 0x67, 0xCC, 0xFF));
                         current.Underline = true;
                         current.Href = ParseHref(tag);
@@ -268,7 +337,10 @@ namespace NanamiUI
                         Flush(current);
                         _runStack.Push(current);
                         if (AttrValue(tag, "color") is { } col)
+                        {
+                            _hasColorTags = true;
                             SetColor(ref current, ParseColor(col));
+                        }
                         if (AttrValue(tag, "size") is { } sz && int.TryParse(sz, out var size))
                             current.Size = size;
                     }
@@ -339,6 +411,7 @@ namespace NanamiUI
                 // [url=href] 超链接（复刻 UBBParser）：默认样式 #3A67CC + 下划线，命中回调同 <a>。
                 Flush(current);
                 _runStack.Push(current);
+                _hasColorTags = true;
                 SetColor(ref current, new Color32(0x3A, 0x67, 0xCC, 0xFF));
                 current.Underline = true;
                 current.Href = tag.StartsWith("url=") ? tag[4..].Trim('\'', '"') : "";
@@ -355,6 +428,7 @@ namespace NanamiUI
             {
                 Flush(current);
                 _runStack.Push(current);
+                _hasColorTags = true;
                 var parts = tag[6..].Split(',');
                 current.TL = ParseColor(parts[0]);
                 current.BL = parts.Length > 1 ? ParseColor(parts[1]) : current.TL;
@@ -400,6 +474,19 @@ namespace NanamiUI
 
         private void Layout()
         {
+            _layoutValid = true;
+            _layoutText = text;
+            _layoutColor = color;
+            _layoutRectSize = rectTransform.rect.size;
+            _layoutFontSize = fontSize;
+            _layoutLeading = leading;
+            _layoutLetterSpacing = letterSpacing;
+            _layoutStyle = fontStyle;
+            _layoutAlignment = alignment;
+            _layoutHOverflow = horizontalOverflow;
+            _layoutVOverflow = verticalOverflow;
+            _layoutFont = font;
+
             _quads.Clear();
             _placements.Clear();
             _links.Clear();
@@ -419,10 +506,7 @@ namespace NanamiUI
             var hAlign = (int)alignment % 3;
             var vAlign = (int)alignment / 3;
             var lineSpacing = leading - 1; // TextField: 实际行距 = lineSpacing - 1
-            var textHeight = 4f;
-            foreach (var line in _lines)
-                textHeight += line.Height;
-            textHeight += (_lines.Count - 1) * lineSpacing;
+            var textHeight = 4f + _lines.AsValueEnumerable().Sum(line => line.Height) + (_lines.Count - 1) * lineSpacing;
 
             var y = 2f + (vAlign == 1 ? (int)(Mathf.Max(0, rect.height - textHeight) / 2)
                 : vAlign == 2 ? Mathf.Max(0, rect.height - textHeight) : 0);
@@ -660,9 +744,7 @@ namespace NanamiUI
                 Width = metrics.Width,
             });
             _pendingCharacters.RemoveRange(0, count);
-            width = 0;
-            foreach (var character in _pendingCharacters)
-                width += CharWidth(character.Value, character.Run);
+            width = _pendingCharacters.AsValueEnumerable().Sum(character => CharWidth(character.Value, character.Run));
         }
     }
 }

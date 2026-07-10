@@ -47,8 +47,8 @@ namespace NanamiUI.Example
             line3.sprite = line3sprite;
             line3.SetPath(new[]
             {
-                new TransitionPath.PathPoint(new Vector2(0, 30), 2, new Vector2(50, -30), new Vector2(150, -50)),
-                new TransitionPath.PathPoint(new Vector2(200, 30), 1, new Vector2(300, 130)),
+                new TransitionPath.PathPoint(new Vector2(0, 30), CurveType.CubicBezier, new Vector2(50, -30), new Vector2(150, -50)),
+                new TransitionPath.PathPoint(new Vector2(200, 30), CurveType.Bezier, new Vector2(300, 130)),
                 new TransitionPath.PathPoint(new Vector2(400, 30)),
             });
 
@@ -57,9 +57,9 @@ namespace NanamiUI.Example
 
         private static object Field(object owner, string name) => owner.GetType().GetField(name).GetValue(owner);
         private static TransitionPath.PathPoint P(float x, float y) => new(new Vector2(x, y));
-        private static TransitionPath.PathPoint S(float x, float y) => new(new Vector2(x, y), 3);
+        private static TransitionPath.PathPoint S(float x, float y) => new(new Vector2(x, y), CurveType.Straight);
 
-        // uGUI 每个 GameObject 只能有一个 Graphic：销毁原图形（Shape/Image），复用其 CanvasRenderer 挂上 Line，
+        // uGUI 每个 GameObject 只能有一个 Graphic：销毁原图形（Graph/Image），复用其 CanvasRenderer 挂上 Line，
         // 并沿用原色（FairyGUI LineMesh 用 shape 的 fillColor 作顶点色；line2 无渐变时靠它上蓝色）。
         private static Line ReplaceWithLine(Graphic existing)
         {

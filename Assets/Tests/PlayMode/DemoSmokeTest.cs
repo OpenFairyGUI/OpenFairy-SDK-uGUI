@@ -61,7 +61,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(demo, "Demo_Window 应已实例化");
             Click(Field(demo, "m_n0")); // 开 Window A
             yield return null;
-            Assert.AreEqual(1, NanamiUI.Root.inst.ActiveWindowCount, "点 n0 应开一个 window");
+            Assert.AreEqual(1, NanamiUI.Root.inst.activeWindowCount, "点 n0 应开一个 window");
         }
 
         [UnityTest]
@@ -73,7 +73,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(demo);
             Click(Field(demo, "m_n0")); // 弹菜单
             yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, "点 n0 应弹出菜单");
+            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "点 n0 应弹出菜单");
         }
 
         [UnityTest]
@@ -102,7 +102,7 @@ namespace NanamiUI.Tests
             n22.text = "Alice"; // 模拟用户输入姓名
             Click(Field(demo, "m_n25")); // 拷 n22 → n24
             yield return null;
-            Assert.AreEqual("Alice", n24.text, "点 n25 应把输入框文本拷到 n24（验证 InputText 读写 + 拷贝）");
+            Assert.AreEqual("Alice", n24.text, "点 n25 应把输入框文本拷到 n24（验证 TextInput 读写 + 拷贝）");
         }
 
         [UnityTest]
@@ -138,7 +138,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(handler, "ComboBox 应挂上点击中继");
             handler.OnPointerClick(new PointerEventData(EventSystem.current));
             yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, "点 ComboBox 应弹出下拉");
+            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "点 ComboBox 应弹出下拉");
         }
 
         [UnityTest]

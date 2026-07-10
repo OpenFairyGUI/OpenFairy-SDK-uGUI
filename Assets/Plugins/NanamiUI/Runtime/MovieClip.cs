@@ -1,6 +1,6 @@
-using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 
@@ -10,18 +10,27 @@ namespace NanamiUI
     // timeScale、SetPlaySettings（播放区间/次数/结束帧）。单帧步进（同 FairyGUI OnTimer，非一次排空）。
     public class MovieClip : UnityEngine.UI.Image
     {
+        private enum Status
+        {
+            Playing,
+            NextRound,
+            Ending,
+            Ended,
+        }
+
         public Sprite[] frames;
         public float interval = 0.1f;
         public float[] addDelays;
         public bool swing;
         public float repeatDelay;
         public float timeScale = 1;
-        public int frame;
+        public UnityEvent onPlayEnd = new();
+
+        [SerializeField, FormerlySerializedAs("frame")]
+        private int _frame;
 
         [SerializeField, FormerlySerializedAs("playing")]
         private bool _playing = true;
-
-        [NonSerialized] public Action onPlayEnd;
 
         private float _frameElapsed;
         private bool _reversed;
@@ -30,7 +39,7 @@ namespace NanamiUI
         private int _end = -1;
         private int _endAt = -1;
         private int _times;
-        private int _status; // 0 播放中，1 下一轮，2 结束中，3 已结束
+        private Status _status;
         private int _playVersion;
 
         public bool playing
@@ -42,6 +51,22 @@ namespace NanamiUI
                     return;
                 _playing = value;
                 RestartLoop();
+            }
+        }
+
+        // 复刻 GMovieClip.frame：setter 即刷帧（钳进有效范围，避免自播 Advance 越界索引 addDelays）。
+        public int frame
+        {
+            get => _frame;
+            set
+            {
+                if (frames is { Length: > 0 })
+                {
+                    _frame = Mathf.Clamp(value, 0, frames.Length - 1);
+                    sprite = frames[_frame];
+                }
+                else
+                    _frame = value;
             }
         }
 
@@ -57,17 +82,6 @@ namespace NanamiUI
             base.OnDisable();
         }
 
-        public void SetFrame(int value)
-        {
-            if (frames != null && frames.Length > 0)
-            {
-                frame = Mathf.Clamp(value, 0, frames.Length - 1); // 钳进有效范围，避免自播 Update 越界索引 addDelays[frame]
-                sprite = frames[frame];
-            }
-            else
-                frame = value;
-        }
-
         // 从 start 帧播到 end 帧（-1=末帧），重复 times 次（0=无限循环），结束停在 endAt 帧（-1=end）。
         public void SetPlaySettings(int start = 0, int end = -1, int times = 0, int endAt = -1)
         {
@@ -75,18 +89,18 @@ namespace NanamiUI
             _end = end < 0 || end > frames.Length - 1 ? frames.Length - 1 : end;
             _times = times;
             _endAt = endAt < 0 ? _end : endAt;
-            _status = 0;
+            _status = Status.Playing;
             _reversed = false;
             _repeatedCount = 0;
             _frameElapsed = 0;
-            SetFrame(start);
+            frame = start;
             _playing = true;
             RestartLoop();
         }
 
         public void Rewind()
         {
-            SetFrame(0);
+            frame = 0;
             _frameElapsed = 0;
             _reversed = false;
         }
@@ -94,7 +108,7 @@ namespace NanamiUI
         private void RestartLoop()
         {
             var version = ++_playVersion;
-            if (Application.isPlaying && isActiveAndEnabled && _playing && frames is { Length: > 1 } && _status != 3)
+            if (Application.isPlaying && isActiveAndEnabled && _playing && frames is { Length: > 1 } && _status != Status.Ended)
                 Run(version).Forget();
         }
 
@@ -103,7 +117,7 @@ namespace NanamiUI
             while (true)
             {
                 await UniTask.Yield(PlayerLoopTiming.Update);
-                if (this == null || version != _playVersion || !_playing || !isActiveAndEnabled || _status == 3)
+                if (this == null || version != _playVersion || !_playing || !isActiveAndEnabled || _status == Status.Ended)
                     return;
                 Advance(Time.deltaTime * timeScale);
             }
@@ -112,8 +126,8 @@ namespace NanamiUI
         private void Advance(float deltaTime)
         {
             _frameElapsed += deltaTime;
-            var tt = interval + addDelays[frame];
-            if (frame == 0 && _repeatedCount > 0)
+            var tt = interval + addDelays[_frame];
+            if (_frame == 0 && _repeatedCount > 0)
                 tt += repeatDelay;
             if (_frameElapsed < tt)
                 return;
@@ -122,24 +136,25 @@ namespace NanamiUI
             if (_frameElapsed > interval)
                 _frameElapsed = interval;
 
+            var next = _frame;
             if (swing)
             {
                 if (_reversed)
                 {
-                    frame--;
-                    if (frame <= 0)
+                    next--;
+                    if (next <= 0)
                     {
-                        frame = 0;
+                        next = 0;
                         _repeatedCount++;
                         _reversed = !_reversed;
                     }
                 }
                 else
                 {
-                    frame++;
-                    if (frame > frames.Length - 1)
+                    next++;
+                    if (next > frames.Length - 1)
                     {
-                        frame = Mathf.Max(0, frames.Length - 2);
+                        next = Mathf.Max(0, frames.Length - 2);
                         _repeatedCount++;
                         _reversed = !_reversed;
                     }
@@ -147,44 +162,39 @@ namespace NanamiUI
             }
             else
             {
-                frame++;
-                if (frame > frames.Length - 1)
+                next++;
+                if (next > frames.Length - 1)
                 {
-                    frame = 0;
+                    next = 0;
                     _repeatedCount++;
                 }
             }
 
-            if (_status == 1) // 新一轮
+            if (_status == Status.NextRound)
             {
+                _frameElapsed = 0;
+                _status = Status.Playing;
                 frame = _start;
-                _frameElapsed = 0;
-                _status = 0;
-                SetFrame(frame);
             }
-            else if (_status == 2) // 结束
+            else if (_status == Status.Ending)
             {
-                frame = _endAt;
                 _frameElapsed = 0;
-                _status = 3;
-                SetFrame(frame);
-                onPlayEnd?.Invoke();
+                _status = Status.Ended;
+                frame = _endAt;
+                onPlayEnd.Invoke();
             }
             else
             {
-                SetFrame(frame);
-                if (frame == _end)
+                frame = next;
+                if (_frame == _end)
                 {
                     if (_times > 0)
                     {
                         _times--;
-                        if (_times == 0)
-                            _status = 2;
-                        else
-                            _status = 1;
+                        _status = _times == 0 ? Status.Ending : Status.NextRound;
                     }
                     else if (_start != 0)
-                        _status = 1;
+                        _status = Status.NextRound;
                 }
             }
         }

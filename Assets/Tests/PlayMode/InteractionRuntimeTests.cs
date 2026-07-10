@@ -116,7 +116,7 @@ namespace NanamiUI.Tests
             Assert.IsTrue(ClickWorld(openBtn), "开窗按钮 n0 应被真实射线命中并派发点击（按钮整块须可点，不能被背景穿透）");
             for (var i = 0; i < 10; i++)
                 yield return null;
-            Assert.AreEqual(1, NanamiUI.Root.inst.ActiveWindowCount, "真实点击 n0 应开出一个 window");
+            Assert.AreEqual(1, NanamiUI.Root.inst.activeWindowCount, "真实点击 n0 应开出一个 window");
 
             // 找到窗口关闭按钮并真实点击关闭。
             RectTransform close = null;
@@ -126,7 +126,7 @@ namespace NanamiUI.Tests
             Assert.IsTrue(ClickWorld(close), "closeButton 应被射线命中（经 Root 覆盖层画布）并派发点击");
             for (var i = 0; i < 10; i++)
                 yield return null;
-            Assert.AreEqual(0, NanamiUI.Root.inst.ActiveWindowCount, "点关闭按钮后 window 应关闭");
+            Assert.AreEqual(0, NanamiUI.Root.inst.activeWindowCount, "点关闭按钮后 window 应关闭");
         }
 
         [UnityTest]
@@ -140,7 +140,7 @@ namespace NanamiUI.Tests
             Assert.IsTrue(ClickWorld(openBtn), "弹菜单按钮 n0 应被射线命中");
             for (var i = 0; i < 5; i++)
                 yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, "真实点击 n0 应弹出菜单");
+            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "真实点击 n0 应弹出菜单");
 
             // 真实点击第一项：菜单应收起（hideOnClickItem）。
             var list = FindDeep(NanamiUI.Root.inst.rect, "list");
@@ -149,7 +149,7 @@ namespace NanamiUI.Tests
             Assert.IsTrue(ClickWorld((RectTransform)list.GetChild(0)), "菜单项应被射线命中");
             for (var i = 0; i < 5; i++)
                 yield return null;
-            Assert.IsFalse(NanamiUI.Root.inst.HasAnyPopup, "点菜单项后菜单应收起");
+            Assert.IsFalse(NanamiUI.Root.inst.hasAnyPopup, "点菜单项后菜单应收起");
         }
 
         [UnityTest]
@@ -160,7 +160,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(demo, "Text demo 应实例化");
             var input = (NanamiUI.TextInput)Field(demo, "m_n22");
             Assert.IsNotNull(input, "n22 应是输入框");
-            Assert.IsNotNull(input.field, "InputText 应绑定 uGUI InputField");
+            Assert.IsNotNull(input.field, "TextInput 应绑定 uGUI InputField");
             Assert.IsFalse(input.field.readOnly, "输入框不应只读");
             Assert.IsTrue(input.field.interactable, "输入框应可交互（可聚焦编辑）");
             Assert.IsNotNull(input.field.textComponent, "InputField 应挂 textComponent 以显示输入");
@@ -200,7 +200,7 @@ namespace NanamiUI.Tests
             Assert.IsTrue(ClickWorld(combo), "ComboBox 应被真实射线命中（整块可点，不被背景穿透）");
             for (var i = 0; i < 5; i++)
                 yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, "真实点击 ComboBox 应弹出下拉");
+            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "真实点击 ComboBox 应弹出下拉");
         }
 
         [UnityTest]
@@ -212,18 +212,18 @@ namespace NanamiUI.Tests
             Assert.IsTrue(ClickWorld((RectTransform)comboComp.transform), "ComboBox 应被命中");
             for (var i = 0; i < 5; i++)
                 yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, "应弹出下拉");
+            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "应弹出下拉");
 
             // 下拉项都在 Root 覆盖层里（combo 本体在页面画布），取第 2 项真实点击。
             var items = NanamiUI.Root.inst.rect.GetComponentsInChildren<NanamiUI.ButtonBase>(true);
             Assert.Greater(items.Length, 1, "下拉应有多项");
-            var options = (string[])comboComp.GetType().GetField("items").GetValue(comboComp);
+            var combo = (NanamiUI.IComboBox)comboComp; // 非泛型面，免反射
+            var options = combo.items;
             Assert.IsTrue(ClickWorld((RectTransform)items[1].transform), "下拉第 2 项应被真实射线命中");
             for (var i = 0; i < 5; i++)
                 yield return null;
-            Assert.IsFalse(NanamiUI.Root.inst.HasAnyPopup, "点选项后下拉应收起");
-            var text = (string)comboComp.GetType().GetProperty("text").GetValue(comboComp);
-            Assert.AreEqual(options[1], text, "选第 2 项后 ComboBox 当前文本应为该项");
+            Assert.IsFalse(NanamiUI.Root.inst.hasAnyPopup, "点选项后下拉应收起");
+            Assert.AreEqual(options[1], combo.text, "选第 2 项后 ComboBox 当前文本应为该项");
         }
 
         private static bool IsComboBox(Type t)
@@ -253,7 +253,7 @@ namespace NanamiUI.Tests
                 Assert.IsTrue(ClickWorld((RectTransform)combo.transform), $"{combo.name} 应被真实射线命中");
                 for (var i = 0; i < 5; i++)
                     yield return null;
-                Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, $"点 {combo.name} 应弹出下拉（每个 combobox 都要能开，不只抽查一个）");
+                Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, $"点 {combo.name} 应弹出下拉（每个 combobox 都要能开，不只抽查一个）");
             }
             NanamiUI.Root.inst.HidePopup();
         }

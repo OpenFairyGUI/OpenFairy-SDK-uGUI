@@ -56,7 +56,7 @@ namespace NanamiUI
                 _grayedEffect.enabled = isGrayed;
             // 传播到按钮：置 grayed → 进 disabled 页并拦截点击（复刻 GButton.HandleGrayedChanged），否则灰显却仍可点。
             if (_button != null)
-                _button.SetGrayed(isGrayed);
+                _button.grayed = isGrayed;
         }
 
         private bool Touchable(int index) => touchables == null || (index >= 0 ? touchables[index] : defaultTouchable);

@@ -25,8 +25,7 @@ namespace NanamiUI
         // = 应排在它前面的其它子物体数（order<=它的都在前，等值稳定追加在后，同 GetInsertPosForSortingChild 的 first-strictly-greater）。
         public static void SetSortingOrder(RectTransform child, int order)
         {
-            var so = child.GetComponent<SortObject>();
-            if (so == null)
+            if (!child.TryGetComponent(out SortObject so))
                 so = child.gameObject.AddComponent<SortObject>();
             so.order = Mathf.Max(0, order);
             var parent = child.parent;
@@ -43,7 +42,7 @@ namespace NanamiUI
             child.SetSiblingIndex(index);
         }
 
-        // 运行时建矩形（复刻 GGraph.DrawRect）：Shape 的 Rect 网格已完全对齐 FairyGUI；按 order 插到正确兄弟位。
+        // 运行时建矩形（复刻 GGraph.DrawRect）：Graph 的 Rect 网格已完全对齐 FairyGUI；按 order 插到正确兄弟位。
         public static Graph CreateRect(RectTransform parent, Vector2 fairyXY, float w, float h, int lineSize, Color line, Color fill, int order)
         {
             var go = new GameObject("graph", typeof(RectTransform), typeof(CanvasRenderer));

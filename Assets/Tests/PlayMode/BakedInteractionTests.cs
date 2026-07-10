@@ -200,7 +200,7 @@ namespace NanamiUI.Tests
             ((IPointerClickHandler)combo).OnPointerClick(new PointerEventData(EventSystem.current));
             yield return null;
             Assert.IsTrue(NanamiUI.Root.inst != null, "点下拉应自建 Root 覆盖层");
-            Assert.IsTrue(NanamiUI.Root.inst.HasAnyPopup, "下拉应作为 popup 打开");
+            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "下拉应作为 popup 打开");
         }
     }
 }

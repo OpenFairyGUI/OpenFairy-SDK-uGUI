@@ -28,12 +28,12 @@ NanamiUI 是基于 uGUI 的 FairyGUI Runtime SDK。目标是让用户继续用 F
 ## 代码结构
 
 - Runtime 控件命名 = 对应 FairyGUI 控件**精确去掉 `G` 前缀**：`Component`(GComponent)、`Button`(GButton)、`Label`(GLabel)、`ComboBox`(GComboBox)、`Slider`(GSlider)、`Loader`(GLoader)、`MovieClip`(GMovieClip)、`ProgressBar`(GProgressBar)、`TextField`(GTextField)、`TextInput`(GTextInput)、`Graph`(GGraph)、`Image`(GImage)、`List`(GList)、`Root`(GRoot)。历史遗留的 `GList`/`GRoot`/`Text`/`InputText`/`Shape`/`FlipImage` 已统一为 `List`/`Root`/`TextField`/`TextInput`/`Graph`/`Image`。
-  - `Line` 不是 FairyGUI 控件（GGraph 内含线绘制），是 Graph 演示用的内部折线渲染 helper，保留原名。`ButtonBase` 是 GButton 的非泛型面（复用其 onClick/Title），非 FairyGUI 类。
-  - `List` 与 `System.Collections.Generic.List<T>` 按泛型元数区分共存（`List.Fill` 是本类静态；`List<T>` 仍是 BCL 泛型），不冲突。
+  - `Line` 不是 FairyGUI 控件（GGraph 内含线绘制），是 Graph 演示用的内部折线渲染 helper，保留原名。`ButtonBase` 是 GButton 的非泛型面（复用其 onClick/title），非 FairyGUI 类；`IComboBox` 同理是 ComboBox 的非泛型面（items/values/selectedIndex/text/value）。
+  - `List` 与 `System.Collections.Generic.List<T>` 按泛型元数区分共存（`List.Container` 是本类静态；`List<T>` 仍是 BCL 泛型），不冲突。列表动态填充入口是 `ListSource.Fill`（实例方法，状态与烘焙描述同在 ListSource 上）。
+  - 公共属性统一 camelCase（与所继承的 uGUI 基类及 FairyGUI 一致）：`title`/`icon`/`selected`/`grayed`/`frame`/`size`/`hasAnyPopup`…；方法保持 PascalCase。烘焙接线字段（titleText/relatedOwner/bar/grip/dropdownPrefab 等）为 `[SerializeField] internal`，经 `InternalsVisibleTo`（editor-firstpass/tests）供 Migrate 与测试直写，不进用户 API 面。
   - `Image`(←GImage, `: UnityEngine.UI.Image`)、`TextField`(`: UnityEngine.UI.Text`) 与 uGUI 同基类同短名：NanamiUI 命名空间内**裸 `Image`/`Text` 指本类**，要引用 uGUI 基类须全限定 `UnityEngine.UI.Image`/`UnityEngine.UI.Text`（改名时已把所有裸 uGUI 用法全限定；`Image.Type`/`Image.FillMethod` 等静态访问也要限定）。`Run.Image`(int 字段)、`DisplayKind.Image`/`ResourceKind.Image`(enum) 不是类型引用，别误改。codegen 里 image 字段类型仍发 `UnityEngine.UI.Image`（`NanamiUI.Image` IS-A，GetComponent 取得到），故生成脚本不引用 `NanamiUI.Image`，改名不触发 codegen 死锁。
-  - `Root` 与 `Window.Root` 属性同名：`Window.cs` 里引用单例用全限定 `NanamiUI.Root.inst`。
   - 重命名会引发 codegen 死锁坑：runtime 改名后，`Assets/UIProject/Scripts` 里**已生成**的组件脚本仍引用旧类型名 → Assembly-CSharp 编译失败 → 编辑器程序集(含 Migrate)无法重编译 → Migrate 跑的是**旧缓存程序集**，会把生成脚本再刷回旧名，死循环。解法：改名后先 `sed` 把生成脚本 + `Assets/Editor/NanamiUI`(BasicsRenderDiff 用 `using FairyGUI`，易漏) 里的旧类型名一并替换，再 `CompilationPipeline.RequestScriptCompilation(RequestScriptCompilationOptions.CleanBuildCache)` 强制干净重编译(普通 Refresh 不够，增量缓存会残留旧程序集)，确认 0 error 后再跑 Migrate(此时幂等)。
-  - `Root` 与 `Window.Root` 属性同名：`Window.cs` 里引用单例用全限定 `NanamiUI.Root.inst` 避开属性遮蔽。
+  - `Window.contentPane` 是窗口内容根（复刻 FairyGUI Window.contentPane；旧的 `Window.Root` 属性已删，不再遮蔽 `NanamiUI.Root` 类型）。
   - `NanamiUI.Editor` 里引用 FairyGUI 的同类须全限定 `FairyGUI.GRoot`/`FairyGUI.GList`（BasicsRenderDiff 已如此）；改名后 NanamiUI 侧是 `Root`/`List`，与 FairyGUI 的 `GRoot`/`GList` 不再同名，天然不遮蔽。
 - Runtime 组件是 `UIBehaviour` 子类；需要时可继承 uGUI 更具体的基类，以保持实现简单。
 - `Controller<T>` 是 `struct`，约束 `where T : struct, Enum`，不是 `MonoBehaviour`。
@@ -127,7 +127,7 @@ AI 操作流程：
 - `BasicsRenderDiff` 直接 `UIPackage.CreateObject` 建 FairyGUI 参照视图，不跑官方 demo 初始化。需要 FairyGUI `UIConfig.*` 的配置必须在脚本里补齐。
 - `Time.captureDeltaTime` 只锁 `Time.deltaTime`，不锁 `Time.unscaledDeltaTime`。截图对比中 FairyGUI transition/tweener 要关闭 `ignoreEngineTimeScale` 才能和 NanamiUI 同步。
 - `NanamiUI.TextField` 自己在 `OnPopulateMesh` 中复刻 FairyGUI 排版公式；改文字布局时对照 `Assets/FairyGUI/Scripts/Core/Text/{TextField,DynamicFont}.cs`。
-- 平铺图由 `FlipImage.OnPopulateMesh` 自己生成 tiled quad，以匹配 FairyGUI 从左上铺、残缺格落在右下的相位。
+- 平铺图由 `Image.OnPopulateMesh` 自己生成 tiled quad，以匹配 FairyGUI 从左上铺、残缺格落在右下的相位。
 - Runtime 类型移动程序集/命名空间会破坏 prefab 中 `[SerializeReference]` 的 gear 类型绑定；移动后必须重烘焙或迁移 serialized type。
 
 ## 发布范围与取舍（AI 经验记录）
