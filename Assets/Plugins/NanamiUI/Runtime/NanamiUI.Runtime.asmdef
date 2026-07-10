@@ -3,7 +3,9 @@
     "rootNamespace": "NanamiUI",
     "references": [
         "UniTask",
-        "ZLinq.Unity"
+        "ZLinq.Unity",
+        "Unity.Splines",
+        "Unity.Mathematics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

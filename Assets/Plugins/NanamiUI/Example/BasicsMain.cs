@@ -88,7 +88,9 @@ namespace NanamiUI.Example
                 Destroy(_container.GetChild(i).gameObject);
 
             var go = Instantiate(Prefab(name), _container, false);
-            Place((RectTransform)go.transform);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
+            rt.anchoredPosition = Vector2.zero;
             // Button demo 的 tab/radio 组现由烘焙的关联控制器（<Button controller=..>）运行时自处理，无需胶水。
             // ComboBox 同理（点击弹下拉、选项设标题）。
             switch (name)
@@ -300,10 +302,5 @@ namespace NanamiUI.Example
             onClick.AddListener(action);
         }
 
-        private static void Place(RectTransform rt)
-        {
-            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
-            rt.anchoredPosition = Vector2.zero;
-        }
     }
 }

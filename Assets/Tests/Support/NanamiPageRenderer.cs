@@ -1,4 +1,3 @@
-using System.IO;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -121,7 +120,8 @@ namespace NanamiUI.TestSupport
 
             var old = RenderTexture.active;
             RenderTexture.active = rt;
-            var texture = new Texture2D(_size.x, _size.y, TextureFormat.RGBA32, false);
+            // ARGB32 与 GoldenImage.Load（LoadImage 解 PNG 的输出格式）一致，ImageAssert 要求两侧格式相同。
+            var texture = new Texture2D(_size.x, _size.y, TextureFormat.ARGB32, false);
             texture.ReadPixels(new Rect(0, 0, _size.x, _size.y), 0, 0);
             texture.Apply();
             RenderTexture.active = old;
@@ -159,35 +159,6 @@ namespace NanamiUI.TestSupport
                 Object.Destroy(_eventSystem);
                 _eventSystem = null;
             }
-        }
-    }
-
-    public static class GoldenImage
-    {
-        public static Texture2D Load(string path)
-        {
-            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            texture.LoadImage(File.ReadAllBytes(path));
-            return texture;
-        }
-
-        // 任一 RGB 通道差 > 2/255 记为差异像素，返回差异占比（与 BasicsRenderDiff 的 diff 口径一致）。
-        public static float DiffRatio(Texture2D actual, Texture2D golden)
-        {
-            var w = Mathf.Min(actual.width, golden.width);
-            var h = Mathf.Min(actual.height, golden.height);
-            var pa = actual.GetPixels32();
-            var pg = golden.GetPixels32();
-            var diff = 0;
-            for (var y = 0; y < h; y++)
-            for (var x = 0; x < w; x++)
-            {
-                var ca = pa[y * actual.width + x];
-                var cg = pg[y * golden.width + x];
-                if (Mathf.Abs(ca.r - cg.r) > 2 || Mathf.Abs(ca.g - cg.g) > 2 || Mathf.Abs(ca.b - cg.b) > 2)
-                    diff++;
-            }
-            return (float)diff / (w * h);
         }
     }
 }

@@ -53,7 +53,8 @@ namespace NanamiUI
                 rt.anchoredPosition = new Vector2(col * stepX, -row * stepY);
                 setup(item, i);
             }
-            PlacePoolRootLast();
+            if (_poolRoot != null)
+                _poolRoot.SetAsLastSibling();
             list.GetComponent<ScrollPane>()?.RefreshContent();
             if (rebindSelection && list.GetComponent<ListSelection>() is { enabled: true } selection)
                 selection.Rebind();
@@ -73,12 +74,6 @@ namespace NanamiUI
         {
             EnsurePool();
             _pool.Release(item);
-        }
-
-        private void PlacePoolRootLast()
-        {
-            if (_poolRoot != null)
-                _poolRoot.SetAsLastSibling();
         }
 
         private void EnsurePool()

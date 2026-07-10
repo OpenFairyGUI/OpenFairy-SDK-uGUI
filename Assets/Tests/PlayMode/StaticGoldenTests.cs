@@ -5,6 +5,7 @@ using NanamiUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using UnityEngine.TestTools.Graphics;
 
 namespace NanamiUI.Tests
 {
@@ -47,13 +48,24 @@ namespace NanamiUI.Tests
                 yield return null;
 
             var actual = _rig.Capture();
-            var golden = GoldenImage.Load(goldenPath);
-            var ratio = GoldenImage.DiffRatio(actual, golden);
-            Object.Destroy(actual);
-            Object.Destroy(golden);
-
-            Assert.LessOrEqual(ratio, page.Threshold,
-                $"{page.Name}: diff {ratio:P2} exceeds threshold {page.Threshold:P2}");
+            var golden = new Texture2D(2, 2);
+            golden.LoadImage(File.ReadAllBytes(goldenPath));
+            try
+            {
+                // 口径同旧 DiffRatio：任一 RGB 通道差 > 2/255 计坏像素（DeltaGamma），坏像素占比超每页阈值失败。
+                ImageAssert.AreEqual(golden, actual, new ImageComparisonSettings
+                {
+                    ActiveImageTests = ImageComparisonSettings.ImageTests.IncorrectPixelsCount,
+                    ActivePixelTests = ImageComparisonSettings.PixelTests.DeltaGamma,
+                    PerPixelGammaThreshold = 2f / 255,
+                    IncorrectPixelsThreshold = page.Threshold,
+                }, $"{page.Name}: threshold {page.Threshold:P2}.");
+            }
+            finally
+            {
+                Object.Destroy(actual);
+                Object.Destroy(golden);
+            }
         }
     }
 }

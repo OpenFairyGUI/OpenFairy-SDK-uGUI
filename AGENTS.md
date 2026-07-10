@@ -59,6 +59,7 @@ NanamiUI 是基于 uGUI 的 FairyGUI Runtime SDK。目标是让用户继续用 F
 - 使用最新版本的写法，充分利用现代特性。
 - 如果最新版本 API 在当前环境下不支持，应该先寻求看有没有办法让它支持 (例如升级环境、安装某个 nuget 包、引入 Polyfill 等)。实在没有办法使用新 API 的情况下才考虑退回旧版本，并且发生了这种情况一定要告知用户。
 - 项目已引入 **ZLinq**（`using ZLinq;`，程序集 `ZLinq.Unity`）和 **UniTask**（`using Cysharp.Threading.Tasks;`，程序集 `UniTask`），两者零 GC。LINQ 能比手动循环表达得更清晰的场合，用 ZLinq（`.AsValueEnumerable()` 起链）替换手动循环；`await` 能比回调/协程/轮询表达得更简洁优雅的场合，用 UniTask。不要用 `System.Linq`。
+- 缓动/补间用 **DOTween**（`DG.Tweening`，缓动直接调 `DG.Tweening.Core.Easing.EaseManager.Evaluate`）；曲线求值用官方 **com.unity.splines**（`UnityEngine.Splines.BezierCurve`+`CurveUtility`，`TransitionPath` 在其上保持 FairyGUI GPath 的参数化与段长口径，勿换成 Spline 类的真弧长求值——那会偏离 FairyGUI 轨迹）；golden 图像断言用官方 **com.unity.testframework.graphics** 的 `ImageAssert`（口径见 `StaticGoldenTests`），不要再手写像素对比。
 
 **静态化**
 - 静态结构优于动态解析；不要滥用 `string`。只有真实文本内容才用 `string`，有限选项用 enum，结构化值用 struct/class 字段等能保持静态引用和编译期检查的表达方式。

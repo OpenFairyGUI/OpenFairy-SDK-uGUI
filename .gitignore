@@ -118,4 +118,8 @@ InitTestScene*.unity*
 # NanamiUI golden 参照图：从 Docs/RenderDiff 按需现生成（Tools/NanamiUI/Promote），不入库
 /Assets/Tests/Golden/
 /Assets/Tests/Golden.meta
+
+# graphics test framework 失败时保存的实际截图，调试用产物不入库
+/Assets/ActualImages/
+/Assets/ActualImages.meta
 /.vscode/
