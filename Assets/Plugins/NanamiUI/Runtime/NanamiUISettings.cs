@@ -8,6 +8,5 @@ namespace NanamiUI
     public class NanamiUISettings : ScriptableObject
     {
         public string defaultFont;  // UIConfig.defaultFont（运行时字体）
-        public string[] packages;   // 要导出的包名（类比 UIPackage.AddPackage）；留空则导出所有 exported 组件
     }
 }
