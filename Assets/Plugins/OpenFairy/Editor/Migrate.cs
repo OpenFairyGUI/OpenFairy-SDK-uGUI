@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -90,11 +90,9 @@ namespace OpenFairy.UGUI.Editor
             foreach (var bar in new[] { Settings().scrollBars?.vertical, Settings().scrollBars?.horizontal })
                 if (!string.IsNullOrEmpty(bar) && TryResolve(bar, null, out var barRes))
                     Collect(barRes, components, images);
-            // 导出 exported 组件（可用 OpenFairySettings.packages 限定包名，留空则全部）；
+            // 导出所有 exported 组件；
             // Collect 会按依赖顺序把它们引用到的（可能未导出、可能跨包的）组件一并带出。
-            var scope = Config()?.packages;
-            bool InScope(Resource r) => scope == null || scope.Length == 0 || Array.IndexOf(scope, r.Package) >= 0;
-            foreach (var entry in Resources.Values.AsValueEnumerable().Where(r => r.Type == Schema.ResourceKind.Component && r.Exported && InScope(r)).ToArray())
+            foreach (var entry in Resources.Values.AsValueEnumerable().Where(r => r.Type == Schema.ResourceKind.Component && r.Exported).ToArray())
                 Collect(entry, components, images);
 
             foreach (var image in images)
