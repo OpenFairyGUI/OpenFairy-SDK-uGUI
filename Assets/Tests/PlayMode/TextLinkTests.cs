@@ -5,7 +5,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     // Text 富文本 <a href> 链接命中：点链接触发 onClickLink(href)。用 Overlay 画布（屏幕坐标直接命中）。
     public class TextLinkTests
@@ -18,13 +18,13 @@ namespace NanamiUI.Tests
             canvasGo.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
             var raycaster = canvasGo.GetComponent<GraphicRaycaster>();
 
-            var textGo = new GameObject("T", typeof(RectTransform), typeof(CanvasRenderer), typeof(NanamiUI.TextField));
+            var textGo = new GameObject("T", typeof(RectTransform), typeof(CanvasRenderer), typeof(OpenFairy.UGUI.TextField));
             var trt = (RectTransform)textGo.transform;
             trt.SetParent(canvasGo.transform, false);
             trt.anchorMin = trt.anchorMax = trt.pivot = new Vector2(0, 1);
             trt.sizeDelta = new Vector2(300, 50);
             trt.anchoredPosition = new Vector2(50, -50);
-            var text = textGo.GetComponent<NanamiUI.TextField>();
+            var text = textGo.GetComponent<OpenFairy.UGUI.TextField>();
             text.html = true;
             text.fontSize = 24;
             text.text = "<a href='foo'>clickme</a>";

@@ -1,7 +1,7 @@
 using System.Xml.Linq;
 using UnityEngine;
 
-namespace NanamiUI.TestSupport
+namespace OpenFairy.UGUI.TestSupport
 {
     public readonly struct ParityPage
     {
@@ -56,12 +56,12 @@ namespace NanamiUI.TestSupport
         };
 
         // 交互几何 case：实例化 Component、定位并驱动 Target 到某状态、快照 Target 子树几何、与 FairyGUI 参照比。
-        // NanamiUI 侧只经非泛型 Runtime 面（Slider / IPointerClickHandler）驱动，故生成的 UI.{包} 类型不用可达。
+        // OpenFairy.UGUI 侧只经非泛型 Runtime 面（Slider / IPointerClickHandler）驱动，故生成的 UI.{包} 类型不用可达。
         public enum ActionKind
         {
-            SliderValue,     // Param = 目标值；NanamiUI 用合成指针经 OnDrag 达到该值，FairyGUI 设 asSlider.value
-            ButtonSelected,  // NanamiUI 经 OnPointerClick（Check/Radio 会置 selected），FairyGUI 设 asButton.selected=true
-            ButtonDown,      // NanamiUI 经 OnPointerDown（按住），FairyGUI 设 button controller 到 down 页
+            SliderValue,     // Param = 目标值；OpenFairy.UGUI 用合成指针经 OnDrag 达到该值，FairyGUI 设 asSlider.value
+            ButtonSelected,  // OpenFairy.UGUI 经 OnPointerClick（Check/Radio 会置 selected），FairyGUI 设 asButton.selected=true
+            ButtonDown,      // OpenFairy.UGUI 经 OnPointerDown（按住），FairyGUI 设 button controller 到 down 页
         }
 
         public readonly struct InteractionCase

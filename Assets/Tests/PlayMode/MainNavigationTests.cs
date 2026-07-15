@@ -1,13 +1,13 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     public class MainNavigationTests
     {
@@ -53,13 +53,13 @@ namespace NanamiUI.Tests
             new("Text", "m_btn_Text", "UI.Basics.Demo_Text"),
         };
 
-        private NanamiPageRenderer _rig;
+        private OpenFairyPageRenderer _rig;
         private GameObject _main;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            _rig = new NanamiPageRenderer();
+            _rig = new OpenFairyPageRenderer();
             _rig.Setup();
             _rig.Configure(1136, 640);
 #if UNITY_EDITOR
@@ -116,7 +116,7 @@ namespace NanamiUI.Tests
         }
 
         private object Comp(string fullName) =>
-            Array.Find(_main.GetComponentsInChildren<NanamiUI.Component>(true), c => c.GetType().FullName == fullName);
+            Array.Find(_main.GetComponentsInChildren<OpenFairy.UGUI.Component>(true), c => c.GetType().FullName == fullName);
 
         private static object Field(object owner, string name) => owner.GetType().GetField(name).GetValue(owner);
 

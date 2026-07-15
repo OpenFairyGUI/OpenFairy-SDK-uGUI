@@ -1,0 +1,17 @@
+{
+    "name": "OpenFairy.UGUI.TestSupport",
+    "rootNamespace": "OpenFairy.UGUI.TestSupport",
+    "references": [
+        "OpenFairy.UGUI",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

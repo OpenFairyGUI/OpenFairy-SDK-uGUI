@@ -115,7 +115,7 @@ InitTestScene*.unity*
 /Assets/UIProject.meta
 /Docs/RenderDiff/
 
-# NanamiUI golden 参照图：从 Docs/RenderDiff 按需现生成（Tools/NanamiUI/Promote），不入库
+# OpenFairy golden 参照图：按需现生成（Tools/OpenFairy/Generate Golden References），不入库
 /Assets/Tests/Golden/
 /Assets/Tests/Golden.meta
 

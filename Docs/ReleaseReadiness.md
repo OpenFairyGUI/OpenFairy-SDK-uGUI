@@ -1,7 +1,7 @@
-# NanamiUI 通用 SDK 发布就绪清单
+# OpenFairy 通用 SDK 发布就绪清单
 
 > **历史存档**（2026-07-08 时点）：文中类型/文件名为当时旧名——`InputText.cs`/`GList.cs`/`GRoot.cs` 现为
-> `TextInput.cs`/`List.cs`/`Root.cs`，`GList.Fill` 现为 `ListSource.Fill`。现状以 `Docs/NanamiUI-Runtime-API.md` 为准。
+> `TextInput.cs`/`List.cs`/`Root.cs`，`GList.Fill` 现为 `ListSource.Fill`。现状以 `Docs/OpenFairy-Runtime-API.md` 为准。
 
 目标：从"完美复刻 Basics/Transition 两个 demo"升级为**通用 FairyGUI 三方 SDK**。
 本文件是发布前 code review 的整改跟踪清单，按优先级分组。状态：⬜ 待办 / 🔨 进行中 / ✅ 完成 / ⏸️ 部分完成（见备注）。

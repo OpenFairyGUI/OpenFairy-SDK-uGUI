@@ -1,12 +1,12 @@
 using System.Collections;
 using Cysharp.Threading.Tasks;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     // Root 覆盖层 + PopupMenu + Window 的运行时机制回归。定位/居中/尺寸是分析精确值；交互直接调 handler（不经 raycast，
     // 因 golden rig 是 WorldSpace + 禁用相机，raycast 命中不可靠）。
@@ -16,7 +16,7 @@ namespace NanamiUI.Tests
         private const string PopupItemPrefab = "Assets/UIProject/Assets/Basics/popupmenu/PopupMenuItem.prefab";
         private const string WindowAPrefab = "Assets/UIProject/Assets/Basics/WindowA.prefab";
 
-        private NanamiPageRenderer _rig;
+        private OpenFairyPageRenderer _rig;
         private Root _gr;
 
         private static GameObject Load(string path)
@@ -31,7 +31,7 @@ namespace NanamiUI.Tests
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            _rig = new NanamiPageRenderer();
+            _rig = new OpenFairyPageRenderer();
             _rig.Setup();
             _rig.Configure(1136, 640);
             var design = new GameObject("Design", typeof(RectTransform));
@@ -67,7 +67,7 @@ namespace NanamiUI.Tests
         [UnityTest]
         public IEnumerator PopupMenu_positions_below_target_and_sizes_to_items()
         {
-            var pm = new NanamiUI.PopupMenu(Load(PopupMenuPrefab), Load(PopupItemPrefab));
+            var pm = new OpenFairy.UGUI.PopupMenu(Load(PopupMenuPrefab), Load(PopupItemPrefab));
             var clicked = 0;
             pm.AddItem("Item 1").onClick.AddListener(() => clicked++);
             pm.AddItem("Item 2");
@@ -102,7 +102,7 @@ namespace NanamiUI.Tests
         [UnityTest]
         public IEnumerator PopupMenu_clear_items_reuses_items_and_clears_listeners()
         {
-            var pm = new NanamiUI.PopupMenu(Load(PopupMenuPrefab), Load(PopupItemPrefab));
+            var pm = new OpenFairy.UGUI.PopupMenu(Load(PopupMenuPrefab), Load(PopupItemPrefab));
             var oldListener = 0;
             var freshListener = 0;
             var first = pm.AddItem("Old");
@@ -168,7 +168,7 @@ namespace NanamiUI.Tests
 
         private const string ComboPopupPrefab = "Assets/UIProject/Assets/Basics/components/ComboBoxPopup.prefab";
         private enum ComboPage { up, down, over, selectedOver }
-        private sealed class TestCombo : NanamiUI.ComboBox<ComboPage> { }
+        private sealed class TestCombo : OpenFairy.UGUI.ComboBox<ComboPage> { }
 
         [UnityTest]
         public IEnumerator ComboBox_dropdown_clips_to_visibleItemCount_and_scrolls()
@@ -232,7 +232,7 @@ namespace NanamiUI.Tests
             return null;
         }
 
-        private sealed class CenteringWindow : NanamiUI.Window
+        private sealed class CenteringWindow : OpenFairy.UGUI.Window
         {
             protected override void OnInit()
             {

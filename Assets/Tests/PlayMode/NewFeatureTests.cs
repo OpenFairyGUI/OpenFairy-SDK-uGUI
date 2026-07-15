@@ -1,6 +1,6 @@
 using System.Collections;
 using Cysharp.Threading.Tasks;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -8,16 +8,16 @@ using UnityEngine.TestTools;
 using UnityEngine.UI;
 using ZLinq;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
-    // 本批发布前整改新增功能的行为回归（NanamiUI-only、分析上精确、无需 FairyGUI 参照）：
+    // 本批发布前整改新增功能的行为回归（OpenFairy.UGUI-only、分析上精确、无需 FairyGUI 参照）：
     // Slider onChanged/绝对跳值、Radio 组互斥、Relation 尺寸跟随传播。
     public class NewFeatureTests
     {
         private enum RadioPage { up, down, over, selectedOver }
         private class TestButton : Button<RadioPage> { }
         private class TestCombo : ComboBox<RadioPage> { }
-        private class TestOwner : NanamiUI.Component
+        private class TestOwner : OpenFairy.UGUI.Component
         {
             public Controller<RadioPage> m_ctrl;
 
@@ -30,12 +30,12 @@ namespace NanamiUI.Tests
             }
         }
 
-        private NanamiPageRenderer _rig;
+        private OpenFairyPageRenderer _rig;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            _rig = new NanamiPageRenderer();
+            _rig = new OpenFairyPageRenderer();
             _rig.Setup();
             _rig.Configure(1136, 640);
             yield return null;
@@ -690,11 +690,11 @@ namespace NanamiUI.Tests
             yield return null;
 
             // a、b order 0；把 move 提到 order 5：应排到 order<=5 的其它子物体之后 = 末尾（index 2 保持）。
-            NanamiUI.Depth.SetSortingOrder(move, 5);
+            OpenFairy.UGUI.Depth.SetSortingOrder(move, 5);
             Assert.AreEqual(2, move.GetSiblingIndex(), "forward move：move 应落在末尾（在 a、b 之后）");
 
             // 再把 a 提到 order 10：应排到最后 → 顺序 b, move, a。
-            NanamiUI.Depth.SetSortingOrder(a, 10);
+            OpenFairy.UGUI.Depth.SetSortingOrder(a, 10);
             Assert.AreEqual(2, a.GetSiblingIndex(), "a 提到最高 order 应到末尾");
             Assert.AreSame(b, container.GetChild(0), "顺序应为 b, move, a：首位是 b");
             Assert.AreSame(move.transform, container.GetChild(1), "次位是 move");

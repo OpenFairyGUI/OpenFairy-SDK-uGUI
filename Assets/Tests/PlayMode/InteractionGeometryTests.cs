@@ -1,12 +1,12 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     // 交互几何 parity：实例化烘焙态 prefab，经真实 handler 把目标驱动到某交互态，settle 掉 gear 缓动后，
     // 把目标子树的几何快照与 FairyGUI 参照（由 Generate Golden References 生成）比。
@@ -18,12 +18,12 @@ namespace NanamiUI.Tests
         // gear 切页缓动默认 0.3s；40 帧(@captureDeltaTime 1/60 ≈0.67s)足够收敛，省去对 DOTween 的直接引用。
         private const int SettleFrames = 40;
 
-        private NanamiPageRenderer _rig;
+        private OpenFairyPageRenderer _rig;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            _rig = new NanamiPageRenderer();
+            _rig = new OpenFairyPageRenderer();
             _rig.Setup();
             yield return null;
         }
@@ -41,7 +41,7 @@ namespace NanamiUI.Tests
         {
             var geoPath = ParityCatalog.GeometryPath(c);
             if (!File.Exists(geoPath))
-                Assert.Fail($"No geometry reference for {c.Name}. Run Tools/NanamiUI/Generate Golden References.");
+                Assert.Fail($"No geometry reference for {c.Name}. Run Tools/OpenFairy/Generate Golden References.");
 
             _rig.LoadComponent(c.Package, c.Component);
             Assert.IsNotNull(_rig.Instance, $"Prefab missing: {ParityCatalog.PrefabPath(c.Package, c.Component)}");
@@ -55,7 +55,7 @@ namespace NanamiUI.Tests
                 yield return null;
             Canvas.ForceUpdateCanvases();
 
-            var actual = GeometrySnapshot.FromNanami(target);
+            var actual = GeometrySnapshot.FromOpenFairy(target);
             var reference = GeometrySnapshot.Load(geoPath);
             var diff = actual.Compare(reference, c.Epsilon);
             Assert.IsNull(diff, $"{c.Name}: {diff}");

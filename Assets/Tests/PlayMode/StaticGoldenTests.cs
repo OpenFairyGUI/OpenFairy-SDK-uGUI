@@ -1,28 +1,28 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEngine.TestTools.Graphics;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
-    // 静态 golden 回归：逐页渲 NanamiUI 末帧，与 FairyGUI golden PNG 比，差异占比超每页阈值即失败。
-    // golden 由 Tools/NanamiUI/Generate Golden References 生成（gitignore、按需现生成）；缺图即失败，不静默跳过。
+    // 静态 golden 回归：逐页渲 OpenFairy.UGUI 末帧，与 FairyGUI golden PNG 比，差异占比超每页阈值即失败。
+    // golden 由 Tools/OpenFairy/Generate Golden References 生成（gitignore、按需现生成）；缺图即失败，不静默跳过。
     public class StaticGoldenTests
     {
         public static IEnumerable<ParityPage> Pages => ParityCatalog.StaticPages;
 
-        private NanamiPageRenderer _rig;
+        private OpenFairyPageRenderer _rig;
 
         // 用 [UnitySetUp]/[UnityTearDown]（协程、在 play mode 内跑）建/拆渲染台，
         // 不用 [OneTimeSetUp]——它在进入 play mode 之前执行，那时 SceneManager 等 play-only API 不可用。
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            _rig = new NanamiPageRenderer();
+            _rig = new OpenFairyPageRenderer();
             _rig.Setup();
             yield return null;
         }
@@ -40,7 +40,7 @@ namespace NanamiUI.Tests
         {
             var goldenPath = ParityCatalog.GoldenPath(page);
             if (!File.Exists(goldenPath))
-                Assert.Fail($"No golden for {page.Name}. Run Tools/NanamiUI/Generate Golden References.");
+                Assert.Fail($"No golden for {page.Name}. Run Tools/OpenFairy/Generate Golden References.");
 
             _rig.LoadPage(page);
             Assert.IsNotNull(_rig.Instance, $"Prefab missing: {ParityCatalog.PrefabPath(page)}");

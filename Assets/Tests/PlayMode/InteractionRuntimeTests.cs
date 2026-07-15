@@ -1,27 +1,27 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     // 端到端交互回归：经真实 GraphicRaycaster 命中 + ExecuteEvents 驱动页内二级交互（开窗/弹菜单/下拉、MovieClip 自播、
     // 输入框可编辑）。区别于 DemoSmokeTest（直接 Invoke onClick / 直接写 .text），这里走真实点击路径，能抓到
     // "射线打不到目标 / 覆盖层挡住 / 输入框不可编辑" 这类只在真跑时暴露的问题。
     public class InteractionRuntimeTests
     {
-        private NanamiPageRenderer _rig;
+        private OpenFairyPageRenderer _rig;
         private GameObject _main;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            _rig = new NanamiPageRenderer();
+            _rig = new OpenFairyPageRenderer();
             _rig.Setup();
             _rig.Configure(1136, 640);
 #if UNITY_EDITOR
@@ -46,7 +46,7 @@ namespace NanamiUI.Tests
         }
 
         private object Comp(string fullName) =>
-            Array.Find(_main.GetComponentsInChildren<NanamiUI.Component>(true), c => c.GetType().FullName == fullName);
+            Array.Find(_main.GetComponentsInChildren<OpenFairy.UGUI.Component>(true), c => c.GetType().FullName == fullName);
 
         private static object Field(object owner, string name) => owner.GetType().GetField(name).GetValue(owner);
 
@@ -90,7 +90,7 @@ namespace NanamiUI.Tests
             yield return Enter("m_btn_MovieClip");
             var demo = (UnityEngine.Component)Comp("UI.Basics.Demo_MovieClip");
             Assert.IsNotNull(demo, "MovieClip demo 应实例化");
-            var mc = demo.GetComponentInChildren<NanamiUI.MovieClip>(true);
+            var mc = demo.GetComponentInChildren<OpenFairy.UGUI.MovieClip>(true);
             Assert.IsNotNull(mc, "MovieClip demo 应含 MovieClip 组件");
             Assert.IsNotNull(mc.frames, "MovieClip 应有帧数组");
             Assert.Greater(mc.frames.Length, 1, "MovieClip 应有多帧");
@@ -116,17 +116,17 @@ namespace NanamiUI.Tests
             Assert.IsTrue(ClickWorld(openBtn), "开窗按钮 n0 应被真实射线命中并派发点击（按钮整块须可点，不能被背景穿透）");
             for (var i = 0; i < 10; i++)
                 yield return null;
-            Assert.AreEqual(1, NanamiUI.Root.inst.activeWindowCount, "真实点击 n0 应开出一个 window");
+            Assert.AreEqual(1, OpenFairy.UGUI.Root.inst.activeWindowCount, "真实点击 n0 应开出一个 window");
 
             // 找到窗口关闭按钮并真实点击关闭。
             RectTransform close = null;
-            foreach (var b in NanamiUI.Root.inst.rect.GetComponentsInChildren<NanamiUI.ButtonBase>(true))
+            foreach (var b in OpenFairy.UGUI.Root.inst.rect.GetComponentsInChildren<OpenFairy.UGUI.ButtonBase>(true))
                 if (b.name == "closeButton") { close = (RectTransform)b.transform; break; }
             Assert.IsNotNull(close, "窗口应有 closeButton");
             Assert.IsTrue(ClickWorld(close), "closeButton 应被射线命中（经 Root 覆盖层画布）并派发点击");
             for (var i = 0; i < 10; i++)
                 yield return null;
-            Assert.AreEqual(0, NanamiUI.Root.inst.activeWindowCount, "点关闭按钮后 window 应关闭");
+            Assert.AreEqual(0, OpenFairy.UGUI.Root.inst.activeWindowCount, "点关闭按钮后 window 应关闭");
         }
 
         [UnityTest]
@@ -140,16 +140,16 @@ namespace NanamiUI.Tests
             Assert.IsTrue(ClickWorld(openBtn), "弹菜单按钮 n0 应被射线命中");
             for (var i = 0; i < 5; i++)
                 yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "真实点击 n0 应弹出菜单");
+            Assert.IsTrue(OpenFairy.UGUI.Root.inst.hasAnyPopup, "真实点击 n0 应弹出菜单");
 
             // 真实点击第一项：菜单应收起（hideOnClickItem）。
-            var list = FindDeep(NanamiUI.Root.inst.rect, "list");
+            var list = FindDeep(OpenFairy.UGUI.Root.inst.rect, "list");
             Assert.IsNotNull(list, "弹出的菜单应含 list");
             Assert.Greater(list.childCount, 0, "菜单应有项");
             Assert.IsTrue(ClickWorld((RectTransform)list.GetChild(0)), "菜单项应被射线命中");
             for (var i = 0; i < 5; i++)
                 yield return null;
-            Assert.IsFalse(NanamiUI.Root.inst.hasAnyPopup, "点菜单项后菜单应收起");
+            Assert.IsFalse(OpenFairy.UGUI.Root.inst.hasAnyPopup, "点菜单项后菜单应收起");
         }
 
         [UnityTest]
@@ -158,7 +158,7 @@ namespace NanamiUI.Tests
             yield return Enter("m_btn_Text");
             var demo = Comp("UI.Basics.Demo_Text");
             Assert.IsNotNull(demo, "Text demo 应实例化");
-            var input = (NanamiUI.TextInput)Field(demo, "m_n22");
+            var input = (OpenFairy.UGUI.TextInput)Field(demo, "m_n22");
             Assert.IsNotNull(input, "n22 应是输入框");
             Assert.IsNotNull(input.field, "TextInput 应绑定 uGUI InputField");
             Assert.IsFalse(input.field.readOnly, "输入框不应只读");
@@ -166,7 +166,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(input.field.textComponent, "InputField 应挂 textComponent 以显示输入");
 
             // 关键回归：输入框中心必须被真实射线命中并解析到 InputField（否则点不到 = 无法聚焦/输入）。
-            // 之前的 bug：display 用 NanamiUI.TextField 作 targetGraphic，其 OnEnable 把 raycastTarget 清零 → 命中落空。
+            // 之前的 bug：display 用 OpenFairy.UGUI.TextField 作 targetGraphic，其 OnEnable 把 raycastTarget 清零 → 命中落空。
             var rt = (RectTransform)input.transform;
             var raycaster = rt.GetComponentInParent<GraphicRaycaster>();
             var screen = RectTransformUtility.WorldToScreenPoint(_rig.Camera, rt.TransformPoint(rt.rect.center));
@@ -200,7 +200,7 @@ namespace NanamiUI.Tests
             Assert.IsTrue(ClickWorld(combo), "ComboBox 应被真实射线命中（整块可点，不被背景穿透）");
             for (var i = 0; i < 5; i++)
                 yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "真实点击 ComboBox 应弹出下拉");
+            Assert.IsTrue(OpenFairy.UGUI.Root.inst.hasAnyPopup, "真实点击 ComboBox 应弹出下拉");
         }
 
         [UnityTest]
@@ -212,24 +212,24 @@ namespace NanamiUI.Tests
             Assert.IsTrue(ClickWorld((RectTransform)comboComp.transform), "ComboBox 应被命中");
             for (var i = 0; i < 5; i++)
                 yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "应弹出下拉");
+            Assert.IsTrue(OpenFairy.UGUI.Root.inst.hasAnyPopup, "应弹出下拉");
 
             // 下拉项都在 Root 覆盖层里（combo 本体在页面画布），取第 2 项真实点击。
-            var items = NanamiUI.Root.inst.rect.GetComponentsInChildren<NanamiUI.ButtonBase>(true);
+            var items = OpenFairy.UGUI.Root.inst.rect.GetComponentsInChildren<OpenFairy.UGUI.ButtonBase>(true);
             Assert.Greater(items.Length, 1, "下拉应有多项");
-            var combo = (NanamiUI.IComboBox)comboComp; // 非泛型面，免反射
+            var combo = (OpenFairy.UGUI.IComboBox)comboComp; // 非泛型面，免反射
             var options = combo.items;
             Assert.IsTrue(ClickWorld((RectTransform)items[1].transform), "下拉第 2 项应被真实射线命中");
             for (var i = 0; i < 5; i++)
                 yield return null;
-            Assert.IsFalse(NanamiUI.Root.inst.hasAnyPopup, "点选项后下拉应收起");
+            Assert.IsFalse(OpenFairy.UGUI.Root.inst.hasAnyPopup, "点选项后下拉应收起");
             Assert.AreEqual(options[1], combo.text, "选第 2 项后 ComboBox 当前文本应为该项");
         }
 
         private static bool IsComboBox(Type t)
         {
             for (; t != null; t = t.BaseType)
-                if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(NanamiUI.ComboBox<>))
+                if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(OpenFairy.UGUI.ComboBox<>))
                     return true;
             return false;
         }
@@ -241,29 +241,29 @@ namespace NanamiUI.Tests
             var demo = (UnityEngine.Component)Comp("UI.Basics.Demo_ComboBox");
             Assert.IsNotNull(demo, "ComboBox demo 应实例化");
             // 逐个真实点击页内每个 combobox（含 Dropdown 变体 n4/n5），断言各自都能弹下拉——而不是抽查一个 n1 就断言"ComboBox 可用"。
-            var combos = new List<NanamiUI.ButtonBase>();
-            foreach (var b in demo.GetComponentsInChildren<NanamiUI.ButtonBase>(true))
+            var combos = new List<OpenFairy.UGUI.ButtonBase>();
+            foreach (var b in demo.GetComponentsInChildren<OpenFairy.UGUI.ButtonBase>(true))
                 if (IsComboBox(b.GetType()))
                     combos.Add(b);
             Assert.Greater(combos.Count, 1, "ComboBox demo 应有多个下拉（含 Dropdown 变体，不能只有 n1/n6）");
             foreach (var combo in combos)
             {
-                NanamiUI.Root.inst.HidePopup();
+                OpenFairy.UGUI.Root.inst.HidePopup();
                 yield return null;
                 Assert.IsTrue(ClickWorld((RectTransform)combo.transform), $"{combo.name} 应被真实射线命中");
                 for (var i = 0; i < 5; i++)
                     yield return null;
-                Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, $"点 {combo.name} 应弹出下拉（每个 combobox 都要能开，不只抽查一个）");
+                Assert.IsTrue(OpenFairy.UGUI.Root.inst.hasAnyPopup, $"点 {combo.name} 应弹出下拉（每个 combobox 都要能开，不只抽查一个）");
             }
-            NanamiUI.Root.inst.HidePopup();
+            OpenFairy.UGUI.Root.inst.HidePopup();
         }
 
         [UnityTest]
         public IEnumerator Slider_is_reachable_by_real_click_and_changes_value()
         {
             yield return Enter("m_btn_Slider");
-            NanamiUI.Slider slider = null;
-            foreach (var s in _main.GetComponentsInChildren<NanamiUI.Slider>(true))
+            OpenFairy.UGUI.Slider slider = null;
+            foreach (var s in _main.GetComponentsInChildren<OpenFairy.UGUI.Slider>(true))
                 if (s.bar != null) { slider = s; break; } // 取横向 slider（有 bar），x 方向点击可跳值
             Assert.IsNotNull(slider, "Slider demo 应含横向 Slider 组件");
             slider.value = 0;

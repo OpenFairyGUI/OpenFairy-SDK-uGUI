@@ -3,10 +3,10 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NanamiUI.TestSupport
+namespace OpenFairy.UGUI.TestSupport
 {
     // 交互测试的核心信号：把一棵子树的每个节点记成"相对交互目标左上角、页面像素、y 向下"的几何 + 少量视觉标量。
-    // 参照来自 FairyGUI（由 BasicsRenderDiff 用 GObject 侧构建），实测来自 NanamiUI（这里从 RectTransform 构建）。
+    // 参照来自 FairyGUI（由 BasicsRenderDiff 用 GObject 侧构建），实测来自 OpenFairy.UGUI（这里从 RectTransform 构建）。
     // 因为静态渲染 parity 已单独保证"任意状态渲成像素 = FairyGUI"，交互只需证明"到达了正确状态"，故比几何不比像素。
     // 坐标一律相对子树根的左上角，避免依赖画布世界摆位与 y 翻转的跨引擎歧义。
     public sealed class GeometrySnapshot
@@ -22,8 +22,8 @@ namespace NanamiUI.TestSupport
 
         public List<Node> nodes = new();
 
-        // 从 NanamiUI 实例的子树构建。rig 下 CanvasScaler=ConstantPixelSize/1 且 WorldSpace，故 1 world unit = 1px。
-        public static GeometrySnapshot FromNanami(Transform root)
+        // 从 OpenFairy.UGUI 实例的子树构建。rig 下 CanvasScaler=ConstantPixelSize/1 且 WorldSpace，故 1 world unit = 1px。
+        public static GeometrySnapshot FromOpenFairy(Transform root)
         {
             var snapshot = new GeometrySnapshot();
             var corners = new Vector3[4];
@@ -83,8 +83,8 @@ namespace NanamiUI.TestSupport
             return new GeometrySnapshot { nodes = wrapper.nodes };
         }
 
-        // FairyGUI 参照是规格：要求 参照 ⊆ 实测（每个 FairyGUI 节点都在 NanamiUI 存在且几何/显隐/文本一致）。
-        // NanamiUI 侧多出的节点（描边/阴影/遮罩等渲染辅助，FairyGUI 无对应）被忽略。超 epsilon/不一致即返回失败信息。
+        // FairyGUI 参照是规格：要求 参照 ⊆ 实测（每个 FairyGUI 节点都在 OpenFairy.UGUI 存在且几何/显隐/文本一致）。
+        // OpenFairy.UGUI 侧多出的节点（描边/阴影/遮罩等渲染辅助，FairyGUI 无对应）被忽略。超 epsilon/不一致即返回失败信息。
         public string Compare(GeometrySnapshot reference, float epsilonPx)
         {
             var mine = new Dictionary<string, Node>();
@@ -94,7 +94,7 @@ namespace NanamiUI.TestSupport
             foreach (var b in reference.nodes)
             {
                 if (!mine.TryGetValue(b.path, out var a))
-                    return $"node '{b.path}' present in FairyGUI reference but missing in NanamiUI";
+                    return $"node '{b.path}' present in FairyGUI reference but missing in OpenFairy.UGUI";
                 if (a.active != b.active)
                     return $"node '{b.path}' active {a.active} != FairyGUI {b.active}";
                 if (a.text != b.text)

@@ -1,23 +1,23 @@
 using System.Collections;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     // Depth（sortingOrder 兄弟序）+ Draggable（保偏移拖动 + 取整）+ DragDrop（agent + DropTarget）的运行时机制回归。
     // 直接驱动 Runtime（不经生成的 UI.{包} 类型），断言分析上精确的终点，故无需 FairyGUI 参照。
     public class DragDepthTests
     {
-        private NanamiPageRenderer _rig;
+        private OpenFairyPageRenderer _rig;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            _rig = new NanamiPageRenderer();
+            _rig = new OpenFairyPageRenderer();
             _rig.Setup();
             _rig.Configure(1136, 640);
             yield return null;
@@ -55,11 +55,11 @@ namespace NanamiUI.Tests
             var container = Child(_rig.CanvasRt, "container", Vector2.zero, new Vector2(600, 600), false);
             var fixedShape = Child(container, "fixed", new Vector2(50, 50), new Vector2(150, 150), true);
 
-            NanamiUI.Depth.SetSortingOrder(fixedShape, 100);
-            var red0 = NanamiUI.Depth.CreateRect(container, new Vector2(60, 60), 150, 150, 1, Color.black, Color.red, 0);
-            var red1 = NanamiUI.Depth.CreateRect(container, new Vector2(70, 70), 150, 150, 1, Color.black, Color.red, 0);
-            var green0 = NanamiUI.Depth.CreateRect(container, new Vector2(80, 80), 150, 150, 1, Color.black, Color.green, 200);
-            var green1 = NanamiUI.Depth.CreateRect(container, new Vector2(90, 90), 150, 150, 1, Color.black, Color.green, 200);
+            OpenFairy.UGUI.Depth.SetSortingOrder(fixedShape, 100);
+            var red0 = OpenFairy.UGUI.Depth.CreateRect(container, new Vector2(60, 60), 150, 150, 1, Color.black, Color.red, 0);
+            var red1 = OpenFairy.UGUI.Depth.CreateRect(container, new Vector2(70, 70), 150, 150, 1, Color.black, Color.red, 0);
+            var green0 = OpenFairy.UGUI.Depth.CreateRect(container, new Vector2(80, 80), 150, 150, 1, Color.black, Color.green, 200);
+            var green1 = OpenFairy.UGUI.Depth.CreateRect(container, new Vector2(90, 90), 150, 150, 1, Color.black, Color.green, 200);
             yield return null;
 
             // 期望兄弟序：order 0 保持插入序在前，order>0 升序在后 → [red0, red1, fixed, green0, green1]
@@ -75,12 +75,12 @@ namespace NanamiUI.Tests
         {
             var container = Child(_rig.CanvasRt, "container", Vector2.zero, new Vector2(600, 600), false);
             var child = Child(container, "obj", new Vector2(100, 100), new Vector2(80, 80), true);
-            child.gameObject.AddComponent<NanamiUI.Draggable>();
+            child.gameObject.AddComponent<OpenFairy.UGUI.Draggable>();
             var start = child.anchoredPosition; // (100, -100)
 
             var local0 = new Vector2(120, -140);
             var local1 = local0 + new Vector2(40, -25);
-            var drag = child.GetComponent<NanamiUI.Draggable>();
+            var drag = child.GetComponent<OpenFairy.UGUI.Draggable>();
             drag.OnBeginDrag(Ped(ScreenOf(container, local0)));
             drag.OnDrag(Ped(ScreenOf(container, local1)));
             yield return null;
@@ -95,7 +95,7 @@ namespace NanamiUI.Tests
         {
             var container = Child(_rig.CanvasRt, "container", Vector2.zero, new Vector2(600, 600), false);
             var child = Child(container, "obj", new Vector2(100, 100), new Vector2(80, 80), true);
-            var drag = child.gameObject.AddComponent<NanamiUI.Draggable>();
+            var drag = child.gameObject.AddComponent<OpenFairy.UGUI.Draggable>();
             // bounds parent-local y-down: x∈[50, 300], y(down)∈[50, 300] → obj (80x80) x∈[50,220], yDown∈[50,220]
             drag.dragBounds = new Rect(50, 50, 250, 250);
 
@@ -130,14 +130,14 @@ namespace NanamiUI.Tests
             var tex = new Texture2D(4, 4);
             var payload = Sprite.Create(tex, new Rect(0, 0, 4, 4), Vector2.one * 0.5f);
 
-            var drag = b.gameObject.AddComponent<NanamiUI.Draggable>();
+            var drag = b.gameObject.AddComponent<OpenFairy.UGUI.Draggable>();
             drag.onDragStart = e =>
             {
-                NanamiUI.DragDropManager.inst.StartDrag(canvas, raycaster, payload, payload, e);
+                OpenFairy.UGUI.DragDropManager.inst.StartDrag(canvas, raycaster, payload, payload, e);
                 return true; // PreventDefault → agent 拖动
             };
             object dropped = null;
-            c.gameObject.AddComponent<NanamiUI.DropTarget>().onDrop = data => dropped = data;
+            c.gameObject.AddComponent<OpenFairy.UGUI.DropTarget>().onDrop = data => dropped = data;
 
             // Overlay：屏幕点 = 世界点（null 相机）。取各自中心。
             Vector2 Screen(RectTransform rt) => RectTransformUtility.WorldToScreenPoint(null, rt.TransformPoint(rt.rect.center));
@@ -149,7 +149,7 @@ namespace NanamiUI.Tests
             yield return null;
 
             Assert.AreSame(payload, dropped, "DropTarget 应收到拖动 payload");
-            Assert.IsFalse(NanamiUI.DragDropManager.inst.dragging, "松手后 agent 应停用");
+            Assert.IsFalse(OpenFairy.UGUI.DragDropManager.inst.dragging, "松手后 agent 应停用");
             Assert.AreEqual(new Vector2(20, -20), b.anchoredPosition, "b 本体不应移动（PreventDefault）");
 
             Object.Destroy(canvasGo);

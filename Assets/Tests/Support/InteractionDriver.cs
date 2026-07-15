@@ -3,9 +3,9 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace NanamiUI.TestSupport
+namespace OpenFairy.UGUI.TestSupport
 {
-    // NanamiUI 侧交互驱动：只经非泛型 Runtime 面驱动，故不依赖生成的 UI.{包} 类型。
+    // OpenFairy.UGUI 侧交互驱动：只经非泛型 Runtime 面驱动，故不依赖生成的 UI.{包} 类型。
     // Slider 用"由目标 value 反算出的合成指针"经真实 OnPointerDown 达到该值（changeOnClick 路径，同时验证 ScreenPoint↔Local 往返 + Apply）；
     // 连续 OnDrag 拖动路径由 BakedInteractionTests.Baked_slider_continuous_drag 覆盖。
     // Button/Checkbox 经真实 OnPointerClick（Check/Radio 会翻 selected）。
@@ -30,12 +30,12 @@ namespace NanamiUI.TestSupport
         }
 
         // 按名切控制器的页（复刻 FairyGUI GetController(name).selectedIndex）。Controller<T> 是泛型 struct、
-        // 生成的 UI.{包} 类型测试程序集不可达，故经反射设 m_{name}.page（同 NanamiUI.Example.BasicsMain.SetPage）。
+        // 生成的 UI.{包} 类型测试程序集不可达，故经反射设 m_{name}.page（同 OpenFairy.UGUI.Example.BasicsMain.SetPage）。
         // 运行时 page setter 触发 gears 缓动。pageName 用生成枚举名（"_0"/"_1"）。
         public static void DriveControllerPage(GameObject root, string controllerName, string pageName)
         {
             var fieldName = "m_" + controllerName;
-            foreach (var component in root.GetComponents<NanamiUI.Component>())
+            foreach (var component in root.GetComponents<OpenFairy.UGUI.Component>())
             {
                 var field = component.GetType().GetField(fieldName);
                 if (field == null)

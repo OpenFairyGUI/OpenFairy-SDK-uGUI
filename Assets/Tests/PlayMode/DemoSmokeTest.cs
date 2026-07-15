@@ -1,25 +1,25 @@
 using System;
 using System.Collections;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     // 集成 smoke：实例化 Main、让 BasicsMain.Awake 跑，经反射驱动 Window/Popup/Depth/Drag&Drop demo，
     // 验证胶水（反射字段名、Root/Window/PopupMenu 接线）端到端不抛且能开窗/弹菜单。
     public class DemoSmokeTest
     {
-        private NanamiPageRenderer _rig;
+        private OpenFairyPageRenderer _rig;
         private GameObject _main;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            _rig = new NanamiPageRenderer();
+            _rig = new OpenFairyPageRenderer();
             _rig.Setup();
             _rig.Configure(1136, 640);
 #if UNITY_EDITOR
@@ -45,7 +45,7 @@ namespace NanamiUI.Tests
         }
 
         private object Comp(string fullName) =>
-            Array.Find(_main.GetComponentsInChildren<NanamiUI.Component>(true), c => c.GetType().FullName == fullName);
+            Array.Find(_main.GetComponentsInChildren<OpenFairy.UGUI.Component>(true), c => c.GetType().FullName == fullName);
 
         private static object Field(object owner, string name) => owner.GetType().GetField(name).GetValue(owner);
 
@@ -61,7 +61,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(demo, "Demo_Window 应已实例化");
             Click(Field(demo, "m_n0")); // 开 Window A
             yield return null;
-            Assert.AreEqual(1, NanamiUI.Root.inst.activeWindowCount, "点 n0 应开一个 window");
+            Assert.AreEqual(1, OpenFairy.UGUI.Root.inst.activeWindowCount, "点 n0 应开一个 window");
         }
 
         [UnityTest]
@@ -73,7 +73,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(demo);
             Click(Field(demo, "m_n0")); // 弹菜单
             yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "点 n0 应弹出菜单");
+            Assert.IsTrue(OpenFairy.UGUI.Root.inst.hasAnyPopup, "点 n0 应弹出菜单");
         }
 
         [UnityTest]
@@ -83,7 +83,7 @@ namespace NanamiUI.Tests
             yield return null;
             var demo = (UnityEngine.Component)Comp("UI.Basics.Demo_ProgressBar");
             Assert.IsNotNull(demo);
-            var bar = demo.GetComponentInChildren<NanamiUI.ProgressBar>();
+            var bar = demo.GetComponentInChildren<OpenFairy.UGUI.ProgressBar>();
             var v0 = bar.value;
             for (var i = 0; i < 5; i++)
                 yield return null;
@@ -97,8 +97,8 @@ namespace NanamiUI.Tests
             yield return null;
             var demo = Comp("UI.Basics.Demo_Text");
             Assert.IsNotNull(demo);
-            var n22 = (NanamiUI.TextInput)Field(demo, "m_n22"); // n22 是可编辑输入框
-            var n24 = (NanamiUI.TextField)Field(demo, "m_n24");
+            var n22 = (OpenFairy.UGUI.TextInput)Field(demo, "m_n22"); // n22 是可编辑输入框
+            var n24 = (OpenFairy.UGUI.TextField)Field(demo, "m_n24");
             n22.text = "Alice"; // 模拟用户输入姓名
             Click(Field(demo, "m_n25")); // 拷 n22 → n24
             yield return null;
@@ -110,7 +110,7 @@ namespace NanamiUI.Tests
         {
             Click(Field(Comp("UI.Basics.Main"), "m_btn_List"));
             yield return null;
-            var pane = _main.GetComponentInChildren<NanamiUI.ScrollPane>();
+            var pane = _main.GetComponentInChildren<OpenFairy.UGUI.ScrollPane>();
             Assert.IsNotNull(pane, "List demo 应挂上 ScrollPane");
             var content = (RectTransform)pane.transform.Find("viewport/content");
             Assert.IsNotNull(content, "应有 content 容器");
@@ -138,7 +138,7 @@ namespace NanamiUI.Tests
             Assert.IsNotNull(handler, "ComboBox 应挂上点击中继");
             handler.OnPointerClick(new PointerEventData(EventSystem.current));
             yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "点 ComboBox 应弹出下拉");
+            Assert.IsTrue(OpenFairy.UGUI.Root.inst.hasAnyPopup, "点 ComboBox 应弹出下拉");
         }
 
         [UnityTest]

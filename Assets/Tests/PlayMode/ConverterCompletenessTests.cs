@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using ZLinq;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     // 系统性转换完整性：枚举 Basics 里每个组件的源 XML，凡 extention 声明了交互面（Button/ComboBox/Slider/ProgressBar/Label）的，
     // 断言烘焙 prefab 根挂了能响应的对应运行时组件——而不是退化成不可交互的 Component。
@@ -50,7 +50,7 @@ namespace NanamiUI.Tests
                 if (prefab == null)
                     continue; // 未导出/无 prefab（依赖闭包之外）
 
-                var comp = prefab.GetComponents<NanamiUI.Component>().AsValueEnumerable().FirstOrDefault();
+                var comp = prefab.GetComponents<OpenFairy.UGUI.Component>().AsValueEnumerable().FirstOrDefault();
                 var type = comp?.GetType();
                 var ok = ext switch
                 {
@@ -63,7 +63,7 @@ namespace NanamiUI.Tests
                 };
                 checkedCount++;
                 if (!ok)
-                    failures.Add($"{sub}: extention={ext} 但烘焙成 {(comp == null ? "无 NanamiUI 组件" : type.Name)}（该元素点了没反应）");
+                    failures.Add($"{sub}: extention={ext} 但烘焙成 {(comp == null ? "无 OpenFairy.UGUI 组件" : type.Name)}（该元素点了没反应）");
             }
 
             Assert.Greater(checkedCount, 0, "应至少扫到若干带交互 extention 的组件");
@@ -76,7 +76,7 @@ namespace NanamiUI.Tests
         public void ComboBox_item_values_parse_as_strings()
         {
 #if UNITY_EDITOR
-            var path = Path.Combine(Directory.GetCurrentDirectory(), "Temp", "NanamiUIComboValueTest.xml");
+            var path = Path.Combine(Directory.GetCurrentDirectory(), "Temp", "OpenFairy.UGUIComboValueTest.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllText(path, @"
 <component size=""10,10"" extention=""ComboBox"">
@@ -87,7 +87,7 @@ namespace NanamiUI.Tests
 </component>");
 
             var fairyXml = AppDomain.CurrentDomain.GetAssemblies().AsValueEnumerable()
-                .Select(assembly => assembly.GetType("NanamiUI.Editor.FairyXml"))
+                .Select(assembly => assembly.GetType("OpenFairy.UGUI.Editor.FairyXml"))
                 .FirstOrDefault(type => type != null);
             Assert.IsNotNull(fairyXml, "应能找到编辑器 XML 解析器");
             var component = fairyXml.GetMethod("LoadComponent").Invoke(null, new object[] { path });
@@ -106,7 +106,7 @@ namespace NanamiUI.Tests
         {
 #if UNITY_EDITOR
             var fairyXml = AppDomain.CurrentDomain.GetAssemblies().AsValueEnumerable()
-                .Select(assembly => assembly.GetType("NanamiUI.Editor.FairyXml"))
+                .Select(assembly => assembly.GetType("OpenFairy.UGUI.Editor.FairyXml"))
                 .FirstOrDefault(type => type != null);
             Assert.IsNotNull(fairyXml, "应能找到编辑器 XML 解析器");
             var load = fairyXml.GetMethod("LoadComponent");
@@ -135,7 +135,7 @@ namespace NanamiUI.Tests
             foreach (var path in Directory.GetFiles(scriptRoot, "*.cs", SearchOption.AllDirectories))
             {
                 var code = File.ReadAllText(path);
-                if (code.Contains("NanamiUI.Text ") || code.Contains("NanamiUI.Shape ") || code.Contains("NanamiUI.InputText ")
+                if (code.Contains("OpenFairy.UGUI.Text ") || code.Contains("OpenFairy.UGUI.Shape ") || code.Contains("OpenFairy.UGUI.InputText ")
                     || code.Contains("public Image ") || code.Contains("public RectTransform "))
                     failures.Add(Path.GetRelativePath(scriptRoot, path));
             }

@@ -1,0 +1,27 @@
+{
+    "name": "OpenFairy.UGUI.Tests.PlayMode",
+    "rootNamespace": "OpenFairy.UGUI.Tests",
+    "references": [
+        "OpenFairy.UGUI",
+        "OpenFairy.UGUI.TestSupport",
+        "UniTask",
+        "ZLinq.Unity",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "UnityEngine.TestTools.Graphics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll",
+        "ZLinq.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

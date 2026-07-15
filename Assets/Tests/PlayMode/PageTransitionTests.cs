@@ -1,24 +1,24 @@
 using System.Collections;
 using System.IO;
 using System.Text;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     // 翻页动效回归：Main 的 c1 从 0→1（进 Demo）时，btns 组本应"飞出去再消失"（gearDisplay 隐藏 + gearXY 缓动，
-    // FairyGUI 用 display lock 延迟隐藏）。修复前 NanamiUI 立即 SetActive(false) → 瞬间消失。这里断言 btns 在
-    // 滑出途中保持 active，缓动结束后才隐藏。轨迹写 Temp/NanamiUIPageTransition.txt 供人看。
+    // FairyGUI 用 display lock 延迟隐藏）。修复前 OpenFairy.UGUI 立即 SetActive(false) → 瞬间消失。这里断言 btns 在
+    // 滑出途中保持 active，缓动结束后才隐藏。轨迹写 Temp/OpenFairy.UGUIPageTransition.txt 供人看。
     public class PageTransitionTests
     {
-        private NanamiPageRenderer _rig;
+        private OpenFairyPageRenderer _rig;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            _rig = new NanamiPageRenderer();
+            _rig = new OpenFairyPageRenderer();
             _rig.Setup();
             yield return null;
         }
@@ -57,7 +57,7 @@ namespace NanamiUI.Tests
                 if (ba && bx > 120 && bx < 1120) sawBtnsActiveMidSlide = true;      // 滑出途中仍显示
                 if (ca && cx > -1120 && cx < -20) sawContainerActiveMidSlide = true; // 滑入途中已显示
             }
-            File.WriteAllText(Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Temp", "NanamiUIPageTransition.txt"), log.ToString());
+            File.WriteAllText(Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Temp", "OpenFairy.UGUIPageTransition.txt"), log.ToString());
 
             Assert.IsTrue(sawBtnsActiveMidSlide, "btns 应在滑出途中保持 active（飞出），而非立即消失。\n" + log);
             Assert.IsTrue(sawContainerActiveMidSlide, "container 应在滑入途中已显示。\n" + log);

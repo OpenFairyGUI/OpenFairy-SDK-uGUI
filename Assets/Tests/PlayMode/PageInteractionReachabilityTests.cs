@@ -1,14 +1,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     // 系统性可达性扫：对每个交互 demo 页，枚举页内每个 active 的按钮/下拉（ButtonBase），真实射线打其中心，
     // 断言命中落在它自己子树内、且解析到一个 IPointerClickHandler；下拉还须解析到下拉自身（内部 button 面不得抢走点击）。
@@ -32,7 +32,7 @@ namespace NanamiUI.Tests
         [UnityTest]
         public IEnumerator Every_active_button_center_receives_its_own_click()
         {
-            var rig = new NanamiPageRenderer();
+            var rig = new OpenFairyPageRenderer();
             rig.Setup();
             var failures = new List<string>();
             var swept = 0;
@@ -50,13 +50,13 @@ namespace NanamiUI.Tests
                 yield return null;
 
                 var raycaster = rig.Raycaster;
-                foreach (var button in go.GetComponentsInChildren<NanamiUI.ButtonBase>(false)) // 只扫 active
+                foreach (var button in go.GetComponentsInChildren<OpenFairy.UGUI.ButtonBase>(false)) // 只扫 active
                 {
                     var rt = (RectTransform)button.transform;
                     if (rt.rect.width < 2 || rt.rect.height < 2)
                         continue; // 零尺寸占位不计
                     // 跳过嵌套在另一个 Button/ComboBox 里的子面（如 Dropdown 的内部 button 面）——外层才是点击单元。
-                    if (button.transform.parent != null && button.transform.parent.GetComponentInParent<NanamiUI.ButtonBase>() != null)
+                    if (button.transform.parent != null && button.transform.parent.GetComponentInParent<OpenFairy.UGUI.ButtonBase>() != null)
                         continue;
                     // 跳过 touchable=false（烘成 CanvasGroup.blocksRaycasts=false）的故意不可点元素（如 Button demo 的禁用按钮 n32）。
                     if (System.Array.Exists(button.GetComponentsInParent<CanvasGroup>(true), cg => !cg.blocksRaycasts))

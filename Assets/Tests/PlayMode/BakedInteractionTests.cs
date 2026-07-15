@@ -1,26 +1,26 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using NanamiUI.TestSupport;
+using OpenFairy.UGUI.TestSupport;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
-namespace NanamiUI.Tests
+namespace OpenFairy.UGUI.Tests
 {
     // 直接实例化转换产物 prefab（不经 Main 页/业务胶水），用真实指针驱动，证明"转换器已把交互烘焙进通用工程"：
     // 关联控制器换页(tab/radio)、overflow=scroll 自挂 ScrollPane、输入框 Enter 提交、slider 连续拖动。
     // 这是"交互不正确但测不出来"的直接防线——通用工程拿到的就是这些 prefab，不含 demo 胶水。
     public class BakedInteractionTests
     {
-        private NanamiPageRenderer _rig;
+        private OpenFairyPageRenderer _rig;
 
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            _rig = new NanamiPageRenderer();
+            _rig = new OpenFairyPageRenderer();
             _rig.Setup();
             yield return null;
         }
@@ -41,7 +41,7 @@ namespace NanamiUI.Tests
         }
 
         private static object Comp(GameObject go, string fullName) =>
-            Array.Find(go.GetComponentsInChildren<NanamiUI.Component>(true), c => c.GetType().FullName == fullName);
+            Array.Find(go.GetComponentsInChildren<OpenFairy.UGUI.Component>(true), c => c.GetType().FullName == fullName);
 
         private static object Field(object owner, string name) => owner.GetType().GetField(name).GetValue(owner);
         private static bool Selected(object button) => (bool)button.GetType().GetProperty("selected").GetValue(button);
@@ -146,7 +146,7 @@ namespace NanamiUI.Tests
         {
             var go = Load("Demo_Text");
             var demo = Comp(go, "UI.Basics.Demo_Text");
-            var input = (NanamiUI.TextInput)Field(demo, "m_n22");
+            var input = (OpenFairy.UGUI.TextInput)Field(demo, "m_n22");
             yield return null;
             Assert.IsNotNull(input.field, "输入框应绑定 InputField");
             Assert.IsNotNull(input.submit, "输入框应烘焙 InputSubmit（Enter 提交中继）");
@@ -159,8 +159,8 @@ namespace NanamiUI.Tests
         public IEnumerator Baked_slider_continuous_drag_changes_value()
         {
             var go = Load("Demo_Slider");
-            NanamiUI.Slider slider = null;
-            foreach (var s in go.GetComponentsInChildren<NanamiUI.Slider>(true))
+            OpenFairy.UGUI.Slider slider = null;
+            foreach (var s in go.GetComponentsInChildren<OpenFairy.UGUI.Slider>(true))
                 if (s.bar != null) { slider = s; break; } // 横向 slider
             Assert.IsNotNull(slider, "应有横向 Slider");
             slider.value = 0;
@@ -179,11 +179,11 @@ namespace NanamiUI.Tests
         [UnityTest]
         public IEnumerator Baked_combobox_opens_dropdown_without_root_glue()
         {
-            // 通用工程场景：只实例化转换产物、不跑任何 NanamiUI 胶水（无 Root.Create）。
+            // 通用工程场景：只实例化转换产物、不跑任何 OpenFairy.UGUI 胶水（无 Root.Create）。
             // 点 ComboBox 应自建覆盖层并弹下拉（复刻 GRoot.inst 惰性自建），而不是 NullReferenceException。
             var go = Load("Demo_ComboBox");
             Assert.IsNotNull(go, "Demo_ComboBox prefab 应存在");
-            Assert.IsTrue(NanamiUI.Root.inst == null, "前置：无业务胶水时不应已有 Root");
+            Assert.IsTrue(OpenFairy.UGUI.Root.inst == null, "前置：无业务胶水时不应已有 Root");
             // 经非泛型面找烘焙的 ComboBox（测试程序集访问不到生成的 UI.{包} 类型）。
             ButtonBase combo = null;
             foreach (var b in go.GetComponentsInChildren<ButtonBase>(true))
@@ -199,8 +199,8 @@ namespace NanamiUI.Tests
 
             ((IPointerClickHandler)combo).OnPointerClick(new PointerEventData(EventSystem.current));
             yield return null;
-            Assert.IsTrue(NanamiUI.Root.inst != null, "点下拉应自建 Root 覆盖层");
-            Assert.IsTrue(NanamiUI.Root.inst.hasAnyPopup, "下拉应作为 popup 打开");
+            Assert.IsTrue(OpenFairy.UGUI.Root.inst != null, "点下拉应自建 Root 覆盖层");
+            Assert.IsTrue(OpenFairy.UGUI.Root.inst.hasAnyPopup, "下拉应作为 popup 打开");
         }
     }
 }
