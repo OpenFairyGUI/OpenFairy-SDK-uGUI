@@ -53,7 +53,7 @@ namespace OpenFairy.UGUI.Example
 
         private void Awake()
         {
-            OpenFairy.UGUI.TextField.defaultFont = "Microsoft YaHei";
+            DemoFont.Apply(gameObject);
             _main = Array.Find(GetComponents<OpenFairy.UGUI.Component>(), component => component.GetType().FullName == "UI.Basics.Main");
             _mainType = _main.GetType();
             _container = ((UnityEngine.Component)Get("m_container")).transform;
@@ -88,6 +88,7 @@ namespace OpenFairy.UGUI.Example
                 Destroy(_container.GetChild(i).gameObject);
 
             var go = Instantiate(Prefab(name), _container, false);
+            DemoFont.Apply(go);
             var rt = (RectTransform)go.transform;
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
             rt.anchoredPosition = Vector2.zero;
@@ -187,6 +188,7 @@ namespace OpenFairy.UGUI.Example
                     var n = i;
                     _pm.AddItem("Item " + n).onClick.AddListener(() => Debug.Log("click Item " + n));
                 }
+                DemoFont.Apply(_pm.ContentPane.gameObject);
             }
             var n0 = (UnityEngine.Component)Get(demo, "m_n0");
             BindButton(n0, () => _pm.Show((RectTransform)n0.transform, OpenFairy.UGUI.PopupDirection.Down).Forget());
@@ -195,6 +197,7 @@ namespace OpenFairy.UGUI.Example
                 if (_popupCom == null)
                 {
                     _popupCom = Instantiate(popupComPrefab);
+                    DemoFont.Apply(_popupCom);
                     OpenFairy.UGUI.Root.inst.Center((RectTransform)_popupCom.transform);
                 }
                 OpenFairy.UGUI.Root.inst.ShowPopup((RectTransform)_popupCom.transform).Forget();

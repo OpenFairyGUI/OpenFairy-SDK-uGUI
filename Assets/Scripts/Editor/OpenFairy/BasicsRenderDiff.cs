@@ -134,7 +134,6 @@ namespace OpenFairy.UGUI.Editor
             Time.timeScale = 1;
             Time.captureDeltaTime = FixedDeltaTime; // 两侧动效同步的关键：锁定每帧步进量
             UIConfig.defaultFont = "Microsoft YaHei";
-            OpenFairy.UGUI.TextField.defaultFont = "Microsoft YaHei";
             // 复刻 BasicsMain 的配置：FairyGUI 只有在这里配了滚动条资源才会创建滚动条。
             // 不配则 FairyGUI 侧无滚动条、viewport 用满宽，与已烤进滚动条的 OpenFairy.UGUI 产物产生假 diff。
             UIConfig.verticalScrollBar = "ui://Basics/ScrollBar_VT";
@@ -357,6 +356,7 @@ namespace OpenFairy.UGUI.Editor
             rt.localScale = Vector3.one;
             if (page.Component == "Main")
                 _openFairyInstance.transform.Find("btn_Back").gameObject.SetActive(true);
+            OpenFairy.UGUI.Example.DemoFont.Apply(_openFairyInstance); // 与 FairyGUI 侧 UIConfig.defaultFont 同字体
             foreach (var text in _openFairyInstance.GetComponentsInChildren<OpenFairy.UGUI.TextField>(true))
                 text.WarmUp();
             if (_openFairyInstance.GetComponents<Transition>().AsValueEnumerable().FirstOrDefault(transition => transition.transitionName == "t0") is { } transition)

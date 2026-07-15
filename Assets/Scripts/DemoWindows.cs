@@ -11,6 +11,7 @@ namespace OpenFairy.UGUI.Example
         protected override void OnInit()
         {
             base.OnInit();
+            DemoFont.Apply(contentPane.gameObject);
             Center();
         }
 
@@ -32,6 +33,7 @@ namespace OpenFairy.UGUI.Example
         protected override void OnInit()
         {
             base.OnInit();
+            DemoFont.Apply(contentPane.gameObject);
             Center();
         }
 

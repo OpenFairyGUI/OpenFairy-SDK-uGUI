@@ -17,6 +17,7 @@ namespace OpenFairy.UGUI.TestSupport
         private GameObject _instance;
         private GameObject _eventSystem;
         private Vector2Int _size;
+        private Font _runtimeFont;
 
         public GameObject Instance => _instance;
         public Camera Camera => _camera;
@@ -28,7 +29,6 @@ namespace OpenFairy.UGUI.TestSupport
             Time.timeScale = 1;
             Time.captureDeltaTime = 1f / 60f; // 两侧动效同步的关键：锁定每帧步进量
             Application.runInBackground = true;
-            OpenFairy.UGUI.TextField.defaultFont = "Microsoft YaHei";
 
             _camera = new GameObject("OpenFairy.UGUI Golden Camera").AddComponent<Camera>();
             _camera.clearFlags = CameraClearFlags.SolidColor;
@@ -90,8 +90,17 @@ namespace OpenFairy.UGUI.TestSupport
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
             rt.anchoredPosition = Vector2.zero;
             rt.localScale = Vector3.one;
+            // 复刻用户脚本的运行时字体替换（Assets/Scripts 的 DemoFont，TestSupport 引用不到 Assembly-CSharp 故内联）：
+            // 与 FairyGUI 参照侧的 UIConfig.defaultFont = "Microsoft YaHei" 同字体，否则像素对比全崩。
             foreach (var text in _instance.GetComponentsInChildren<OpenFairy.UGUI.TextField>(true))
+            {
+                if (text.fontNames == "Heiti SC Medium")
+                {
+                    text.fontNames = "Microsoft YaHei";
+                    text.font = _runtimeFont = _runtimeFont ? _runtimeFont : Font.CreateDynamicFontFromOSFont("Microsoft YaHei", 16);
+                }
                 text.WarmUp();
+            }
         }
 
         // 无 prefab 的独立测试用：设定画布尺寸并摆好相机（供 Depth/Drag 这类自建物体的坐标换算）。

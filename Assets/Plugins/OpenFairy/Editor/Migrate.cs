@@ -1212,7 +1212,9 @@ namespace OpenFairy.UGUI.Editor
                     return def;
                 var parts = value.Split(',');
                 return (new Vector2(float.Parse(parts[0], CultureInfo.InvariantCulture), float.Parse(parts[1], CultureInfo.InvariantCulture)),
-                    new Vector2(float.Parse(parts[2], CultureInfo.InvariantCulture), float.Parse(parts[3], CultureInfo.InvariantCulture)));
+                    parts.Length >= 4 // 老格式只有 "w,h" 无 scale 分量（复刻 GearSize.Init）
+                        ? new Vector2(float.Parse(parts[2], CultureInfo.InvariantCulture), float.Parse(parts[3], CultureInfo.InvariantCulture))
+                        : def.Scale);
             }
 
             var fallback = (Size: rt.sizeDelta, Scale: Vector2.one);
@@ -1812,8 +1814,12 @@ namespace OpenFairy.UGUI.Editor
             };
             if (element.Font is { } font)
             {
+                // 只有 .fnt 是位图字体；ttf/otf 资源（如 TextMeshPro 包的 SDF 字体）按字体名当动态字体。
                 if (TryResolve(font, owner.PackageId, out var fontResource) && fontResource.Type == Schema.ResourceKind.Font)
-                    text.bitmapFont = ImportFont(fontResource);
+                    if (fontResource.File.EndsWith(".fnt"))
+                        text.bitmapFont = ImportFont(fontResource);
+                    else
+                        text.fontNames = Path.GetFileNameWithoutExtension(fontResource.File);
                 else
                     text.fontNames = font;
             }
@@ -1826,6 +1832,8 @@ namespace OpenFairy.UGUI.Editor
         // 或 UIBuilder 逐字图片格式（img=资源id，打包成横向图集）。
         private static BitmapFont ImportFont(Resource fontResource)
         {
+            if (!fontResource.File.EndsWith(".fnt")) // ttf/otf（如 TextMeshPro 包的 SDF 字体）不是位图字体
+                return null;
             if (FontAssets.TryGetValue(fontResource, out var existing))
                 return existing;
 
@@ -2021,38 +2029,26 @@ namespace OpenFairy.UGUI.Editor
             Path.ChangeExtension($"{OutputRoot}/Scripts/{Path.GetRelativePath($"{UiRoot}/assets", file).Replace('\\', '/')}", ".cs").Replace('\\', '/');
 
         private static CommonSettings Settings() =>
-            _settings ??= JsonUtility.FromJson<CommonSettings>(File.ReadAllText($"{UiRoot}/settings/Common.json"));
+            _settings ??= File.Exists($"{UiRoot}/settings/Common.json")
+                ? JsonUtility.FromJson<CommonSettings>(File.ReadAllText($"{UiRoot}/settings/Common.json"))
+                : new CommonSettings();
 
-        // 游戏 UIConfig.defaultFont（运行时字体，不在 FairyGUI 工程文件里）：优先 OpenFairySettings 覆盖，
-        // 否则回退 Common.json 的设计期字体首个族名。
+        // 烘焙字体 = Common.json 的设计期字体首个族名。游戏运行时字体（FairyGUI 的 UIConfig.defaultFont）
+        // 不在工程文件里，由用户脚本在实例化后按 fontNames 遍历替换（见 Assets/Scripts 的 DemoFont）。
         private static string DefaultFont()
         {
-            if (Config() is { defaultFont: { Length: > 0 } font })
-                return font;
             var designFont = Settings().font;
             return string.IsNullOrEmpty(designFont) ? "Arial" : designFont.Split(',')[0].Trim();
         }
 
-        private static bool _configLoaded;
-        private static OpenFairySettings _config;
-        private static OpenFairySettings Config()
-        {
-            if (_configLoaded)
-                return _config;
-            _configLoaded = true;
-            var guid = AssetDatabase.FindAssets("t:OpenFairySettings").AsValueEnumerable().FirstOrDefault();
-            if (guid != null)
-                _config = AssetDatabase.LoadAssetAtPath<OpenFairySettings>(AssetDatabase.GUIDToAssetPath(guid));
-            return _config;
-        }
-
+        // 缺省值硬编码自 FairyGUI 新建工程的 settings/Common.json（Common.json 允许不存在）。
         [Serializable]
         private class CommonSettings
         {
-            public int fontSize;
-            public string textColor;
-            public string font;
-            public ScrollBars scrollBars;
+            public int fontSize = 12;
+            public string textColor = "#000000";
+            public string font = "";
+            public ScrollBars scrollBars = new();
         }
 
         [Serializable]

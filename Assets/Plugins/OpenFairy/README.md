@@ -12,7 +12,6 @@
 
 - `Runtime/`：运行时 SDK，命名空间 `OpenFairy.UGUI`（`TextField`/`TextInput`/`Button`/`ComboBox`/`Slider`/`ScrollPane`/`MovieClip`/`Transition`/`Gear*` …）。
 - `Editor/`：通用转换器与工程 postprocess，命名空间 `OpenFairy.UGUI.Editor`。
-- `Example/`：Basics demo 的运行时胶水。
 
 ## 使用（Unity 菜单 `Tools/OpenFairy`）
 

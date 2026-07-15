@@ -78,7 +78,7 @@
 
 - Migrate 按 `package.xml` 的 `exported="true"` 发现组件，并通过依赖闭包收集引用组件、图片、movieclip、字体、声音。
 - FairyGUI XML 通过 `XmlAttribute` / `XmlElement` / `XmlArrayItem` 标注的 `OpenFairy.UGUI.Editor.Schema` 类型和轻量自定义 converter reader 反序列化为 `Schema.Package` / `Schema.Component` / `Schema.Display` 等结构化数据，`Vector2`、bool 默认值、派生字段和有限选项 enum 在 schema 层落型，转换器后续逻辑不再直接读取 XML attribute。
-- 运行时配置来自 `settings/Common.json` 和可选的 `OpenFairySettings`，本工程限定导出 `Basics`、`Transition`。
+- 烘焙配置来自 `settings/Common.json`（允许不存在，缺省值硬编码自 FairyGUI 新建工程默认值）；运行时字体由用户脚本按 `fontNames` 遍历替换（`Assets/Scripts/DemoFont.cs`）。
 - codegen 已支持 C# 关键字转义、controller enum 内嵌、`Button<T>`、`ComboBox<T>`、`ProgressBar`、`Slider` 等基类选择。
 - `ListSource`、ComboBox items/values/dropdown、Window1 列表已通过全量 Migrate 重烘焙；Example Grid 已改用通用 `List.Fill`，不再自挂 SDK 级滚动能力。动态 `List.Fill` 现复用 `ListSource` item 池，`PopupMenu` 现复用菜单项池。
 - Basics demo 的工程胶水通过 `[MigratePostProcess]` 自动配置，不再作为菜单入口暴露。
