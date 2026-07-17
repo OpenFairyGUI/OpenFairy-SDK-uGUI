@@ -25,7 +25,7 @@
 Unity 菜单 **Window → Package Manager → ＋ → Add package from git URL...**，填入：
 
 ```
-https://github.com/nanamicat/OpenFairy-SDK-uGUI.git?path=Assets/Plugins/OpenFairy
+https://github.com/OpenFairyGUI/OpenFairy-SDK-uGUI.git?path=Assets/Plugins/OpenFairy
 ```
 
 或直接编辑 `Packages/manifest.json`：
@@ -33,7 +33,7 @@ https://github.com/nanamicat/OpenFairy-SDK-uGUI.git?path=Assets/Plugins/OpenFair
 ```json
 {
   "dependencies": {
-    "com.openfairy.ugui": "https://github.com/nanamicat/OpenFairy-SDK-uGUI.git?path=Assets/Plugins/OpenFairy"
+    "com.openfairy.ugui": "https://github.com/OpenFairyGUI/OpenFairy-SDK-uGUI.git?path=Assets/Plugins/OpenFairy"
   }
 }
 ```
