@@ -21,7 +21,7 @@ public class EmojiMain : MonoBehaviour
     }
     List<Message> _messages;
 
-    Dictionary<uint, Emoji> _emojies;
+    Dictionary<uint, FairyGUI.Emoji> _emojies;
 
     void Awake()
     {
@@ -52,12 +52,12 @@ public class EmojiMain : MonoBehaviour
         _input2.onKeyDown.Add(__inputKeyDown2);
 
         //作为demo，这里只添加了部分表情素材
-        _emojies = new Dictionary<uint, Emoji>();
+        _emojies = new Dictionary<uint, FairyGUI.Emoji>();
         for (uint i = 0x1f600; i < 0x1f637; i++)
         {
             string url = UIPackage.GetItemURL("Emoji", Convert.ToString(i, 16));
             if (url != null)
-                _emojies.Add(i, new Emoji(url));
+                _emojies.Add(i, new FairyGUI.Emoji(url));
         }
         _input2.emojies = _emojies;
 

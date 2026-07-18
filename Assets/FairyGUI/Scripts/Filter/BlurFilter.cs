@@ -54,7 +54,7 @@ namespace FairyGUI
         {
         }
 
-        void FourTapCone(RenderTexture source, RenderTexture dest, int iteration)
+        void FourTapCone(UnityEngine.RenderTexture source, UnityEngine.RenderTexture dest, int iteration)
         {
             float off = blurSize * iteration + 0.5f;
             Graphics.BlitMultiTap(source, dest, _blitMaterial,
@@ -65,7 +65,7 @@ namespace FairyGUI
             );
         }
 
-        void DownSample4x(RenderTexture source, RenderTexture dest)
+        void DownSample4x(UnityEngine.RenderTexture source, UnityEngine.RenderTexture dest)
         {
             float off = 1.0f;
             Graphics.BlitMultiTap(source, dest, _blitMaterial,
@@ -81,23 +81,23 @@ namespace FairyGUI
             if (blurSize < 0.01)
                 return;
 
-            RenderTexture sourceTexture = (RenderTexture)_target.paintingGraphics.texture.nativeTexture;
+            UnityEngine.RenderTexture sourceTexture = (UnityEngine.RenderTexture)_target.paintingGraphics.texture.nativeTexture;
             int rtW = sourceTexture.width / 8;
             int rtH = sourceTexture.height / 8;
-            RenderTexture buffer = RenderTexture.GetTemporary(rtW, rtH, 0);
+            UnityEngine.RenderTexture buffer = UnityEngine.RenderTexture.GetTemporary(rtW, rtH, 0);
 
             DownSample4x(sourceTexture, buffer);
 
             for (int i = 0; i < 2; i++)
             {
-                RenderTexture buffer2 = RenderTexture.GetTemporary(rtW, rtH, 0);
+                UnityEngine.RenderTexture buffer2 = UnityEngine.RenderTexture.GetTemporary(rtW, rtH, 0);
                 FourTapCone(buffer, buffer2, i);
-                RenderTexture.ReleaseTemporary(buffer);
+                UnityEngine.RenderTexture.ReleaseTemporary(buffer);
                 buffer = buffer2;
             }
             Graphics.Blit(buffer, sourceTexture);
 
-            RenderTexture.ReleaseTemporary(buffer);
+            UnityEngine.RenderTexture.ReleaseTemporary(buffer);
         }
     }
 }

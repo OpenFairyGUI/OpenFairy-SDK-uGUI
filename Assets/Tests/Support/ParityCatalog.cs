@@ -56,7 +56,7 @@ namespace OpenFairy.UGUI.TestSupport
         };
 
         // 交互几何 case：实例化 Component、定位并驱动 Target 到某状态、快照 Target 子树几何、与 FairyGUI 参照比。
-        // OpenFairy.UGUI 侧只经非泛型 Runtime 面（Slider / IPointerClickHandler）驱动，故生成的 UI.{包} 类型不用可达。
+        // OpenFairy.UGUI 侧只经非泛型 Runtime 面（Slider / IPointerClickHandler）驱动，故生成的 {包} 类型不用可达。
         public enum ActionKind
         {
             SliderValue,     // Param = 目标值；OpenFairy.UGUI 用合成指针经 OnDrag 达到该值，FairyGUI 设 asSlider.value

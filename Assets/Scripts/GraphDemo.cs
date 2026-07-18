@@ -10,7 +10,7 @@ namespace OpenFairy.UGUI.Example
     {
         public static Line Setup(GameObject go, Sprite changeSprite)
         {
-            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Graph");
+            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "Basics.Demo_Graph");
 
             var pie = (Graph)Field(demo, "m_pie");
             pie.startDegree = 30;

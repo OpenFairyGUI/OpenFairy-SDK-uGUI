@@ -1239,13 +1239,13 @@ namespace FairyGUI
                 output = new Texture2D(1, 1, TextureFormat.RGBA32, false, true);
             else
             {
-                RenderTexture rt = (RenderTexture)paintingGraphics.texture.nativeTexture;
+                UnityEngine.RenderTexture rt = (UnityEngine.RenderTexture)paintingGraphics.texture.nativeTexture;
                 output = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false, true);
-                RenderTexture old = RenderTexture.active;
-                RenderTexture.active = rt;
+                UnityEngine.RenderTexture old = UnityEngine.RenderTexture.active;
+                UnityEngine.RenderTexture.active = rt;
                 output.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
                 output.Apply();
-                RenderTexture.active = old;
+                UnityEngine.RenderTexture.active = old;
             }
 
             LeavePaintingMode(8);
@@ -1664,7 +1664,7 @@ namespace FairyGUI
                 return;
 
             Vector2 offset = new Vector2(_paintingInfo.extend.left, _paintingInfo.extend.top);
-            CaptureCamera.Capture(this, (RenderTexture)paintingGraphics.texture.nativeTexture, paintingGraphics.contentRect.height, offset);
+            CaptureCamera.Capture(this, (UnityEngine.RenderTexture)paintingGraphics.texture.nativeTexture, paintingGraphics.contentRect.height, offset);
 
             _paintingInfo.flag = 2; //2表示已完成一次Capture
             if (onPaint != null)

@@ -49,7 +49,7 @@ namespace FairyGUI
         Renderer _renderer;
 
         [NonSerialized]
-        RenderTexture _texture;
+        UnityEngine.RenderTexture _texture;
 
         Action _captureDelegate;
 
@@ -206,9 +206,9 @@ namespace FairyGUI
             if (_texture != null)
             {
                 if (Application.isPlaying)
-                    RenderTexture.Destroy(_texture);
+                    UnityEngine.RenderTexture.Destroy(_texture);
                 else
-                    RenderTexture.DestroyImmediate(_texture);
+                    UnityEngine.RenderTexture.DestroyImmediate(_texture);
                 _texture = null;
 
                 if (_renderer != null)
@@ -264,11 +264,11 @@ namespace FairyGUI
                 view.displayObject.Update(context);
                 context.End();
 
-                RenderTexture old = RenderTexture.active;
-                RenderTexture.active = _texture;
+                UnityEngine.RenderTexture old = UnityEngine.RenderTexture.active;
+                UnityEngine.RenderTexture.active = _texture;
                 GL.Clear(true, true, Color.clear);
                 camera.Render();
-                RenderTexture.active = old;
+                UnityEngine.RenderTexture.active = old;
 
                 camera.targetTexture = null;
                 view.Dispose();

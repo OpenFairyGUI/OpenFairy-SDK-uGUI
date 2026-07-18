@@ -55,9 +55,9 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Window_demo_opens_window()
         {
-            Click(Field(Comp("UI.Basics.Main"), "m_btn_Window")); // → PlayWindow 接线 n0/n1
+            Click(Field(Comp("Basics.Main"), "m_btn_Window")); // → PlayWindow 接线 n0/n1
             yield return null;
-            var demo = Comp("UI.Basics.Demo_Window");
+            var demo = Comp("Basics.Demo_Window");
             Assert.IsNotNull(demo, "Demo_Window 应已实例化");
             Click(Field(demo, "m_n0")); // 开 Window A
             yield return null;
@@ -67,9 +67,9 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Popup_demo_shows_menu()
         {
-            Click(Field(Comp("UI.Basics.Main"), "m_btn_Popup"));
+            Click(Field(Comp("Basics.Main"), "m_btn_Popup"));
             yield return null;
-            var demo = Comp("UI.Basics.Demo_Popup");
+            var demo = Comp("Basics.Demo_Popup");
             Assert.IsNotNull(demo);
             Click(Field(demo, "m_n0")); // 弹菜单
             yield return null;
@@ -79,9 +79,9 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator ProgressBar_demo_cycles_values()
         {
-            Click(Field(Comp("UI.Basics.Main"), "m_btn_ProgressBar"));
+            Click(Field(Comp("Basics.Main"), "m_btn_ProgressBar"));
             yield return null;
-            var demo = (UnityEngine.Component)Comp("UI.Basics.Demo_ProgressBar");
+            var demo = (UnityEngine.Component)Comp("Basics.Demo_ProgressBar");
             Assert.IsNotNull(demo);
             var bar = demo.GetComponentInChildren<OpenFairy.UGUI.ProgressBar>();
             var v0 = bar.value;
@@ -93,9 +93,9 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Text_demo_copies_text()
         {
-            Click(Field(Comp("UI.Basics.Main"), "m_btn_Text"));
+            Click(Field(Comp("Basics.Main"), "m_btn_Text"));
             yield return null;
-            var demo = Comp("UI.Basics.Demo_Text");
+            var demo = Comp("Basics.Demo_Text");
             Assert.IsNotNull(demo);
             var n22 = (OpenFairy.UGUI.TextInput)Field(demo, "m_n22"); // n22 是可编辑输入框
             var n24 = (OpenFairy.UGUI.TextField)Field(demo, "m_n24");
@@ -108,7 +108,7 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator List_demo_scrolls()
         {
-            Click(Field(Comp("UI.Basics.Main"), "m_btn_List"));
+            Click(Field(Comp("Basics.Main"), "m_btn_List"));
             yield return null;
             var pane = _main.GetComponentInChildren<OpenFairy.UGUI.ScrollPane>();
             Assert.IsNotNull(pane, "List demo 应挂上 ScrollPane");
@@ -131,9 +131,9 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator ComboBox_demo_opens_dropdown()
         {
-            Click(Field(Comp("UI.Basics.Main"), "m_btn_ComboBox"));
+            Click(Field(Comp("Basics.Main"), "m_btn_ComboBox"));
             yield return null;
-            var n1 = (UnityEngine.Component)Field(Comp("UI.Basics.Demo_ComboBox"), "m_n1");
+            var n1 = (UnityEngine.Component)Field(Comp("Basics.Demo_ComboBox"), "m_n1");
             var handler = (IPointerClickHandler)n1.GetComponent(typeof(IPointerClickHandler));
             Assert.IsNotNull(handler, "ComboBox 应挂上点击中继");
             handler.OnPointerClick(new PointerEventData(EventSystem.current));
@@ -144,9 +144,9 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Grid_demo_fills_lists()
         {
-            Click(Field(Comp("UI.Basics.Main"), "m_btn_Grid"));
+            Click(Field(Comp("Basics.Main"), "m_btn_Grid"));
             yield return null;
-            var demo = Comp("UI.Basics.Demo_Grid");
+            var demo = Comp("Basics.Demo_Grid");
             Assert.IsNotNull(demo);
             var list1 = (RectTransform)((UnityEngine.Component)Field(demo, "m_list1")).transform;
             var content = list1.Find("viewport/content");
@@ -157,13 +157,13 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Depth_and_dragdrop_demos_wire_without_error()
         {
-            Click(Field(Comp("UI.Basics.Main"), "m_btn_Depth"));
+            Click(Field(Comp("Basics.Main"), "m_btn_Depth"));
             yield return null;
-            Assert.IsNotNull(Comp("UI.Basics.Demo_Depth"), "Depth demo 应实例化且 PlayDepth 不抛");
+            Assert.IsNotNull(Comp("Basics.Demo_Depth"), "Depth demo 应实例化且 PlayDepth 不抛");
 
-            Click(Field(Comp("UI.Basics.Main"), "m_btn_Drag_Drop"));
+            Click(Field(Comp("Basics.Main"), "m_btn_Drag_Drop"));
             yield return null;
-            Assert.IsNotNull(Comp("UI.Basics.Demo_Drag_Drop"), "Drag&Drop demo 应实例化且 PlayDragDrop 不抛");
+            Assert.IsNotNull(Comp("Basics.Demo_Drag_Drop"), "Drag&Drop demo 应实例化且 PlayDragDrop 不抛");
             yield return null;
         }
     }

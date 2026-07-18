@@ -46,7 +46,7 @@ public class TransitionMain : MonoBehaviour
     {
         _btnGroup.visible = false;
         GRoot.inst.AddChild(target);
-        Transition t = target.GetTransition("t0");
+        FairyGUI.Transition t = target.GetTransition("t0");
 
         t.Play(() =>
         {
@@ -61,7 +61,7 @@ public class TransitionMain : MonoBehaviour
         _g4.x = GRoot.inst.width - _g4.width - 20;
         _g4.y = 100;
         GRoot.inst.AddChild(_g4);
-        Transition t = _g4.GetTransition("t0");
+        FairyGUI.Transition t = _g4.GetTransition("t0");
         t.Play(3, 0, () =>
         {
             _btnGroup.visible = true;
@@ -75,7 +75,7 @@ public class TransitionMain : MonoBehaviour
         _g5.x = 20;
         _g5.y = GRoot.inst.height - _g5.height - 100;
         GRoot.inst.AddChild(_g5);
-        Transition t = _g5.GetTransition("t0");
+        FairyGUI.Transition t = _g5.GetTransition("t0");
         _startValue = 10000;
         int add = UnityEngine.Random.Range(1000, 3000);
         _endValue = _startValue + add;

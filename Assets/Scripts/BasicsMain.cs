@@ -54,7 +54,7 @@ namespace OpenFairy.UGUI.Example
         private void Awake()
         {
             DemoFont.Apply(gameObject);
-            _main = Array.Find(GetComponents<OpenFairy.UGUI.Component>(), component => component.GetType().FullName == "UI.Basics.Main");
+            _main = Array.Find(GetComponents<OpenFairy.UGUI.Component>(), component => component.GetType().FullName == "Basics.Main");
             _mainType = _main.GetType();
             _container = ((UnityEngine.Component)Get("m_container")).transform;
             OpenFairy.UGUI.Root.Create((RectTransform)_main.transform); // 顶层覆盖层：承载 window/popup
@@ -110,13 +110,13 @@ namespace OpenFairy.UGUI.Example
         // 复刻 FairyGUI PlayGrid：把两个列表用平台名+随机数据填满；滚动由烘焙的 ScrollPaneHost 自挂。
         private void PlayGrid(GameObject go)
         {
-            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Grid");
+            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "Basics.Demo_Grid");
             var names = System.Enum.GetNames(typeof(RuntimePlatform));
             var colors = new[] { Color.yellow, Color.red, Color.white, Color.cyan };
 
             ((UnityEngine.Component)Get(demo, "m_list1")).GetComponent<OpenFairy.UGUI.ListSource>().Fill(names.Length, (item, i) =>
             {
-                var comp = ItemComp(item, "UI.Basics.GridItem");
+                var comp = ItemComp(item, "Basics.GridItem");
                 SetText(comp, "m_t0", (i + 1).ToString());
                 SetText(comp, "m_t1", names[i]);
                 if (Get(comp, "m_t2") is OpenFairy.UGUI.TextField t2)
@@ -124,7 +124,7 @@ namespace OpenFairy.UGUI.Example
             });
             ((UnityEngine.Component)Get(demo, "m_list2")).GetComponent<OpenFairy.UGUI.ListSource>().Fill(names.Length, (item, i) =>
             {
-                var comp = ItemComp(item, "UI.Basics.GridItem2");
+                var comp = ItemComp(item, "Basics.GridItem2");
                 SetText(comp, "m_t1", names[i]);
                 SetText(comp, "m_t3", UnityEngine.Random.Range(0, 10000).ToString());
             });
@@ -155,7 +155,7 @@ namespace OpenFairy.UGUI.Example
         // 复刻 FairyGUI PlayText：点富文本链接改写其内容；点 n25 把 n22 文本拷到 n24。
         private void PlayText(GameObject go)
         {
-            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Text");
+            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "Basics.Demo_Text");
             if (Get(demo, "m_n12") is OpenFairy.UGUI.TextField rich)
                 rich.onClickLink = href =>
                     rich.text = $"[img]ui://Basics/pet[/img][color=#FF0000]You click the link[/color]：{href}";
@@ -171,7 +171,7 @@ namespace OpenFairy.UGUI.Example
         // 复刻 FairyGUI PlayWindow：两个按钮各开一个单例 window（A 无动效居中，B 缩放进出 + 播 t1）。
         private void PlayWindow(GameObject go)
         {
-            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Window");
+            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "Basics.Demo_Window");
             BindButton(Get(demo, "m_n0"), () => (_winA ??= new DemoWindow1 { prefab = windowAPrefab }).Show());
             BindButton(Get(demo, "m_n1"), () => (_winB ??= new DemoWindow2 { prefab = windowBPrefab }).Show());
         }
@@ -179,7 +179,7 @@ namespace OpenFairy.UGUI.Example
         // 复刻 FairyGUI PlayPopup：n0 在按钮下方弹菜单；n1 居中弹一个组件。
         private void PlayPopup(GameObject go)
         {
-            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Popup");
+            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "Basics.Demo_Popup");
             if (_pm == null)
             {
                 _pm = new OpenFairy.UGUI.PopupMenu(popupMenuPrefab, popupItemPrefab);
@@ -207,7 +207,7 @@ namespace OpenFairy.UGUI.Example
         // 复刻 FairyGUI BasicsMain.PlayDepth：固定物置 sortingOrder 100 + 可拖；两个按钮各建 order 0(红,靠后)/200(绿,靠前) 矩形。
         private void PlayDepth(GameObject go)
         {
-            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Depth");
+            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "Basics.Demo_Depth");
             var container = (OpenFairy.UGUI.Component)Get(demo, "m_n22");
             var fixedShape = (OpenFairy.UGUI.Graph)Get(container, "m_n0");
             var containerRt = (RectTransform)((UnityEngine.Component)container).transform;
@@ -226,7 +226,7 @@ namespace OpenFairy.UGUI.Example
         // 复刻 FairyGUI BasicsMain.PlayDragDrop：a 自由拖；b 拖时改走 DragDropManager 的 agent；c 是落点(收到 icon)；d 限定在 n7 范围内拖。
         private void PlayDragDrop(GameObject go)
         {
-            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "UI.Basics.Demo_Drag_Drop");
+            var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "Basics.Demo_Drag_Drop");
             var a = (UnityEngine.Component)Get(demo, "m_a");
             var b = (UnityEngine.Component)Get(demo, "m_b");
             var c = (UnityEngine.Component)Get(demo, "m_c");

@@ -81,6 +81,7 @@
 - 烘焙配置来自 `settings/Common.json`（允许不存在，缺省值硬编码自 FairyGUI 新建工程默认值）；运行时字体由用户脚本按 `fontNames` 遍历替换（`Assets/Scripts/DemoFont.cs`）。
 - codegen 已支持 C# 关键字转义、controller enum 内嵌、`Button<T>`、`ComboBox<T>`、`ProgressBar`、`Slider` 等基类选择。
 - `ListSource`、ComboBox items/values/dropdown、Window1 列表已通过全量 Migrate 重烘焙；Example Grid 已改用通用 `List.Fill`，不再自挂 SDK 级滚动能力。动态 `List.Fill` 现复用 `ListSource` item 池，`PopupMenu` 现复用菜单项池。
+- 2026-07-18 codegen 生成命名空间由 `UI.{包名}` 简化为 `{包名}`；命名空间声明、跨包组件字段类型和 Migrate 的 `FindType` 使用同一套 `Identifier` 结果；同包组件字段使用短类型名，跨包字段使用 `global::{包名}.{组件名}` 避免目标包名被同名组件类遮蔽，并全限定被全局包命名空间遮蔽的 Unity/FairyGUI 同名类型；现生成脚本及 prefab 序列化类型名已同步迁移；Unity 6.4 自带 Roslyn 已验证 `Assembly-CSharp`、Editor、TestSupport、PlayMode tests 与 EditorTestRunner 全部编译通过。
 - Basics demo 的工程胶水通过 `[MigratePostProcess]` 自动配置，不再作为菜单入口暴露。
 
 ## 已知边界

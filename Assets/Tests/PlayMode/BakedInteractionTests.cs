@@ -104,7 +104,7 @@ namespace OpenFairy.UGUI.Tests
         {
             var go = Load("Demo_Button");
             Assert.IsNotNull(go, "Demo_Button prefab 应存在（先跑 Migrate）");
-            var demo = Comp(go, "UI.Basics.Demo_Button");
+            var demo = Comp(go, "Basics.Demo_Button");
             yield return null;
             Assert.AreEqual("_0", ControllerPage(demo, "m_tab"), "初始 tab 在第 0 页");
             Assert.IsTrue(ClickWorld(Rt(Field(demo, "m_n24"))), "Tab2 应被真实射线命中");
@@ -119,7 +119,7 @@ namespace OpenFairy.UGUI.Tests
         public IEnumerator Baked_radio_group_is_mutually_exclusive_without_glue()
         {
             var go = Load("Demo_Button");
-            var demo = Comp(go, "UI.Basics.Demo_Button");
+            var demo = Comp(go, "Basics.Demo_Button");
             yield return null;
             Assert.IsTrue(ClickWorld(Rt(Field(demo, "m_n19"))), "Option2 应被命中");
             yield return null;
@@ -145,7 +145,7 @@ namespace OpenFairy.UGUI.Tests
         public IEnumerator Baked_input_has_submit_relay_and_is_editable()
         {
             var go = Load("Demo_Text");
-            var demo = Comp(go, "UI.Basics.Demo_Text");
+            var demo = Comp(go, "Basics.Demo_Text");
             var input = (OpenFairy.UGUI.TextInput)Field(demo, "m_n22");
             yield return null;
             Assert.IsNotNull(input.field, "输入框应绑定 InputField");
@@ -184,7 +184,7 @@ namespace OpenFairy.UGUI.Tests
             var go = Load("Demo_ComboBox");
             Assert.IsNotNull(go, "Demo_ComboBox prefab 应存在");
             Assert.IsTrue(OpenFairy.UGUI.Root.inst == null, "前置：无业务胶水时不应已有 Root");
-            // 经非泛型面找烘焙的 ComboBox（测试程序集访问不到生成的 UI.{包} 类型）。
+            // 经非泛型面找烘焙的 ComboBox（测试程序集访问不到生成的 {包} 类型）。
             ButtonBase combo = null;
             foreach (var b in go.GetComponentsInChildren<ButtonBase>(true))
             {

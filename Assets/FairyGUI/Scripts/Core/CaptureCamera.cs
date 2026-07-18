@@ -127,9 +127,9 @@ namespace FairyGUI
         /// <param name="height"></param>
         /// <param name="stencilSupport"></param>
         /// <returns></returns>
-        public static RenderTexture CreateRenderTexture(int width, int height, bool stencilSupport)
+        public static UnityEngine.RenderTexture CreateRenderTexture(int width, int height, bool stencilSupport)
         {
-            RenderTexture texture = new RenderTexture(width, height, stencilSupport ? 24 : 0, RenderTextureFormat.ARGB32);
+            UnityEngine.RenderTexture texture = new UnityEngine.RenderTexture(width, height, stencilSupport ? 24 : 0, RenderTextureFormat.ARGB32);
             texture.antiAliasing = 1;
             texture.filterMode = FilterMode.Bilinear;
             texture.anisoLevel = 0;
@@ -146,7 +146,7 @@ namespace FairyGUI
         /// <param name="texture"></param>
         /// <param name="contentHeight"></param>
         /// <param name="offset"></param>
-        public static void Capture(DisplayObject target, RenderTexture texture, float contentHeight, Vector2 offset)
+        public static void Capture(DisplayObject target, UnityEngine.RenderTexture texture, float contentHeight, Vector2 offset)
         {
             CheckMain();
 
@@ -189,11 +189,11 @@ namespace FairyGUI
                 ((Container)target).SetChildrenLayer(CaptureCamera.layer);
             }
 
-            RenderTexture old = RenderTexture.active;
-            RenderTexture.active = texture;
+            UnityEngine.RenderTexture old = UnityEngine.RenderTexture.active;
+            UnityEngine.RenderTexture.active = texture;
             GL.Clear(true, true, Color.clear);
             camera.Render();
-            RenderTexture.active = old;
+            UnityEngine.RenderTexture.active = old;
 
             if (target.graphics != null)
                 target._SetLayerDirect(oldLayer);

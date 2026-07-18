@@ -12,7 +12,7 @@ public class RenderImage
     Transform _root;
     Transform _background;
     Transform _model;
-    RenderTexture _renderTexture;
+    UnityEngine.RenderTexture _renderTexture;
     int _width;
     int _height;
     bool _cacheTexture;
@@ -219,7 +219,7 @@ public class RenderImage
         if (_renderTexture != null)
             return;
 
-        _renderTexture = new RenderTexture(_width, _height, 24, RenderTextureFormat.ARGB32)
+        _renderTexture = new UnityEngine.RenderTexture(_width, _height, 24, RenderTextureFormat.ARGB32)
         {
             antiAliasing = 1,
             filterMode = FilterMode.Bilinear,
@@ -272,11 +272,11 @@ public class RenderImage
         SetLayer(this._root.gameObject, RENDER_LAYER);
 
         _camera.targetTexture = this._renderTexture;
-        RenderTexture old = RenderTexture.active;
-        RenderTexture.active = this._renderTexture;
+        UnityEngine.RenderTexture old = UnityEngine.RenderTexture.active;
+        UnityEngine.RenderTexture.active = this._renderTexture;
         GL.Clear(true, true, Color.clear);
         _camera.Render();
-        RenderTexture.active = old;
+        UnityEngine.RenderTexture.active = old;
 
         SetLayer(this._root.gameObject, HIDDEN_LAYER);
     }

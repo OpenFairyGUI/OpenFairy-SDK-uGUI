@@ -123,20 +123,20 @@ namespace OpenFairy.UGUI.TestSupport
             PlaceCamera();
             Canvas.ForceUpdateCanvases();
 
-            var rt = RenderTexture.GetTemporary(_size.x, _size.y, 24, RenderTextureFormat.ARGB32);
+            var rt = UnityEngine.RenderTexture.GetTemporary(_size.x, _size.y, 24, RenderTextureFormat.ARGB32);
             _camera.targetTexture = rt;
             _camera.Render();
 
-            var old = RenderTexture.active;
-            RenderTexture.active = rt;
+            var old = UnityEngine.RenderTexture.active;
+            UnityEngine.RenderTexture.active = rt;
             // ARGB32 与 GoldenImage.Load（LoadImage 解 PNG 的输出格式）一致，ImageAssert 要求两侧格式相同。
             var texture = new Texture2D(_size.x, _size.y, TextureFormat.ARGB32, false);
             texture.ReadPixels(new Rect(0, 0, _size.x, _size.y), 0, 0);
             texture.Apply();
-            RenderTexture.active = old;
+            UnityEngine.RenderTexture.active = old;
 
             _camera.targetTexture = null;
-            RenderTexture.ReleaseTemporary(rt);
+            UnityEngine.RenderTexture.ReleaseTemporary(rt);
             return texture;
         }
 

@@ -6,7 +6,7 @@ public class MailItem : GButton
     GTextField _timeText;
     Controller _readController;
     Controller _fetchController;
-    Transition _trans;
+    FairyGUI.Transition _trans;
 
     public override void ConstructFromXML(FairyGUI.Utils.XML cxml)
     {

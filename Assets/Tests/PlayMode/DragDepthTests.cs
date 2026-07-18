@@ -9,7 +9,7 @@ using UnityEngine.UI;
 namespace OpenFairy.UGUI.Tests
 {
     // Depth（sortingOrder 兄弟序）+ Draggable（保偏移拖动 + 取整）+ DragDrop（agent + DropTarget）的运行时机制回归。
-    // 直接驱动 Runtime（不经生成的 UI.{包} 类型），断言分析上精确的终点，故无需 FairyGUI 参照。
+    // 直接驱动 Runtime（不经生成的 {包} 类型），断言分析上精确的终点，故无需 FairyGUI 参照。
     public class DragDepthTests
     {
         private OpenFairyPageRenderer _rig;

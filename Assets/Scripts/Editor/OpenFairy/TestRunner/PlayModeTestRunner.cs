@@ -27,7 +27,7 @@ namespace OpenFairy.UGUI.Editor
             if (File.Exists(ResultPath))
                 File.Delete(ResultPath);
             var api = ScriptableObject.CreateInstance<TestRunnerApi>();
-            api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.PlayMode }));
+            api.Execute(new ExecutionSettings(new UnityEditor.TestTools.TestRunner.Api.Filter { testMode = TestMode.PlayMode }));
         }
 
         private sealed class Callbacks : ICallbacks

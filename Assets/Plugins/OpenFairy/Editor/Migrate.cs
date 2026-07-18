@@ -394,7 +394,7 @@ namespace OpenFairy.UGUI.Editor
             code.AppendLine("using UnityEngine;");
             code.AppendLine("using UnityEngine.UI;");
             code.AppendLine();
-            code.AppendLine($"namespace UI.{Identifier(component.Package)}");
+            code.AppendLine($"namespace {Identifier(component.Package)}");
             code.AppendLine("{");
             code.AppendLine($"    public partial class {name} : {baseType}");
             code.AppendLine("    {");
@@ -449,7 +449,9 @@ namespace OpenFairy.UGUI.Editor
             Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText => child.Input ? "OpenFairy.UGUI.TextInput" : "OpenFairy.UGUI.TextField",
             Schema.DisplayKind.Loader => "OpenFairy.UGUI.Loader",
             Schema.DisplayKind.Component when TryResolve(child.Source, packageId, out var dep) =>
-                $"UI.{Identifier(dep.Package)}.{Identifier(Path.GetFileNameWithoutExtension(dep.File))}",
+                dep.PackageId == packageId
+                    ? Identifier(Path.GetFileNameWithoutExtension(dep.File))
+                    : $"global::{Identifier(dep.Package)}.{Identifier(Path.GetFileNameWithoutExtension(dep.File))}",
             Schema.DisplayKind.Component => null,
             _ when IsMovieClip(child, packageId) => "OpenFairy.UGUI.MovieClip",
             _ => "UnityEngine.RectTransform",
@@ -470,7 +472,7 @@ namespace OpenFairy.UGUI.Editor
                 if (xml.Overflow == Schema.Overflow.Hidden)
                     root.AddComponent<RectMask2D>();
 
-                var componentType = FindType($"UI.{Identifier(component.Package)}.{Identifier(root.name)}");
+                var componentType = FindType($"{Identifier(component.Package)}.{Identifier(root.name)}");
                 var comp = (Component)root.AddComponent(componentType);
 
                 var controllers = new Dictionary<string, ControllerData>();

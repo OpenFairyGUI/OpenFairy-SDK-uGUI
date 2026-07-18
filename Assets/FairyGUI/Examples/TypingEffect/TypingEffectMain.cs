@@ -4,8 +4,8 @@ using FairyGUI;
 public class TypingEffectMain : MonoBehaviour
 {
     GComponent _mainView;
-    TypingEffect _te1;
-    TypingEffect _te2;
+    FairyGUI.TypingEffect _te1;
+    FairyGUI.TypingEffect _te2;
 
     void Awake()
     {
@@ -17,11 +17,11 @@ public class TypingEffectMain : MonoBehaviour
     {
         _mainView = this.GetComponent<UIPanel>().ui;
 
-        _te1 = new TypingEffect(_mainView.GetChild("n2").asTextField);
+        _te1 = new FairyGUI.TypingEffect(_mainView.GetChild("n2").asTextField);
         _te1.Start();
         Timers.inst.StartCoroutine(_te1.Print(0.050f));
 
-        _te2 = new TypingEffect(_mainView.GetChild("n3").asTextField);
+        _te2 = new FairyGUI.TypingEffect(_mainView.GetChild("n3").asTextField);
         _te2.Start();
         Timers.inst.Add(0.050f, 0, PrintText);
     }

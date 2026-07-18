@@ -31,26 +31,26 @@ namespace OpenFairy.UGUI.Tests
 
         public static readonly MainEntry[] Entries =
         {
-            new("Button", "m_btn_Button", "UI.Basics.Demo_Button"),
-            new("Image", "m_btn_Image", "UI.Basics.Demo_Image"),
-            new("Graph", "m_btn_Graph", "UI.Basics.Demo_Graph"),
-            new("MovieClip", "m_btn_MovieClip", "UI.Basics.Demo_MovieClip"),
-            new("Depth", "m_btn_Depth", "UI.Basics.Demo_Depth"),
-            new("Loader", "m_btn_Loader", "UI.Basics.Demo_Loader"),
-            new("List", "m_btn_List", "UI.Basics.Demo_List"),
-            new("ProgressBar", "m_btn_ProgressBar", "UI.Basics.Demo_ProgressBar"),
-            new("Slider", "m_btn_Slider", "UI.Basics.Demo_Slider"),
-            new("ComboBox", "m_btn_ComboBox", "UI.Basics.Demo_ComboBox"),
-            new("Clip&Scroll", "m_btn_Clip_Scroll", "UI.Basics.Demo_Clip_Scroll"),
-            new("Controller", "m_btn_Controller", "UI.Basics.Demo_Controller"),
-            new("Relation", "m_btn_Relation", "UI.Basics.Demo_Relation"),
-            new("Label", "m_btn_Label", "UI.Basics.Demo_Label"),
-            new("Popup", "m_btn_Popup", "UI.Basics.Demo_Popup"),
-            new("Window", "m_btn_Window", "UI.Basics.Demo_Window"),
-            new("Drag&Drop", "m_btn_Drag_Drop", "UI.Basics.Demo_Drag_Drop"),
-            new("Component", "m_btn_Component", "UI.Basics.Demo_Component"),
-            new("Grid", "m_btn_Grid", "UI.Basics.Demo_Grid"),
-            new("Text", "m_btn_Text", "UI.Basics.Demo_Text"),
+            new("Button", "m_btn_Button", "Basics.Demo_Button"),
+            new("Image", "m_btn_Image", "Basics.Demo_Image"),
+            new("Graph", "m_btn_Graph", "Basics.Demo_Graph"),
+            new("MovieClip", "m_btn_MovieClip", "Basics.Demo_MovieClip"),
+            new("Depth", "m_btn_Depth", "Basics.Demo_Depth"),
+            new("Loader", "m_btn_Loader", "Basics.Demo_Loader"),
+            new("List", "m_btn_List", "Basics.Demo_List"),
+            new("ProgressBar", "m_btn_ProgressBar", "Basics.Demo_ProgressBar"),
+            new("Slider", "m_btn_Slider", "Basics.Demo_Slider"),
+            new("ComboBox", "m_btn_ComboBox", "Basics.Demo_ComboBox"),
+            new("Clip&Scroll", "m_btn_Clip_Scroll", "Basics.Demo_Clip_Scroll"),
+            new("Controller", "m_btn_Controller", "Basics.Demo_Controller"),
+            new("Relation", "m_btn_Relation", "Basics.Demo_Relation"),
+            new("Label", "m_btn_Label", "Basics.Demo_Label"),
+            new("Popup", "m_btn_Popup", "Basics.Demo_Popup"),
+            new("Window", "m_btn_Window", "Basics.Demo_Window"),
+            new("Drag&Drop", "m_btn_Drag_Drop", "Basics.Demo_Drag_Drop"),
+            new("Component", "m_btn_Component", "Basics.Demo_Component"),
+            new("Grid", "m_btn_Grid", "Basics.Demo_Grid"),
+            new("Text", "m_btn_Text", "Basics.Demo_Text"),
         };
 
         private OpenFairyPageRenderer _rig;
@@ -86,7 +86,7 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Main_starts_on_home_with_all_entries()
         {
-            var main = Comp("UI.Basics.Main");
+            var main = Comp("Basics.Main");
             Assert.IsNotNull(main, "Main component should exist");
             Assert.IsTrue(Rt("btns").gameObject.activeInHierarchy, "Main button group should be visible");
             Assert.IsFalse(Rt("container").gameObject.activeSelf, "Demo container should start hidden");
@@ -100,7 +100,7 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Real_pointer_clicks_open_demo_and_back_to_home([ValueSource(nameof(Entries))] MainEntry entry)
         {
-            var main = Comp("UI.Basics.Main");
+            var main = Comp("Basics.Main");
             var homeX = Rt("btns").anchoredPosition.x;
             yield return Click(Field(main, entry.ButtonField));
             Assert.IsNotNull(Comp(entry.ComponentName), $"{entry.Name} should instantiate {entry.ComponentName}");

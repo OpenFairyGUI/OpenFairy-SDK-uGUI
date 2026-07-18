@@ -78,7 +78,7 @@ namespace OpenFairy.UGUI.Tests
 
         private IEnumerator Enter(string buttonField)
         {
-            ClickWorld((RectTransform)((UnityEngine.Component)Field(Comp("UI.Basics.Main"), buttonField)).transform);
+            ClickWorld((RectTransform)((UnityEngine.Component)Field(Comp("Basics.Main"), buttonField)).transform);
             // 进场动效 + 胶水接线要几帧
             for (var i = 0; i < 50; i++)
                 yield return null;
@@ -88,7 +88,7 @@ namespace OpenFairy.UGUI.Tests
         public IEnumerator MovieClip_demo_actually_animates()
         {
             yield return Enter("m_btn_MovieClip");
-            var demo = (UnityEngine.Component)Comp("UI.Basics.Demo_MovieClip");
+            var demo = (UnityEngine.Component)Comp("Basics.Demo_MovieClip");
             Assert.IsNotNull(demo, "MovieClip demo 应实例化");
             var mc = demo.GetComponentInChildren<OpenFairy.UGUI.MovieClip>(true);
             Assert.IsNotNull(mc, "MovieClip demo 应含 MovieClip 组件");
@@ -109,7 +109,7 @@ namespace OpenFairy.UGUI.Tests
         public IEnumerator Window_opens_and_closes_via_real_click()
         {
             yield return Enter("m_btn_Window");
-            var demo = Comp("UI.Basics.Demo_Window");
+            var demo = Comp("Basics.Demo_Window");
             Assert.IsNotNull(demo, "Window demo 应实例化");
 
             var openBtn = (RectTransform)((UnityEngine.Component)Field(demo, "m_n0")).transform;
@@ -133,7 +133,7 @@ namespace OpenFairy.UGUI.Tests
         public IEnumerator Popup_opens_via_real_click_and_item_closes_it()
         {
             yield return Enter("m_btn_Popup");
-            var demo = Comp("UI.Basics.Demo_Popup");
+            var demo = Comp("Basics.Demo_Popup");
             Assert.IsNotNull(demo, "Popup demo 应实例化");
 
             var openBtn = (RectTransform)((UnityEngine.Component)Field(demo, "m_n0")).transform;
@@ -156,7 +156,7 @@ namespace OpenFairy.UGUI.Tests
         public IEnumerator TextInput_field_is_editable_and_readable()
         {
             yield return Enter("m_btn_Text");
-            var demo = Comp("UI.Basics.Demo_Text");
+            var demo = Comp("Basics.Demo_Text");
             Assert.IsNotNull(demo, "Text demo 应实例化");
             var input = (OpenFairy.UGUI.TextInput)Field(demo, "m_n22");
             Assert.IsNotNull(input, "n22 应是输入框");
@@ -194,7 +194,7 @@ namespace OpenFairy.UGUI.Tests
         public IEnumerator ComboBox_opens_dropdown_via_real_click()
         {
             yield return Enter("m_btn_ComboBox");
-            var demo = Comp("UI.Basics.Demo_ComboBox");
+            var demo = Comp("Basics.Demo_ComboBox");
             Assert.IsNotNull(demo, "ComboBox demo 应实例化");
             var combo = (RectTransform)((UnityEngine.Component)Field(demo, "m_n1")).transform;
             Assert.IsTrue(ClickWorld(combo), "ComboBox 应被真实射线命中（整块可点，不被背景穿透）");
@@ -207,7 +207,7 @@ namespace OpenFairy.UGUI.Tests
         public IEnumerator ComboBox_selecting_dropdown_item_updates_title_and_closes()
         {
             yield return Enter("m_btn_ComboBox");
-            var demo = Comp("UI.Basics.Demo_ComboBox");
+            var demo = Comp("Basics.Demo_ComboBox");
             var comboComp = (UnityEngine.Component)Field(demo, "m_n1");
             Assert.IsTrue(ClickWorld((RectTransform)comboComp.transform), "ComboBox 应被命中");
             for (var i = 0; i < 5; i++)
@@ -238,7 +238,7 @@ namespace OpenFairy.UGUI.Tests
         public IEnumerator Every_combobox_on_the_page_opens_a_dropdown()
         {
             yield return Enter("m_btn_ComboBox");
-            var demo = (UnityEngine.Component)Comp("UI.Basics.Demo_ComboBox");
+            var demo = (UnityEngine.Component)Comp("Basics.Demo_ComboBox");
             Assert.IsNotNull(demo, "ComboBox demo 应实例化");
             // 逐个真实点击页内每个 combobox（含 Dropdown 变体 n4/n5），断言各自都能弹下拉——而不是抽查一个 n1 就断言"ComboBox 可用"。
             var combos = new List<OpenFairy.UGUI.ButtonBase>();

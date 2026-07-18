@@ -467,9 +467,9 @@ namespace FairyGUI
                         Resources.UnloadAsset(_alphaTexture);
                     break;
                 case DestroyMethod.ReleaseTemp:
-                    RenderTexture.ReleaseTemporary((RenderTexture)_nativeTexture);
-                    if (_alphaTexture is RenderTexture)
-                        RenderTexture.ReleaseTemporary((RenderTexture)_alphaTexture);
+                    UnityEngine.RenderTexture.ReleaseTemporary((UnityEngine.RenderTexture)_nativeTexture);
+                    if (_alphaTexture is UnityEngine.RenderTexture)
+                        UnityEngine.RenderTexture.ReleaseTemporary((UnityEngine.RenderTexture)_alphaTexture);
                     break;
                 case DestroyMethod.Custom:
                     if (CustomDestroyMethod == null)

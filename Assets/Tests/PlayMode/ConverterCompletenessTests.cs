@@ -135,11 +135,46 @@ namespace OpenFairy.UGUI.Tests
             foreach (var path in Directory.GetFiles(scriptRoot, "*.cs", SearchOption.AllDirectories))
             {
                 var code = File.ReadAllText(path);
-                if (code.Contains("OpenFairy.UGUI.Text ") || code.Contains("OpenFairy.UGUI.Shape ") || code.Contains("OpenFairy.UGUI.InputText ")
-                    || code.Contains("public Image ") || code.Contains("public RectTransform "))
+                var ambiguousPackageType = false;
+                var redundantSamePackageType = false;
+                var currentNamespace = code.Split('\n').AsValueEnumerable()
+                    .First(line => line.StartsWith("namespace "))["namespace ".Length..].Trim();
+                foreach (var line in code.Split('\n'))
+                {
+                    var field = line.Trim();
+                    if (field.StartsWith($"public global::{currentNamespace}."))
+                    {
+                        redundantSamePackageType = true;
+                        break;
+                    }
+                    if (field.StartsWith("public ") && field.EndsWith(";") && field.Contains(".")
+                        && !field.StartsWith("public global::") && !field.StartsWith("public OpenFairy.UGUI.") && !field.StartsWith("public UnityEngine."))
+                    {
+                        ambiguousPackageType = true;
+                        break;
+                    }
+                }
+                if (code.Contains("namespace UI.") || code.Contains("OpenFairy.UGUI.Text ") || code.Contains("OpenFairy.UGUI.Shape ") || code.Contains("OpenFairy.UGUI.InputText ")
+                    || code.Contains("public Image ") || code.Contains("public RectTransform ") || ambiguousPackageType || redundantSamePackageType)
                     failures.Add(Path.GetRelativePath(scriptRoot, path));
             }
-            Assert.IsEmpty(failures, "生成脚本仍引用旧类型或含歧义短名：\n" + string.Join("\n", failures));
+            Assert.IsEmpty(failures, "Generated scripts contain old, ambiguous, or redundantly qualified same-package types:\n" + string.Join("\n", failures));
+#endif
+        }
+
+        [Test]
+        public void Every_generated_prefab_uses_current_component_namespaces()
+        {
+#if UNITY_EDITOR
+            var prefabRoot = Path.Combine(Directory.GetCurrentDirectory(), "Assets/UIProject/assets");
+            var failures = new List<string>();
+            foreach (var path in Directory.GetFiles(prefabRoot, "*.prefab", SearchOption.AllDirectories))
+            {
+                var yaml = File.ReadAllText(path);
+                if (yaml.Contains("Assembly-CSharp::UI.") || yaml.Contains("[[UI."))
+                    failures.Add(Path.GetRelativePath(prefabRoot, path));
+            }
+            Assert.IsEmpty(failures, "Generated prefabs still contain the old UI package namespace:\n" + string.Join("\n", failures));
 #endif
         }
     }

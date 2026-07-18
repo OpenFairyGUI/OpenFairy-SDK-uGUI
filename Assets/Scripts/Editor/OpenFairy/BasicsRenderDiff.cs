@@ -454,10 +454,10 @@ namespace OpenFairy.UGUI.Editor
 
         private static Texture2D CaptureFairy(Page page, Vector2Int size, Vector2Int res)
         {
-            RenderTexture rt = null;
+            UnityEngine.RenderTexture rt = null;
             try
             {
-                rt = RenderTexture.GetTemporary(res.x, res.y, 24, RenderTextureFormat.ARGB32);
+                rt = UnityEngine.RenderTexture.GetTemporary(res.x, res.y, 24, RenderTextureFormat.ARGB32);
                 _fairyCamera.targetTexture = rt;
                 _fairyCamera.Render();
                 return Read(rt);
@@ -472,7 +472,7 @@ namespace OpenFairy.UGUI.Editor
                 if (_fairyCamera != null)
                     _fairyCamera.targetTexture = null;
                 if (rt != null)
-                    RenderTexture.ReleaseTemporary(rt);
+                    UnityEngine.RenderTexture.ReleaseTemporary(rt);
             }
         }
 
@@ -481,13 +481,13 @@ namespace OpenFairy.UGUI.Editor
             if (_openFairyInstance == null)
                 return Placeholder(res, new Color32(235, 235, 235, 255));
 
-            RenderTexture rt = null;
+            UnityEngine.RenderTexture rt = null;
             try
             {
                 _openFairyCamera.orthographicSize = size.y * 0.5f;
                 _openFairyCamera.transform.position = new Vector3(size.x * 0.5f, -size.y * 0.5f, -10);
                 Canvas.ForceUpdateCanvases();
-                rt = RenderTexture.GetTemporary(res.x, res.y, 24, RenderTextureFormat.ARGB32);
+                rt = UnityEngine.RenderTexture.GetTemporary(res.x, res.y, 24, RenderTextureFormat.ARGB32);
                 _openFairyCamera.targetTexture = rt;
                 _openFairyCamera.Render();
                 return Read(rt);
@@ -495,7 +495,7 @@ namespace OpenFairy.UGUI.Editor
             finally
             {
                 if (rt != null)
-                    RenderTexture.ReleaseTemporary(rt);
+                    UnityEngine.RenderTexture.ReleaseTemporary(rt);
                 _openFairyCamera.targetTexture = null;
             }
         }
@@ -538,14 +538,14 @@ namespace OpenFairy.UGUI.Editor
             return output;
         }
 
-        private static Texture2D Read(RenderTexture rt)
+        private static Texture2D Read(UnityEngine.RenderTexture rt)
         {
-            var old = RenderTexture.active;
-            RenderTexture.active = rt;
+            var old = UnityEngine.RenderTexture.active;
+            UnityEngine.RenderTexture.active = rt;
             var texture = new Texture2D(rt.width, rt.height, TextureFormat.RGBA32, false);
             texture.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
             texture.Apply();
-            RenderTexture.active = old;
+            UnityEngine.RenderTexture.active = old;
             return texture;
         }
 
