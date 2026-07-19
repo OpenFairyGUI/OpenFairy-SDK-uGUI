@@ -1142,6 +1142,15 @@ namespace OpenFairy.UGUI.Editor
             var rt = (RectTransform)go.transform;
             if (element.Rotation is { } rotation)
                 rt.localEulerAngles = new Vector3(0, 0, -rotation);
+            if (element.BlendMode != Schema.BlendMode.Normal && element.Kind is Schema.DisplayKind.Image
+                    or Schema.DisplayKind.MovieClip or Schema.DisplayKind.Graph or Schema.DisplayKind.Loader
+                    or Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText)
+                foreach (var graphic in go.GetComponentsInChildren<Graphic>(true))
+                {
+                    var blend = graphic.gameObject.AddComponent<BlendModeEffect>();
+                    blend.shader = BlendShader;
+                    blend.blendMode = (OpenFairy.UGUI.BlendMode)element.BlendMode;
+                }
             // authored alpha 烘进 CanvasGroup（FairyGUI object.alpha 语义）：GearLook/Transition 的 alpha 也走同一通道
             // 且是绝对值——若乘进各子 Graphic 颜色，会与 gear/动效通道相乘（0.5 页值显示成 0.25）。
             if (element.Alpha != null || !element.Touchable)
@@ -1994,6 +2003,7 @@ namespace OpenFairy.UGUI.Editor
         // 编辑器期查找、序列化进 prefab；运行时组件不做 Shader.Find。
         private static Shader GrayscaleShader => Shader.Find("OpenFairy/UI Grayscale");
         private static Shader ColorMatrixShader => Shader.Find("OpenFairy/UI ColorMatrix");
+        private static Shader BlendShader => Shader.Find("OpenFairy/UI Blend");
 
         private static Color ParseColor(string value)
         {

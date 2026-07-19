@@ -370,6 +370,36 @@ namespace OpenFairy.UGUI.Editor.Schema
         Ellipsis,
     }
 
+    public enum BlendMode
+    {
+        [XmlEnum("normal")]
+        Normal,
+        [XmlEnum("none")]
+        None,
+        [XmlEnum("add")]
+        Add,
+        [XmlEnum("multiply")]
+        Multiply,
+        [XmlEnum("screen")]
+        Screen,
+        [XmlEnum("erase")]
+        Erase,
+        [XmlEnum("mask")]
+        Mask,
+        [XmlEnum("below")]
+        Below,
+        [XmlEnum("off")]
+        Off,
+        [XmlEnum("one_OneMinusSrcAlpha")]
+        OneOneMinusSrcAlpha,
+        [XmlEnum("custom1")]
+        Custom1,
+        [XmlEnum("custom2")]
+        Custom2,
+        [XmlEnum("custom3")]
+        Custom3,
+    }
+
     public enum GearKind
     {
         [XmlEnum("gearDisplay")]
@@ -490,6 +520,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("grayed")] public bool Grayed;
         [XmlAttribute("rotation")] public float? Rotation;
         [XmlAttribute("alpha")] public float? Alpha;
+        [XmlAttribute("blend")] public BlendMode BlendMode;
         [XmlAttribute("type")] public ShapeType Type;
         [XmlAttribute("color")] public string Color;
         [XmlAttribute("fillMethod")] public ImageFillMethod FillMethod;

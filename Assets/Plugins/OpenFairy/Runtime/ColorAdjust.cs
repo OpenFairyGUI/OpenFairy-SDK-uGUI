@@ -20,6 +20,7 @@ namespace OpenFairy.UGUI
         private static readonly int ColorMatrixId = Shader.PropertyToID("_ColorMatrix");
         private static readonly int ColorOffsetId = Shader.PropertyToID("_ColorOffset");
 
+        private BlendModeEffect _blend;
         private Material _material;
         private readonly float[] _matrix = new float[20];
         private readonly float[] _tmp = new float[20];
@@ -36,6 +37,7 @@ namespace OpenFairy.UGUI
         protected override void OnEnable()
         {
             base.OnEnable();
+            _blend = GetComponent<BlendModeEffect>();
             Apply();
         }
 
@@ -70,6 +72,8 @@ namespace OpenFairy.UGUI
             matrix.SetRow(3, new Vector4(_matrix[15], _matrix[16], _matrix[17], _matrix[18]));
             _material.SetMatrix(ColorMatrixId, matrix);
             _material.SetVector(ColorOffsetId, new Vector4(_matrix[4], _matrix[9], _matrix[14], _matrix[19]));
+            if (_blend != null)
+                _blend.RefreshMaterial();
         }
 
         private void AdjustBrightness(float value)

@@ -83,10 +83,13 @@
 - `ListSource`、ComboBox items/values/dropdown、Window1 列表已通过全量 Migrate 重烘焙；Example Grid 已改用通用 `List.Fill`，不再自挂 SDK 级滚动能力。动态 `List.Fill` 现复用 `ListSource` item 池，`PopupMenu` 现复用菜单项池。
 - 2026-07-18 codegen 生成命名空间由 `UI.{包名}` 简化为 `{包名}`；命名空间声明、跨包组件字段类型和 Migrate 的 `FindType` 使用同一套 `Identifier` 结果；同包组件字段使用短类型名，跨包字段使用 `global::{包名}.{组件名}` 避免目标包名被同名组件类遮蔽，并全限定被全局包命名空间遮蔽的 Unity/FairyGUI 同名类型；现生成脚本及 prefab 序列化类型名已同步迁移；Unity 6.4 自带 Roslyn 已验证 `Assembly-CSharp`、Editor、TestSupport、PlayMode tests 与 EditorTestRunner 全部编译通过。
 - 2026-07-19 `ButtonBase.icon` 与 `Label.icon` 一样支持可选的 icon Loader；按钮实例 XML 即使设置了 `icon`，模板没有名为 `icon` 的 Loader，Migrate 也会忽略该图标而不会空引用崩溃，并由 `NewFeatureTests` 覆盖该结构。
+- 2026-07-19 支持 FairyGUI `blend` 属性及完整 `BlendMode` 因子表：Normal、None、Add、Multiply、Screen、Erase、Mask、Below、Off、One_OneMinusSrcAlpha、Custom1~3；Migrate 为图片、movieclip、图形、Loader 和文本的各 Graphic 烘焙 `BlendModeEffect` 与 shader 引用，Multiply/Screen 按 FairyGUI 预乘 alpha，图片类 alpha 通道固定 `One/One`、文本类随当前混合因子，并可与现有灰度/ColorFilter 材质组合。
+- 2026-07-19 BlendMode 改动已用 Unity 6.4 自带 Roslyn 响应文件编译 Runtime、Editor 与 PlayMode tests 三个程序集；当前会话未连接 Unity MCP，尚未执行 Migrate、Shader 导入和 PlayMode 实跑，计入下次完整验证。
 - Basics demo 的工程胶水通过 `[MigratePostProcess]` 自动配置，不再作为菜单入口暴露。
 
 ## 已知边界
 
+- 组件级 BlendMode 在 FairyGUI 中依赖 PaintMode 先把整个组件渲染到 RenderTexture；OpenFairy 当前只实现图片、movieclip、图形、Loader、文本等 Graphic 级混合，不对组件子树做逐子图近似，避免与 FairyGUI 的整体合成语义不一致。
 - Popup/ComboBox 外点关闭使用透明 blocker，表现为模态；这是为了避开新 Input System 下旧 `UnityEngine.Input` 的异常。
 - `ScrollPane` 已支持拖动、滚轮、滚动条 grip 拖动、轨道点按翻页、惯性回弹；仍无虚拟化、分页吸附、下拉刷新。
 - ComboBox 下拉已按 `visibleItemCount` 裁剪并滚动（项数超出时 `ScrollPane.Attach`）；无 button 控制器的 Dropdown 变体同样接下拉。
@@ -113,4 +116,4 @@
 - 专项测试：`DragDepthTests`、`TextLinkTests`、`WindowPopupTests`、`MainNavigationTests`、`NewFeatureTests`；其中 `NewFeatureTests` 覆盖 ComboBox 程序化 `text/value` 设置与 `List.Fill` 动态重填后的 ScrollPane/ListSelection 刷新。
 - 通用工程交互（无 demo 胶水）：`BakedInteractionTests` 直接实例化转换 prefab，真射线驱动，覆盖 tab 换页、单选组互斥、`overflow=scroll` 自挂滚动、输入框结构、Slider 连续拖动。
 
-上次完整 PlayMode 测试结果为 `134/134` 通过；2026-07-19 新增的无 icon Loader 按钮回归用例计入下一次完整测试。
+上次完整 PlayMode 测试结果为 `134/134` 通过；2026-07-19 新增的无 icon Loader 按钮及 BlendMode 回归用例计入下一次完整测试。

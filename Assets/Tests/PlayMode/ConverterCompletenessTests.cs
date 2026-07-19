@@ -102,6 +102,79 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [Test]
+        public void Every_blend_mode_deserializes_from_fairygui_xml()
+        {
+#if UNITY_EDITOR
+            var names = new[]
+            {
+                "normal", "none", "add", "multiply", "screen", "erase", "mask", "below", "off",
+                "one_OneMinusSrcAlpha", "custom1", "custom2", "custom3",
+            };
+            var path = Path.Combine(Directory.GetCurrentDirectory(), "Temp", "OpenFairy.UGUIBlendModeTest.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            var fairyXml = AppDomain.CurrentDomain.GetAssemblies().AsValueEnumerable()
+                .Select(assembly => assembly.GetType("OpenFairy.UGUI.Editor.FairyXml"))
+                .FirstOrDefault(type => type != null);
+            Assert.IsNotNull(fairyXml, "应能找到编辑器 XML 解析器");
+            var load = fairyXml.GetMethod("LoadComponent");
+
+            for (var i = 0; i < names.Length; i++)
+            {
+                File.WriteAllText(path, $@"
+<component size=""10,10"">
+  <displayList>
+    <image id=""n0"" name=""n0"" size=""1,1"" blend=""{names[i]}""/>
+  </displayList>
+</component>");
+                var component = load.Invoke(null, new object[] { path });
+                var displays = (Array)component.GetType().GetField("DisplayList").GetValue(component);
+                var parsed = displays.GetValue(0).GetType().GetField("BlendMode").GetValue(displays.GetValue(0));
+                Assert.AreEqual(i, System.Convert.ToInt32(parsed), names[i]);
+            }
+            File.Delete(path);
+#endif
+        }
+
+        [Test]
+        public void Every_graphic_display_kind_bakes_blend_mode_on_all_graphics()
+        {
+#if UNITY_EDITOR
+            var tags = new[] { "image", "movieclip", "graph", "loader", "text", "richtext", "inputtext" };
+            var path = Path.Combine(Directory.GetCurrentDirectory(), "Temp", "OpenFairy.UGUIBlendKindTest.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllText(path, new XElement("component", new XAttribute("size", "10,10"),
+                new XElement("displayList", tags.AsValueEnumerable().Select((tag, i) => new XElement(tag,
+                    new XAttribute("id", $"n{i}"), new XAttribute("name", $"n{i}"),
+                    new XAttribute("size", "1,1"), new XAttribute("blend", "add"))).ToArray())).ToString());
+            var editorAssembly = AppDomain.CurrentDomain.GetAssemblies().AsValueEnumerable();
+            var fairyXml = editorAssembly.Select(assembly => assembly.GetType("OpenFairy.UGUI.Editor.FairyXml"))
+                .FirstOrDefault(type => type != null);
+            var migrate = editorAssembly.Select(assembly => assembly.GetType("OpenFairy.UGUI.Editor.Migrate"))
+                .FirstOrDefault(type => type != null);
+            Assert.IsNotNull(fairyXml, "应能找到编辑器 XML 解析器");
+            Assert.IsNotNull(migrate, "应能找到 Migrate");
+            var component = fairyXml.GetMethod("LoadComponent").Invoke(null, new object[] { path });
+            var displays = (Array)component.GetType().GetField("DisplayList").GetValue(component);
+            var apply = migrate.GetMethod("ApplyElement", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+            for (var i = 0; i < displays.Length; i++)
+            {
+                var go = new GameObject(tags[i], typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
+                var child = new GameObject("child", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
+                child.transform.SetParent(go.transform, false);
+
+                apply.Invoke(null, new[] { go, displays.GetValue(i) });
+
+                var effects = go.GetComponentsInChildren<BlendModeEffect>(true);
+                Assert.AreEqual(2, effects.Length, tags[i]);
+                Assert.IsTrue(effects.AsValueEnumerable().All(effect => effect.blendMode == BlendMode.Add && effect.shader != null), tags[i]);
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+            File.Delete(path);
+#endif
+        }
+
+        [Test]
         public void Every_component_xml_deserializes_with_cached_schema_metadata()
         {
 #if UNITY_EDITOR

@@ -1,4 +1,4 @@
-Shader "OpenFairy/UI ColorMatrix"
+Shader "OpenFairy/UI Blend"
 {
     Properties
     {
@@ -15,6 +15,7 @@ Shader "OpenFairy/UI ColorMatrix"
         _BlendSrcFactorAlpha ("Blend SrcFactor Alpha", Float) = 5
         _BlendDstFactorAlpha ("Blend DstFactor Alpha", Float) = 10
         _ColorOption ("Premultiply Alpha", Float) = 0
+        [Toggle(UNITY_UI_ALPHACLIP)] _UseUIAlphaClip ("Use Alpha Clip", Float) = 0
     }
 
     SubShader
@@ -49,15 +50,15 @@ Shader "OpenFairy/UI ColorMatrix"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile_local _ UNITY_UI_ALPHACLIP
             #include "UnityCG.cginc"
             #include "UnityUI.cginc"
 
             sampler2D _MainTex;
             fixed4 _Color;
+            fixed4 _TextureSampleAdd;
             float4 _ClipRect;
             float _ColorOption;
-            float4x4 _ColorMatrix;
-            float4 _ColorOffset;
 
             struct appdata_t
             {
@@ -92,19 +93,14 @@ Shader "OpenFairy/UI ColorMatrix"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                fixed4 col = tex2D(_MainTex, i.texcoord) * i.color;
-                col.a *= UnityGet2DClipping(i.worldPosition.xy, _ClipRect);
+                fixed4 color = (tex2D(_MainTex, i.texcoord) + _TextureSampleAdd) * i.color;
+                color.a *= UnityGet2DClipping(i.worldPosition.xy, _ClipRect);
                 if (_ColorOption != 0)
-                {
-                    col.rgb *= col.a;
-                    return col;
-                }
-                fixed4 result;
-                result.r = dot(col, _ColorMatrix[0]) + _ColorOffset.x;
-                result.g = dot(col, _ColorMatrix[1]) + _ColorOffset.y;
-                result.b = dot(col, _ColorMatrix[2]) + _ColorOffset.z;
-                result.a = dot(col, _ColorMatrix[3]) + _ColorOffset.w;
-                return result;
+                    color.rgb *= color.a;
+#ifdef UNITY_UI_ALPHACLIP
+                clip(color.a - 0.001);
+#endif
+                return color;
             }
             ENDCG
         }

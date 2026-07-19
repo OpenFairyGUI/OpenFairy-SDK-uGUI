@@ -7,6 +7,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 using ZLinq;
+using NativeBlendMode = UnityEngine.Rendering.BlendMode;
 
 namespace OpenFairy.UGUI.Tests
 {
@@ -129,6 +130,74 @@ namespace OpenFairy.UGUI.Tests
             Object.DestroyImmediate(sprite);
             Object.DestroyImmediate(texture);
             Object.DestroyImmediate(go);
+        }
+
+        [TestCase(BlendMode.Normal, NativeBlendMode.SrcAlpha, NativeBlendMode.OneMinusSrcAlpha, false)]
+        [TestCase(BlendMode.None, NativeBlendMode.One, NativeBlendMode.One, false)]
+        [TestCase(BlendMode.Add, NativeBlendMode.SrcAlpha, NativeBlendMode.One, false)]
+        [TestCase(BlendMode.Multiply, NativeBlendMode.DstColor, NativeBlendMode.OneMinusSrcAlpha, true)]
+        [TestCase(BlendMode.Screen, NativeBlendMode.One, NativeBlendMode.OneMinusSrcColor, true)]
+        [TestCase(BlendMode.Erase, NativeBlendMode.Zero, NativeBlendMode.OneMinusSrcAlpha, false)]
+        [TestCase(BlendMode.Mask, NativeBlendMode.Zero, NativeBlendMode.SrcAlpha, false)]
+        [TestCase(BlendMode.Below, NativeBlendMode.OneMinusDstAlpha, NativeBlendMode.DstAlpha, false)]
+        [TestCase(BlendMode.Off, NativeBlendMode.One, NativeBlendMode.Zero, false)]
+        [TestCase(BlendMode.One_OneMinusSrcAlpha, NativeBlendMode.One, NativeBlendMode.OneMinusSrcAlpha, false)]
+        [TestCase(BlendMode.Custom1, NativeBlendMode.SrcAlpha, NativeBlendMode.OneMinusSrcAlpha, false)]
+        [TestCase(BlendMode.Custom2, NativeBlendMode.SrcAlpha, NativeBlendMode.OneMinusSrcAlpha, false)]
+        [TestCase(BlendMode.Custom3, NativeBlendMode.SrcAlpha, NativeBlendMode.OneMinusSrcAlpha, false)]
+        public void Every_blend_mode_uses_fairygui_factors(BlendMode mode, NativeBlendMode src, NativeBlendMode dst, bool premultiplyAlpha)
+        {
+            var shader = Shader.Find("OpenFairy/UI Blend");
+            Assert.IsNotNull(shader);
+            var material = new Material(shader);
+
+            BlendModeEffect.Apply(material, mode);
+
+            Assert.AreEqual((float)src, material.GetFloat("_BlendSrcFactor"), mode.ToString());
+            Assert.AreEqual((float)dst, material.GetFloat("_BlendDstFactor"), mode.ToString());
+            Assert.AreEqual((float)NativeBlendMode.One, material.GetFloat("_BlendSrcFactorAlpha"), mode.ToString());
+            Assert.AreEqual((float)NativeBlendMode.One, material.GetFloat("_BlendDstFactorAlpha"), mode.ToString());
+            Assert.AreEqual(premultiplyAlpha ? 1f : 0f, material.GetFloat("_ColorOption"), mode.ToString());
+            Object.DestroyImmediate(material);
+        }
+
+        [Test]
+        public void Text_blend_uses_fairygui_factors_for_alpha_channel()
+        {
+            var go = new GameObject("blend", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Text));
+            var blend = go.AddComponent<BlendModeEffect>();
+            blend.shader = Shader.Find("OpenFairy/UI Blend");
+            blend.blendMode = BlendMode.Erase;
+            var baseMaterial = new Material(Shader.Find("UI/Default"));
+
+            var material = blend.GetModifiedMaterial(baseMaterial);
+
+            Assert.AreEqual((float)NativeBlendMode.Zero, material.GetFloat("_BlendSrcFactorAlpha"));
+            Assert.AreEqual((float)NativeBlendMode.OneMinusSrcAlpha, material.GetFloat("_BlendDstFactorAlpha"));
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(baseMaterial);
+        }
+
+        [TestCase("OpenFairy/UI Grayscale")]
+        [TestCase("OpenFairy/UI ColorMatrix")]
+        public void Blend_mode_composes_with_existing_effect_shader(string shaderName)
+        {
+            var go = new GameObject("blend", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
+            var blend = go.AddComponent<BlendModeEffect>();
+            blend.shader = Shader.Find("OpenFairy/UI Blend");
+            blend.blendMode = BlendMode.Multiply;
+            var baseMaterial = new Material(Shader.Find(shaderName));
+
+            var material = blend.GetModifiedMaterial(baseMaterial);
+
+            Assert.AreEqual(baseMaterial.shader, material.shader);
+            Assert.AreEqual((float)NativeBlendMode.DstColor, material.GetFloat("_BlendSrcFactor"));
+            Assert.AreEqual((float)NativeBlendMode.OneMinusSrcAlpha, material.GetFloat("_BlendDstFactor"));
+            Assert.AreEqual((float)NativeBlendMode.One, material.GetFloat("_BlendSrcFactorAlpha"));
+            Assert.AreEqual((float)NativeBlendMode.One, material.GetFloat("_BlendDstFactorAlpha"));
+            Assert.AreEqual(1f, material.GetFloat("_ColorOption"));
+            Object.DestroyImmediate(go);
+            Object.DestroyImmediate(baseMaterial);
         }
 
         [UnityTest]

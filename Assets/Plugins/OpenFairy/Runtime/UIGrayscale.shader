@@ -10,6 +10,11 @@ Shader "OpenFairy/UI Grayscale"
         _StencilWriteMask ("Stencil Write Mask", Float) = 255
         _StencilReadMask ("Stencil Read Mask", Float) = 255
         _ColorMask ("Color Mask", Float) = 15
+        _BlendSrcFactor ("Blend SrcFactor", Float) = 5
+        _BlendDstFactor ("Blend DstFactor", Float) = 10
+        _BlendSrcFactorAlpha ("Blend SrcFactor Alpha", Float) = 5
+        _BlendDstFactorAlpha ("Blend DstFactor Alpha", Float) = 10
+        _ColorOption ("Premultiply Alpha", Float) = 0
     }
 
     SubShader
@@ -36,7 +41,7 @@ Shader "OpenFairy/UI Grayscale"
         Lighting Off
         ZWrite Off
         ZTest [unity_GUIZTestMode]
-        Blend SrcAlpha OneMinusSrcAlpha
+        Blend [_BlendSrcFactor] [_BlendDstFactor], [_BlendSrcFactorAlpha] [_BlendDstFactorAlpha]
         ColorMask [_ColorMask]
 
         Pass
@@ -50,6 +55,7 @@ Shader "OpenFairy/UI Grayscale"
             sampler2D _MainTex;
             fixed4 _Color;
             float4 _ClipRect;
+            float _ColorOption;
 
             struct appdata_t
             {
@@ -72,7 +78,13 @@ Shader "OpenFairy/UI Grayscale"
                 o.worldPosition = v.vertex;
                 o.vertex = UnityObjectToClipPos(o.worldPosition);
                 o.texcoord = v.texcoord;
-                o.color = v.color * _Color;
+#if !defined(UNITY_COLORSPACE_GAMMA) && (UNITY_VERSION >= 550)
+                o.color.rgb = GammaToLinearSpace(v.color.rgb);
+                o.color.a = v.color.a;
+#else
+                o.color = v.color;
+#endif
+                o.color *= _Color;
                 return o;
             }
 
@@ -81,7 +93,10 @@ Shader "OpenFairy/UI Grayscale"
                 fixed4 color = tex2D(_MainTex, i.texcoord) * i.color;
                 color.a *= UnityGet2DClipping(i.worldPosition.xy, _ClipRect);
                 fixed gray = dot(color.rgb, fixed3(0.299, 0.587, 0.114));
-                return fixed4(gray, gray, gray, color.a);
+                fixed4 result = fixed4(gray, gray, gray, color.a);
+                if (_ColorOption != 0)
+                    result.rgb *= result.a;
+                return result;
             }
             ENDCG
         }
