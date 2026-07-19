@@ -48,9 +48,11 @@ namespace OpenFairy.UGUI
 
         public Sprite icon
         {
-            get => iconLoader.sprite;
+            get => iconLoader != null ? iconLoader.sprite : null;
             set
             {
+                if (iconLoader == null)
+                    return;
                 iconLoader.sprite = value;
                 iconLoader.enabled = value != null;
             }

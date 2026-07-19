@@ -115,6 +115,22 @@ namespace OpenFairy.UGUI.Tests
             return button;
         }
 
+        [Test]
+        public void Button_icon_is_optional_when_template_has_no_icon_loader()
+        {
+            var go = new GameObject("button", typeof(RectTransform));
+            var button = go.AddComponent<TestButton>();
+            var texture = new Texture2D(1, 1);
+            var sprite = Sprite.Create(texture, new Rect(0, 0, 1, 1), Vector2.zero);
+
+            Assert.DoesNotThrow(() => button.icon = sprite);
+            Assert.IsNull(button.icon);
+
+            Object.DestroyImmediate(sprite);
+            Object.DestroyImmediate(texture);
+            Object.DestroyImmediate(go);
+        }
+
         [UnityTest]
         public IEnumerator Relation_follows_target_resize()
         {
