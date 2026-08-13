@@ -94,16 +94,13 @@ Shader "OpenFairy/UI ColorMatrix"
             {
                 fixed4 col = tex2D(_MainTex, i.texcoord) * i.color;
                 col.a *= UnityGet2DClipping(i.worldPosition.xy, _ClipRect);
-                if (_ColorOption != 0)
-                {
-                    col.rgb *= col.a;
-                    return col;
-                }
                 fixed4 result;
                 result.r = dot(col, _ColorMatrix[0]) + _ColorOffset.x;
                 result.g = dot(col, _ColorMatrix[1]) + _ColorOffset.y;
                 result.b = dot(col, _ColorMatrix[2]) + _ColorOffset.z;
                 result.a = dot(col, _ColorMatrix[3]) + _ColorOffset.w;
+                if (_ColorOption != 0)
+                    result.rgb *= result.a;
                 return result;
             }
             ENDCG

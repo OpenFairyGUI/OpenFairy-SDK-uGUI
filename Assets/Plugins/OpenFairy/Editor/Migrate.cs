@@ -227,7 +227,38 @@ namespace OpenFairy.UGUI.Editor
             importer.npotScale = TextureImporterNPOTScale.None;
             importer.wrapMode = tile ? TextureWrapMode.Repeat : TextureWrapMode.Clamp;
             importer.textureCompression = TextureImporterCompression.Uncompressed;
+            SetMinimumMaxTextureSize(importer);
             importer.SaveAndReimport();
+        }
+
+        private static void SetMinimumMaxTextureSize(TextureImporter importer)
+        {
+            importer.GetSourceTextureWidthAndHeight(out var width, out var height);
+            var longestEdge = Mathf.Max(width, height);
+            var maxTextureSize = Mathf.Clamp(
+                Mathf.NextPowerOfTwo(longestEdge), 32, 16384);
+            importer.maxTextureSize = maxTextureSize;
+
+            // Platform overrides do not inherit the default Max Size. Update
+            // every existing override without changing its format or other
+            // platform-specific settings.
+            var serializedImporter = new SerializedObject(importer);
+            var platformSettings = serializedImporter.FindProperty(
+                "m_PlatformSettings");
+            if (platformSettings == null || !platformSettings.isArray)
+                return;
+
+            for (var i = 0; i < platformSettings.arraySize; i++)
+            {
+                var settings = platformSettings.GetArrayElementAtIndex(i);
+                var overridden = settings.FindPropertyRelative("m_Overridden");
+                var platformMaxSize = settings.FindPropertyRelative(
+                    "m_MaxTextureSize");
+                if (overridden?.boolValue == true && platformMaxSize != null)
+                    platformMaxSize.intValue = maxTextureSize;
+            }
+
+            serializedImporter.ApplyModifiedPropertiesWithoutUndo();
         }
 
         // jta 格式："yytou" 头 + interval(ms) + 8字节保留 + 尺寸 + 标志字节 + 帧数，

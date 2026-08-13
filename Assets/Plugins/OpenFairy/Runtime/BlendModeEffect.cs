@@ -73,7 +73,7 @@ namespace OpenFairy.UGUI
         {
             if (_material == null || _baseMaterial == null)
                 return;
-            _material.CopyPropertiesFromMaterial(_baseMaterial);
+            _material.CopyMatchingPropertiesFromMaterial(_baseMaterial);
             Apply(_material, _blendMode, _graphic is UnityEngine.UI.Text);
         }
 
