@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -571,6 +571,8 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("autoSize")] public TextAutoSize AutoSize = TextAutoSize.Both;
         [XmlAttribute("singleLine")] public bool SingleLine;
         [XmlAttribute("font")] public string Font;
+        // Optional TMP font override; the backend is selected by FAIRYGUI_TMPRO.
+        [XmlAttribute("tmpFont")] public string TmpFont;
 
         [XmlElement("relation")] public Relation[] Relations = Array.Empty<Relation>();
         [XmlElement("gearDisplay")]

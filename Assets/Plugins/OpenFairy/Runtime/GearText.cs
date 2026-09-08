@@ -1,6 +1,12 @@
 using System;
 using UnityEngine.UI;
 
+#if FAIRYGUI_TMPRO
+using TextComponent = TMPro.TextMeshProUGUI;
+#else
+using TextComponent = OpenFairy.UGUI.TextField;
+#endif
+
 namespace OpenFairy.UGUI
 {
     [Serializable]
@@ -9,12 +15,12 @@ namespace OpenFairy.UGUI
         public string[] values;
         public string defaultValue;
 
-        [NonSerialized] private TextField _textField;
+        [NonSerialized] private TextComponent _textField;
 
         public override void Apply(T page)
         {
             var index = Array.IndexOf(pages, page);
-            (_textField ??= target.GetComponentInChildren<TextField>(true)).text = index >= 0 ? values[index] : defaultValue;
+            (_textField ??= target.GetComponentInChildren<TextComponent>(true)).text = index >= 0 ? values[index] : defaultValue;
         }
     }
 }

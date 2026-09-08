@@ -14,8 +14,6 @@ namespace OpenFairy.UGUI
         public Color defaultStroke;
 
         [NonSerialized] private Graphic _graphic;
-        [NonSerialized] private TextStroke _stroke;
-        [NonSerialized] private bool _strokeResolved;
 
         private Graphic Graphic => _graphic ??= target.GetComponent<Graphic>();
 
@@ -23,13 +21,7 @@ namespace OpenFairy.UGUI
         {
             if (strokeValues == null)
                 return;
-            if (!_strokeResolved)
-            {
-                target.TryGetComponent(out _stroke);
-                _strokeResolved = true;
-            }
-            if (_stroke != null)
-                _stroke.color = index >= 0 ? strokeValues[index] : defaultStroke;
+            Graphic.SetOutlineColor(index >= 0 ? strokeValues[index] : defaultStroke);
         }
 
         public override void Apply(T page)

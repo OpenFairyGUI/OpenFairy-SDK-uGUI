@@ -130,6 +130,10 @@ namespace OpenFairy.UGUI
             }
             Font.textureRebuilt += OnFontRebuilt;
             base.OnEnable();
+            // UnityEngine.UI.Text registers a synchronous font-atlas callback
+            // that can re-enter another TextField's mesh generation and corrupt
+            // the shared VertexHelper. This class owns a deferred safe callback.
+            FontUpdateTracker.UntrackText(this);
         }
 
         protected override void OnDisable()
@@ -141,8 +145,28 @@ namespace OpenFairy.UGUI
         // 动态字体图集重建后字形 UV 全部失效，缓存的排版必须作废。
         private void OnFontRebuilt(Font rebuilt)
         {
-            if (rebuilt == font)
-                _layoutValid = false;
+            if (rebuilt != font)
+                return;
+
+            _layoutValid = false;
+            if (_layoutInProgress)
+            {
+                _fontRebuiltDuringLayout = true;
+                return;
+            }
+
+            _fontRebuildPending = true;
+        }
+
+        private void LateUpdate()
+        {
+            if (!_fontRebuildPending || !IsActive()
+                || CanvasUpdateRegistry.IsRebuildingGraphics()
+                || CanvasUpdateRegistry.IsRebuildingLayout())
+                return;
+
+            _fontRebuildPending = false;
+            SetVerticesDirty();
         }
 
         protected override void OnPopulateMesh(VertexHelper toFill)
@@ -177,6 +201,9 @@ namespace OpenFairy.UGUI
         private HorizontalWrapMode _layoutHOverflow;
         private VerticalWrapMode _layoutVOverflow;
         private Font _layoutFont;
+        private bool _layoutInProgress;
+        private bool _fontRebuiltDuringLayout;
+        private bool _fontRebuildPending;
 
         private void EnsureLayout()
         {
@@ -215,7 +242,9 @@ namespace OpenFairy.UGUI
 
         private void RequestChars(List<Run> runs)
         {
-            foreach (var run in runs)
+            // A dynamic font atlas rebuild can synchronously re-enter Layout and
+            // mutate the reused run list, so iterate over a stable snapshot.
+            foreach (var run in runs.ToArray())
                 if (run.Text != null)
                     font.RequestCharactersInTexture(run.Text, run.Size, run.Style);
             font.RequestCharactersInTexture("_", 50, FontStyle.Normal);
@@ -467,7 +496,34 @@ namespace OpenFairy.UGUI
 
         private void Layout()
         {
-            _layoutValid = true;
+            // RequestCharactersInTexture can rebuild the atlas and synchronously
+            // ask this TextField for geometry again. Let the outer layout finish
+            // against the final atlas instead of mutating shared caches twice.
+            if (_layoutInProgress)
+            {
+                _layoutValid = false;
+                return;
+            }
+
+            _layoutInProgress = true;
+            try
+            {
+                // The first pass can trigger a dynamic-atlas rebuild. Repeating
+                // after that callback guarantees every quad uses the final atlas.
+                do
+                {
+                    _fontRebuiltDuringLayout = false;
+                    BuildLayout();
+                } while (_fontRebuiltDuringLayout);
+            }
+            finally
+            {
+                _layoutInProgress = false;
+            }
+        }
+
+        private void BuildLayout()
+        {
             _layoutText = text;
             _layoutColor = color;
             _layoutRectSize = rectTransform.rect.size;
@@ -487,7 +543,10 @@ namespace OpenFairy.UGUI
             if (bitmapFont == null)
             {
                 if (font == null)
+                {
+                    _layoutValid = true;
                     return;
+                }
                 RequestChars(runs);
             }
 
@@ -546,6 +605,8 @@ namespace OpenFairy.UGUI
                     FinishRun(runs[activeRun], runStart, x, y, line.Height, baselineY);
                 y += line.Height + lineSpacing;
             }
+
+            _layoutValid = true;
         }
 
         private void FinishRun(Run run, float from, float to, float lineY, float lineHeight, float baselineY)

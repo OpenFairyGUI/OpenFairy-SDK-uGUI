@@ -3,6 +3,12 @@ using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 
+#if FAIRYGUI_TMPRO
+using TextComponent = TMPro.TextMeshProUGUI;
+#else
+using TextComponent = OpenFairy.UGUI.TextField;
+#endif
+
 namespace OpenFairy.UGUI
 {
     public enum ProgressTitleType
@@ -39,7 +45,7 @@ namespace OpenFairy.UGUI
         public bool reverse;
 
         // 烘焙接线（Migrate 写入）。
-        [SerializeField] internal TextField title;
+        [SerializeField] internal TextComponent title;
         [SerializeField] internal RectTransform bar;
         [SerializeField] internal RectTransform barV;
         [SerializeField] internal MovieClip ani;

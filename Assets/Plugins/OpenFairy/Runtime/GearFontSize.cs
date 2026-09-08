@@ -1,5 +1,11 @@
 using System;
 
+#if FAIRYGUI_TMPRO
+using TextComponent = TMPro.TextMeshProUGUI;
+#else
+using TextComponent = OpenFairy.UGUI.TextField;
+#endif
+
 namespace OpenFairy.UGUI
 {
     [Serializable]
@@ -8,12 +14,12 @@ namespace OpenFairy.UGUI
         public int[] values;
         public int defaultValue;
 
-        [NonSerialized] private TextField _textField;
+        [NonSerialized] private TextComponent _textField;
 
         public override void Apply(T page)
         {
             var index = Array.IndexOf(pages, page);
-            (_textField ??= target.GetComponent<TextField>()).fontSize = index >= 0 ? values[index] : defaultValue;
+            (_textField ??= target.GetComponentInChildren<TextComponent>(true)).fontSize = index >= 0 ? values[index] : defaultValue;
         }
     }
 }

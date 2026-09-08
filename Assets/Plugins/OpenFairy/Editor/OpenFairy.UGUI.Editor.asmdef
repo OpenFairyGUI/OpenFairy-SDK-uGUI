@@ -3,7 +3,8 @@
     "rootNamespace": "OpenFairy.UGUI.Editor",
     "references": [
         "OpenFairy.UGUI",
-        "ZLinq.Unity"
+        "ZLinq.Unity",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [
         "Editor"

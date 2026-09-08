@@ -4,6 +4,12 @@ using UnityEngine.EventSystems;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 
+#if FAIRYGUI_TMPRO
+using TextComponent = TMPro.TextMeshProUGUI;
+#else
+using TextComponent = OpenFairy.UGUI.TextField;
+#endif
+
 namespace OpenFairy.UGUI
 {
     public class Slider : Component, IPointerDownHandler
@@ -17,7 +23,7 @@ namespace OpenFairy.UGUI
         public ProgressTitleType titleType;
 
         // 烘焙接线（Migrate 写入）。
-        [SerializeField] internal TextField title;
+        [SerializeField] internal TextComponent title;
         [SerializeField] internal RectTransform bar;
         [SerializeField] internal RectTransform barV;
         [SerializeField] internal RectTransform grip;

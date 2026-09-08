@@ -10,6 +10,14 @@ using UnityEditor.Callbacks;
 using UnityEngine;
 using UnityEngine.UI;
 using ZLinq;
+#if FAIRYGUI_TMPRO
+using TMPro;
+#endif
+#if FAIRYGUI_TMPRO
+using TextComponent = TMPro.TextMeshProUGUI;
+#else
+using TextComponent = OpenFairy.UGUI.TextField;
+#endif
 using Object = UnityEngine.Object;
 using Schema = OpenFairy.UGUI.Editor.Schema;
 
@@ -82,6 +90,7 @@ namespace OpenFairy.UGUI.Editor
             foreach (var package in Directory.EnumerateFiles($"{UiRoot}/assets", "package.xml", SearchOption.AllDirectories))
                 IndexPackage(package.Replace('\\', '/'));
 
+            _settings = null;
             TextField.defaultFont = DefaultFont(); // 游戏 UIConfig.defaultFont：与运行时一致才能保证烘焙排版一致
 
             var components = new List<Resource>();
@@ -424,6 +433,16 @@ namespace OpenFairy.UGUI.Editor
                 code.AppendLine("using OpenFairy.UGUI;");
             code.AppendLine("using UnityEngine;");
             code.AppendLine("using UnityEngine.UI;");
+            if (xml.DisplayList.AsValueEnumerable().Any(child => child.Kind is Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText))
+            {
+                code.AppendLine("#if FAIRYGUI_TMPRO");
+                code.AppendLine("using OpenFairyTextComponent = TMPro.TextMeshProUGUI;");
+                code.AppendLine("using OpenFairyInputComponent = TMPro.TMP_InputField;");
+                code.AppendLine("#else");
+                code.AppendLine("using OpenFairyTextComponent = OpenFairy.UGUI.TextField;");
+                code.AppendLine("using OpenFairyInputComponent = OpenFairy.UGUI.TextInput;");
+                code.AppendLine("#endif");
+            }
             code.AppendLine();
             code.AppendLine($"namespace {Identifier(component.Package)}");
             code.AppendLine("{");
@@ -477,7 +496,7 @@ namespace OpenFairy.UGUI.Editor
         {
             Schema.DisplayKind.Image => "UnityEngine.UI.Image",
             Schema.DisplayKind.Graph => "OpenFairy.UGUI.Graph",
-            Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText => child.Input ? "OpenFairy.UGUI.TextInput" : "OpenFairy.UGUI.TextField",
+            Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText => TextFieldType(child),
             Schema.DisplayKind.Loader => "OpenFairy.UGUI.Loader",
             Schema.DisplayKind.Component when TryResolve(child.Source, packageId, out var dep) =>
                 dep.PackageId == packageId
@@ -487,6 +506,9 @@ namespace OpenFairy.UGUI.Editor
             _ when IsMovieClip(child, packageId) => "OpenFairy.UGUI.MovieClip",
             _ => "UnityEngine.RectTransform",
         };
+
+        private static string TextFieldType(Schema.Display child) =>
+            child.Input ? "OpenFairyInputComponent" : "OpenFairyTextComponent";
 
         private static bool IsMovieClip(Schema.Display child, string packageId) =>
             child.Source != null && TryResolve(child.Source, packageId, out var resource) && resource.Type == Schema.ResourceKind.MovieClip;
@@ -618,7 +640,7 @@ namespace OpenFairy.UGUI.Editor
                     }
                     if (controllers.TryGetValue("button", out var buttonData))
                         comp.GetType().GetField("controller").SetValue(comp, buttonData.Value); // Controller<T> 泛型字段，仅此保留反射
-                    buttonComp.titleText = Child(children, "title")?.GetComponent<TextField>();
+                    buttonComp.titleText = Child(children, "title")?.GetComponent<TextComponent>();
                     buttonComp.iconLoader = Child(children, "icon")?.GetComponent<Loader>();
                     if (xml.Button is { } buttonEl)
                         ConfigureButton(root, buttonEl, component.PackageId);
@@ -645,7 +667,7 @@ namespace OpenFairy.UGUI.Editor
                     SetupSlider(slider, xml, children, root);
                 else if (comp is Label label)
                 {
-                    label.titleText = Child(children, "title")?.GetComponent<TextField>();
+                    label.titleText = Child(children, "title")?.GetComponent<TextComponent>();
                     label.iconLoader = Child(children, "icon")?.GetComponent<Loader>();
                 }
 
@@ -710,6 +732,9 @@ namespace OpenFairy.UGUI.Editor
                 case Schema.DisplayKind.RichText:
                 case Schema.DisplayKind.InputText:
                 {
+#if FAIRYGUI_TMPRO
+                    go = CreateTmpTextElement(name, parent, element, owner);
+#else
                     go = NewChild(name, parent, typeof(TextField));
                     var textComponent = go.GetComponent<TextField>();
                     ConfigureText(textComponent, element, owner);
@@ -727,6 +752,7 @@ namespace OpenFairy.UGUI.Editor
                     }
                     if (element.Input)
                         ConfigureInput(go, textComponent, element);
+#endif
                     break;
                 }
                 case Schema.DisplayKind.Loader:
@@ -846,7 +872,7 @@ namespace OpenFairy.UGUI.Editor
                         var parts = value.Split(',');
                         return (ParseColor(parts[0]), parts.Length > 1 ? ParseColor(parts[1]) : fallback.Stroke);
                     }
-                    (Color Color, Color Stroke) fallback = (graphic.color, stroke != null ? stroke.color : Color.clear);
+                    (Color Color, Color Stroke) fallback = (graphic.color, graphic.GetOutlineColor());
                     (Color Color, Color Stroke) def = gearXml.Default is { } defaultValue ? Parse(defaultValue, fallback) : fallback;
                     var source = gearXml.Values.Split('|');
                     var colors = new Color[source.Length];
@@ -870,13 +896,13 @@ namespace OpenFairy.UGUI.Editor
                     ConfigureGearAni(gearType, gear, gearXml);
                 else if (kind == Schema.GearKind.FontSize)
                 {
-                    var def = gearXml.Default is { } value ? int.Parse(value) : go.GetComponent<TextField>().fontSize;
+                    var def = gearXml.Default is { } value ? int.Parse(value) : (int)go.GetComponentInChildren<TextComponent>(true).fontSize;
                     gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').AsValueEnumerable().Select(value => value == "-" ? def : int.Parse(value)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
                 else if (kind == Schema.GearKind.Text)
                 {
-                    var def = gearXml.Default ?? go.GetComponentInChildren<TextField>(true).text;
+                    var def = gearXml.Default ?? go.GetComponentInChildren<TextComponent>(true).text;
                     gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').AsValueEnumerable().Select(value => value == "-" ? def : value).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
@@ -996,9 +1022,9 @@ namespace OpenFairy.UGUI.Editor
 
         private static void ConfigureLabel(GameObject go, Schema.Extension labelXml, string packageId)
         {
-            if (labelXml.Title is { } title && FindChild(go.transform, "title")?.GetComponent<TextField>() is { } titleText)
+            if (labelXml.Title is { } title && FindChild(go.transform, "title")?.GetComponent<TextComponent>() is { } titleText)
                 titleText.text = title;
-            if (labelXml.TitleColor is { } titleColor && FindChild(go.transform, "title")?.GetComponent<TextField>() is { } colorText)
+            if (labelXml.TitleColor is { } titleColor && FindChild(go.transform, "title")?.GetComponent<TextComponent>() is { } colorText)
                 colorText.color = ParseColor(titleColor);
             if (labelXml.Icon is { } icon && FindChild(go.transform, "icon")?.GetComponent<UnityEngine.UI.Image>() is { } image)
             {
@@ -1064,7 +1090,7 @@ namespace OpenFairy.UGUI.Editor
             var ext = xml.ProgressBar;
             progress.titleType = ext.TitleType;
             progress.reverse = ext.Reverse;
-            progress.title = Child(children, "title")?.GetComponent<TextField>();
+            progress.title = Child(children, "title")?.GetComponent<TextComponent>();
             var size = xml.Size;
             if (Child(children, "bar") is { } bar)
             {
@@ -1092,7 +1118,7 @@ namespace OpenFairy.UGUI.Editor
             slider.reverse = ext.Reverse;
             slider.wholeNumbers = ext.WholeNumbers;
             slider.changeOnClick = ext.ChangeOnClick;
-            slider.title = Child(children, "title")?.GetComponent<TextField>();
+            slider.title = Child(children, "title")?.GetComponent<TextComponent>();
             var size = xml.Size;
             if (Child(children, "bar") is { } bar)
             {
@@ -1805,6 +1831,150 @@ namespace OpenFairy.UGUI.Editor
             input.field = field;
             input.submit = submit;
         }
+
+#if FAIRYGUI_TMPRO
+        // FAIRYGUI_TMPRO selects native TMP components for every text element.
+        private static GameObject CreateTmpTextElement(string name, RectTransform parent, Schema.Display element, Resource owner)
+        {
+            if (!element.Input)
+            {
+                var displayGo = NewChild(name, parent, typeof(TextMeshProUGUI));
+                ConfigureTmpText(displayGo.GetComponent<TextMeshProUGUI>(), element, owner, false);
+                return displayGo;
+            }
+
+            var root = NewChild(name, parent);
+            var background = root.AddComponent<UnityEngine.UI.Image>();
+            background.color = new Color32(31, 27, 24, 255);
+
+            var field = root.AddComponent<TMP_InputField>();
+            field.targetGraphic = background;
+            field.lineType = element.SingleLine
+                ? TMP_InputField.LineType.SingleLine
+                : TMP_InputField.LineType.MultiLineNewline;
+            if (element.Password)
+                field.contentType = TMP_InputField.ContentType.Password;
+            if (element.MaxLength > 0)
+                field.characterLimit = element.MaxLength;
+
+            var textArea = NewChild("Text Area", (RectTransform)root.transform);
+            textArea.AddComponent<RectMask2D>();
+            var textAreaRect = (RectTransform)textArea.transform;
+            textAreaRect.anchorMin = Vector2.zero;
+            textAreaRect.anchorMax = Vector2.one;
+            textAreaRect.offsetMin = new Vector2(18, 8);
+            textAreaRect.offsetMax = new Vector2(-18, -8);
+
+            var textGo = NewChild("Text", textAreaRect, typeof(TextMeshProUGUI));
+            var text = textGo.GetComponent<TextMeshProUGUI>();
+            ConfigureTmpText(text, element, owner, true);
+            text.text = "";
+            text.raycastTarget = false;
+            StretchFull((RectTransform)textGo.transform);
+
+            TextMeshProUGUI placeholder = null;
+            if (!string.IsNullOrEmpty(element.Prompt))
+            {
+                var placeholderGo = NewChild("Placeholder", textAreaRect, typeof(TextMeshProUGUI));
+                placeholder = placeholderGo.GetComponent<TextMeshProUGUI>();
+                ConfigureTmpText(placeholder, element, owner, true);
+                placeholder.text = element.Prompt;
+                placeholder.fontStyle |= FontStyles.Italic;
+                var placeholderColor = placeholder.color;
+                placeholderColor.a *= 0.45f;
+                placeholder.color = placeholderColor;
+                placeholder.raycastTarget = false;
+                StretchFull((RectTransform)placeholderGo.transform);
+            }
+
+            field.textViewport = textAreaRect;
+            field.textComponent = text;
+            field.placeholder = placeholder;
+            field.fontAsset = text.font;
+            field.text = element.Text;
+            return root;
+        }
+
+        private static void ConfigureTmpText(TextMeshProUGUI text, Schema.Display element, Resource owner, bool inputText)
+        {
+            text.font = LoadTmpFont(element, owner);
+            text.text = element.Text;
+            text.fontSize = element.FontSize ?? Settings().fontSize;
+            text.color = ParseColor(element.Color ?? Settings().textColor);
+            text.richText = !inputText && (element.Ubb || element.Kind == Schema.DisplayKind.RichText);
+            if (text.richText)
+            {
+                var markup = text.gameObject.AddComponent<TmpTextMarkup>();
+                markup.ubb = element.Ubb;
+                markup.html = element.Kind == Schema.DisplayKind.RichText;
+                markup.Bind();
+            }
+            text.extraPadding = true;
+            text.characterSpacing = element.LetterSpacing;
+            text.lineSpacing = element.Leading;
+            text.fontStyle = (element.Bold, element.Italic) switch
+            {
+                (true, true) => FontStyles.Bold | FontStyles.Italic,
+                (true, false) => FontStyles.Bold,
+                (false, true) => FontStyles.Italic,
+                _ => FontStyles.Normal,
+            };
+            text.textWrappingMode = element.SingleLine || element.AutoSize == Schema.TextAutoSize.Both
+                ? TextWrappingModes.NoWrap
+                : TextWrappingModes.Normal;
+            text.overflowMode = inputText || element.AutoSize != Schema.TextAutoSize.None
+                ? TextOverflowModes.Overflow
+                : TextOverflowModes.Truncate;
+            text.alignment = (element.VAlign, element.Align) switch
+            {
+                (Schema.VAlign.Middle, Schema.Align.Center) => TextAlignmentOptions.Center,
+                (Schema.VAlign.Middle, Schema.Align.Right) => TextAlignmentOptions.Right,
+                (Schema.VAlign.Middle, _) => TextAlignmentOptions.Left,
+                (Schema.VAlign.Bottom, Schema.Align.Center) => TextAlignmentOptions.Bottom,
+                (Schema.VAlign.Bottom, Schema.Align.Right) => TextAlignmentOptions.BottomRight,
+                (Schema.VAlign.Bottom, _) => TextAlignmentOptions.BottomLeft,
+                (_, Schema.Align.Center) => TextAlignmentOptions.Top,
+                (_, Schema.Align.Right) => TextAlignmentOptions.TopRight,
+                _ => TextAlignmentOptions.TopLeft,
+            };
+            text.raycastTarget = false;
+        }
+
+        private static TMP_FontAsset LoadTmpFont(Schema.Display element, Resource owner)
+        {
+            if (!string.IsNullOrEmpty(element.TmpFont))
+            {
+                var path = element.TmpFont;
+                var explicitFont = path.StartsWith("Assets/", StringComparison.Ordinal)
+                    ? AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(path)
+                    : UnityEngine.Resources.Load<TMP_FontAsset>(path);
+                return explicitFont != null ? explicitFont
+                    : throw new InvalidOperationException($"TMP font asset '{path}' was not found.");
+            }
+
+            var name = element.Font;
+            if (!string.IsNullOrEmpty(name))
+            {
+                if (TryResolve(name, owner.PackageId, out var resource))
+                    name = Path.GetFileNameWithoutExtension(resource.File);
+                var font = UnityEngine.Resources.Load<TMP_FontAsset>(name);
+                if (font == null)
+                    font = UnityEngine.Resources.Load<TMP_FontAsset>("Fonts/" + name);
+                if (font != null)
+                    return font;
+                foreach (var guid in AssetDatabase.FindAssets("t:TMP_FontAsset"))
+                {
+                    font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetDatabase.GUIDToAssetPath(guid));
+                    if (font.name == name || (font.sourceFontFile != null && font.sourceFontFile.name == name))
+                        return font;
+                }
+                throw new InvalidOperationException($"No TMP font asset matches FairyGUI font '{name}'.");
+            }
+
+            return TMP_Settings.defaultFontAsset != null ? TMP_Settings.defaultFontAsset
+                : throw new InvalidOperationException("Assign a default font in TMP Settings before running OpenFairy Migrate.");
+        }
+#endif
 
         private static void StretchFull(RectTransform rt)
         {

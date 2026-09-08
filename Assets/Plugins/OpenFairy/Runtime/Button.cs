@@ -3,6 +3,12 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 
+#if FAIRYGUI_TMPRO
+using TextComponent = TMPro.TextMeshProUGUI;
+#else
+using TextComponent = OpenFairy.UGUI.TextField;
+#endif
+
 namespace OpenFairy.UGUI
 {
     public enum ButtonMode
@@ -25,7 +31,7 @@ namespace OpenFairy.UGUI
         public bool changeStateOnClick = true; // 复刻 GButton：列表项交给 ListSelection 管选择时置 false，禁本体自翻 selected
 
         // 烘焙接线（Migrate 写入），不属用户 API 面。
-        [SerializeField] internal TextField titleText;
+        [SerializeField] internal TextComponent titleText;
         [SerializeField] internal Loader iconLoader;
         [SerializeField] internal Component relatedOwner;
         [SerializeField] internal int relatedController = -1;

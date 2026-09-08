@@ -7,6 +7,12 @@ using UnityEngine;
 using UnityEngine.UI;
 using ZLinq;
 
+#if FAIRYGUI_TMPRO
+using TextComponent = TMPro.TextMeshProUGUI;
+#else
+using TextComponent = OpenFairy.UGUI.TextField;
+#endif
+
 namespace OpenFairy.UGUI
 {
     internal readonly struct TransitionValue
@@ -328,7 +334,7 @@ namespace OpenFairy.UGUI
                     break;
                 }
                 case TransitionItemType.Text:
-                    ((TextField)item.RuntimeTarget).text = item.stringValue;
+                    ((TextComponent)item.RuntimeTarget).text = item.stringValue;
                     break;
                 default:
                     ApplyValue(item, Resolve(item, item.start));
@@ -405,7 +411,7 @@ namespace OpenFairy.UGUI
                 TransitionItemType.Alpha => target.GetComponent<CanvasGroup>(),
                 TransitionItemType.Animation => target.GetComponent<MovieClip>(),
                 TransitionItemType.Nested => FindNested(target, item.stringValue),
-                TransitionItemType.Text => target.GetComponent<TextField>(),
+                TransitionItemType.Text => target.GetComponent<TextComponent>(),
                 TransitionItemType.Skew => target.GetComponent<Graph>(),
                 TransitionItemType.Color => target.GetComponent<Graphic>(),
                 TransitionItemType.ColorFilter => target.GetComponent<ColorAdjust>(),

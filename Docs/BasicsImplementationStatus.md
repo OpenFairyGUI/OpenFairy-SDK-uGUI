@@ -18,7 +18,14 @@
 - 真跑才暴露的三个 bug（已修 + 新增真射线交互测试 `InteractionRuntimeTests`）：① MovieClip 页空白（`<jta>` movieclip 标签被丢弃，现已识别）；② Popup/Window 按钮点不动（button 根加透明 raycast 面，整块可点）；③ Text 输入框不工作（真因是 `OpenFairy.UGUI.TextField` 作 InputField 面时 `OnEnable` 清 raycastTarget + 自绘不填 generator；改用原生 InputField 结构：透明 Image 作 targetGraphic + 普通 UI.Text 作 textComponent，placeholder 仍 OpenFairy.UGUI.TextField。`activeInputHandler` 保持 `1`）。详见 `AGENTS.md`。
 - `InteractionRuntimeTests` 覆盖真射线交互：MovieClip 自播、Window 开关、Popup 开/点项收起、ComboBox 开下拉、Slider 可点跳值、TextInput 可编辑读写。
 - 2026-07-09 交互烘焙完整化：让**转换产物在无 demo 胶水下也具备完整交互**（通用 SDK 发布前提）。补齐按钮关联控制器(tab/单选组)、`overflow=scroll` 自挂 ScrollPane、Slider `min/reverse/wholeNumbers/changeOnClick`、列表选择 + `onClickItem`、ComboBox onChanged 语义、输入框 `SetTextWithoutNotify`/只读/回车提交、Window frame 拖动、右键指针弹菜单、GearLook 置灰传按钮、Depth 前移越位修正。新增 `BakedInteractionTests`（直接实例化 prefab、无胶水、真射线驱动）证明通用工程已具交互。详见 `AGENTS.md`「交互烘焙完整化」。
-- 当前 `Run PlayMode Tests` `134/134`。范围与取舍详见 `AGENTS.md`「发布范围与取舍」。
+- 传统文本分支历史 `Run PlayMode Tests` `134/134`。范围与取舍详见 `AGENTS.md`「发布范围与取舍」。
+
+## 2026-09-08 全局 TMP 变更
+
+- `FAIRYGUI_TMPRO` 现在全局选择原生 TMP 文本/输入组件，已移除逐元素 `tmp` 开关。字体从明确覆盖、原字体名或 TMP Settings 默认字体解析；生成字段和常用控件、gear、动效均按宏选择后端。
+- Nuo 集成工程在 Unity 6000.5.6f1 发布后审计 16 个 Prefab：28 个 TMP 文本实例，0 个传统 UI.Text，生成字段引用无缺失。生产 UI 源无需 `tmp` 属性。
+- 使用该 Editor 的实际编译引用和 Roslyn，开启/关闭宏分别编译 Runtime、Editor、Assembly-CSharp，六次编译均通过。原生 Play Mode 验证已发布的 TMP 输入框接受中文与拉丁字符、静默赋值事件语义、UBB 透明度顶点颜色、文字/字号 gear，以及 Nuo 对话与任务流程。输入框测试使用已有发布夹具，未声称额外的无标记输入夹具重新发布已执行。
+- 当前集成工程不包含 SDK 的 Basics/Transition 测试运行器和 golden。尚未运行 TMP 分支完整 parity 套件，历史 134/134 仅对应此前传统后端。TMP 当前 UBB 适配范围及未验证的 HTML、图片、链接点击边界见 README。
 
 ## 标准验证流程
 
