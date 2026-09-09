@@ -21,6 +21,16 @@
 
 改转换输出结构/序列化字段/生成代码 → 先 `Migrate`；改参照相关逻辑 → 先 `Generate Golden References`；改运行时渲染/动效/交互 → 至少 `Run PlayMode Tests`。
 
+### 代码生成设置
+
+`Migrate` 读取 `UIProject/settings/Publish.json` 的 `codeGeneration`：
+
+- `classNamePrefix`：生成类名及脚本文件名的前缀，也用于组件类型引用和 Prefab 绑定。已有 Prefab 对应的生成脚本改名时保留 `.meta` GUID。
+- `memberNamePrefix`：生成成员字段的前缀，也用于控制器访问和 Prefab 成员绑定。前缀为空时，控制器枚举名加 `Pages` 后缀，避免与同名字段冲突。
+- `ignoreNoname`：开启时只过滤名称完全符合小写 `n` 加一个或多个 ASCII 数字的子元件，例如 `n1`、`n023`；保留 `title`、`icon`、`n1Label` 和元件本身。关闭时不过滤。
+
+缺少上述配置时保持旧行为：类名前缀为空、成员前缀为 `m_`、不过滤默认名称。修改前缀后，手写 partial 类和业务调用需同步更新；已有 UI 应重新转换，控制器的序列化类型包含生成类名。`getMemberByName` 不影响 Prefab 引用绑定。
+
 ## 已实现
 
 Basics / Transition 两套官方 demo 的静态渲染、主要交互（按钮/复选/单选、Slider、ComboBox 下拉、滚动、拖放、窗口/弹窗、翻页动效、文本 UBB 链接、列表填充）与 Transition 动效（路径、嵌套、滤镜、shake、循环/yoyo、倒放）均已覆盖并过 PlayMode parity 测试。

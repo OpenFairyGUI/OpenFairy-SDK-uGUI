@@ -78,6 +78,7 @@ namespace OpenFairy.UGUI.Editor
         private static readonly Dictionary<Resource, AudioClip> Sounds = new();
         private static readonly Dictionary<string, GameObject> Prefabs = new();
         private static CommonSettings _settings;
+        private static CodeGenerationSettings _codeGenerationSettings;
 
         [MenuItem("Tools/OpenFairy/Migrate %e")]
         public static void Execute()
@@ -91,6 +92,7 @@ namespace OpenFairy.UGUI.Editor
                 IndexPackage(package.Replace('\\', '/'));
 
             _settings = null;
+            _codeGenerationSettings = null;
             TextField.defaultFont = DefaultFont(); // 游戏 UIConfig.defaultFont：与运行时一致才能保证烘焙排版一致
 
             var components = new List<Resource>();
@@ -353,8 +355,9 @@ namespace OpenFairy.UGUI.Editor
         private static void GenerateScript(Resource component)
         {
             var xml = component.ComponentXml;
-            var name = Identifier(Path.GetFileNameWithoutExtension(component.File));
+            var name = ClassName(component);
             var path = ScriptPath(component.File);
+            PreserveScriptGuid(component, path);
             var used = new HashSet<string>();
             var fields = new List<string>();
             var controllerBindings = new List<(int Index, string Type, string Field)>();
@@ -362,17 +365,18 @@ namespace OpenFairy.UGUI.Editor
             for (var controllerIndex = 0; controllerIndex < xml.Controllers.Length; controllerIndex++)
             {
                 var controller = xml.Controllers[controllerIndex];
-                var cname = Identifier(controller.Name);
+                var cname = ControllerEnumName(controller.Name);
+                var field = Field(controller.Name);
                 DeleteScript($"{Path.GetDirectoryName(path)}/{name}_{cname}.cs".Replace('\\', '/'));
-                if (used.Add(Field(cname)))
+                if (used.Add(field))
                 {
                     fields.Add(EnumDeclaration(cname, xml.Extension));
                     fields.Add("        {");
                     foreach (var page in PageMembers(controller))
                         fields.Add($"            {page.Member},");
                     fields.Add("        }");
-                    fields.Add($"        public Controller<{cname}> {Field(cname)};");
-                    controllerBindings.Add((controllerIndex, cname, Field(cname)));
+                    fields.Add($"        public Controller<{cname}> {field};");
+                    controllerBindings.Add((controllerIndex, cname, field));
                 }
             }
 
@@ -398,6 +402,9 @@ namespace OpenFairy.UGUI.Editor
 
             foreach (var child in xml.DisplayList)
             {
+                // 仅忽略 n + ASCII 数字；title、icon 等控件约定名称仍生成字段。
+                if (CodeSettings().ignoreNoname && Regex.IsMatch(child.Name ?? "", @"\An[0-9]+\z"))
+                    continue;
                 var fieldName = Identifier(child.Name);
                 var fieldType = FieldType(child, component.PackageId);
                 if (fieldType != null && used.Add(Field(fieldName)))
@@ -413,12 +420,12 @@ namespace OpenFairy.UGUI.Editor
             if (isButtonFamily && buttonController == null)
                 fields.InsertRange(0, new[]
                 {
-                    EnumDeclaration("button", xml.Extension),
+                    EnumDeclaration(ControllerEnumName("button"), xml.Extension),
                     "        {",
                     "            up,",
                     "        }",
                 });
-            var stateEnum = buttonController != null ? Identifier(buttonController.Name) : "button";
+            var stateEnum = ControllerEnumName(buttonController?.Name ?? "button");
             var baseType = xml.Extension switch
             {
                 Schema.ComponentExtension.Button => $"OpenFairy.UGUI.Button<{name}.{stateEnum}>",
@@ -475,6 +482,28 @@ namespace OpenFairy.UGUI.Editor
 
         private static bool _scriptsChanged;
 
+        private static void PreserveScriptGuid(Resource component, string path)
+        {
+            if (File.Exists(path))
+                return;
+
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(Path.ChangeExtension(AssetPath(component.File), ".prefab"));
+            var script = prefab != null && prefab.GetComponent<Component>() is { } view
+                ? MonoScript.FromMonoBehaviour(view)
+                : null;
+            var previousPath = script != null ? AssetDatabase.GetAssetPath(script) : null;
+            if (string.IsNullOrEmpty(previousPath))
+                return;
+            if (!previousPath.StartsWith($"{OutputRoot}/Scripts/", StringComparison.Ordinal))
+                throw new InvalidOperationException($"OpenFairy cannot rename a script outside its generated directory: {previousPath}");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            var error = AssetDatabase.MoveAsset(previousPath, path);
+            if (!string.IsNullOrEmpty(error))
+                throw new InvalidOperationException($"OpenFairy failed to rename {previousPath} to {path}: {error}");
+            _scriptsChanged = true;
+        }
+
         private static void WriteScript(string path, string text)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path));
@@ -500,8 +529,8 @@ namespace OpenFairy.UGUI.Editor
             Schema.DisplayKind.Loader => "OpenFairy.UGUI.Loader",
             Schema.DisplayKind.Component when TryResolve(child.Source, packageId, out var dep) =>
                 dep.PackageId == packageId
-                    ? Identifier(Path.GetFileNameWithoutExtension(dep.File))
-                    : $"global::{Identifier(dep.Package)}.{Identifier(Path.GetFileNameWithoutExtension(dep.File))}",
+                    ? ClassName(dep)
+                    : $"global::{Identifier(dep.Package)}.{ClassName(dep)}",
             Schema.DisplayKind.Component => null,
             _ when IsMovieClip(child, packageId) => "OpenFairy.UGUI.MovieClip",
             _ => "UnityEngine.RectTransform",
@@ -525,7 +554,7 @@ namespace OpenFairy.UGUI.Editor
                 if (xml.Overflow == Schema.Overflow.Hidden)
                     root.AddComponent<RectMask2D>();
 
-                var componentType = FindType($"{Identifier(component.Package)}.{Identifier(root.name)}");
+                var componentType = FindType($"{Identifier(component.Package)}.{ClassName(component)}");
                 var comp = (Component)root.AddComponent(componentType);
 
                 var controllers = new Dictionary<string, ControllerData>();
@@ -533,7 +562,7 @@ namespace OpenFairy.UGUI.Editor
                 {
                     var name = Identifier(element.Name);
                     var pages = PageMembers(element).AsValueEnumerable().ToArray();
-                    var pageType = componentType.GetNestedType(name);
+                    var pageType = componentType.GetNestedType(ControllerEnumName(element.Name));
                     controllers[element.Name] = new ControllerData
                     {
                         Index = controllers.Count,
@@ -1223,7 +1252,7 @@ namespace OpenFairy.UGUI.Editor
             {
                 var button = go.GetComponent<ButtonBase>();
                 // FairyGUI 约定：存在名为 grayed 的控制器时，置灰只切换其页面 1，不套灰度材质。
-                if (button != null && button.GetType().GetField("m_grayed") is { } grayedController)
+                if (button != null && button.GetType().GetField(Field("grayed")) is { } grayedController)
                 {
                     var controller = grayedController.GetValue(button);
                     var pageProperty = controller.GetType().GetProperty("page");
@@ -2230,7 +2259,14 @@ namespace OpenFairy.UGUI.Editor
             return id.Length == 0 || char.IsDigit(id[0]) || Keywords.Contains(id) ? "_" + id : id;
         }
 
-        private static string Field(string name) => $"m_{Identifier(name)}";
+        private static string ClassName(Resource component) =>
+            Identifier(CodeSettings().classNamePrefix + Path.GetFileNameWithoutExtension(component.File));
+
+        private static string Field(string name) => Identifier(CodeSettings().memberNamePrefix + Identifier(name));
+
+        // 空成员前缀时，控制器字段与内嵌枚举不能同名。
+        private static string ControllerEnumName(string name) =>
+            Field(name) == Identifier(name) ? Identifier(name) + "Pages" : Identifier(name);
 
         private static string AssetPath(string file) =>
             $"{OutputRoot}/Assets/{Path.GetRelativePath($"{UiRoot}/assets", file).Replace('\\', '/')}";
@@ -2238,8 +2274,36 @@ namespace OpenFairy.UGUI.Editor
         private static string SpritePath(Resource resource) =>
             resource.Type == Schema.ResourceKind.MovieClip ? FramePath(AssetPath(resource.File), 0) : AssetPath(resource.File);
 
-        private static string ScriptPath(string file) =>
-            Path.ChangeExtension($"{OutputRoot}/Scripts/{Path.GetRelativePath($"{UiRoot}/assets", file).Replace('\\', '/')}", ".cs").Replace('\\', '/');
+        private static string ScriptPath(string file)
+        {
+            var relativePath = Path.GetRelativePath($"{UiRoot}/assets", file);
+            var name = Identifier(CodeSettings().classNamePrefix + Path.GetFileNameWithoutExtension(file));
+            return $"{OutputRoot}/Scripts/{Path.GetDirectoryName(relativePath)}/{name}.cs".Replace('\\', '/');
+        }
+
+        private static CodeGenerationSettings CodeSettings()
+        {
+            if (_codeGenerationSettings != null)
+                return _codeGenerationSettings;
+            var path = $"{UiRoot}/settings/Publish.json";
+            var publish = File.Exists(path) ? JsonUtility.FromJson<PublishSettings>(File.ReadAllText(path)) : null;
+            return _codeGenerationSettings = publish?.codeGeneration ?? new CodeGenerationSettings();
+        }
+
+        [Serializable]
+        private class PublishSettings
+        {
+            public CodeGenerationSettings codeGeneration = new();
+        }
+
+        [Serializable]
+        private class CodeGenerationSettings
+        {
+            // 缺少配置时沿用旧版 OpenFairy 的命名和不过滤行为。
+            public string classNamePrefix = "";
+            public string memberNamePrefix = "m_";
+            public bool ignoreNoname;
+        }
 
         private static CommonSettings Settings() =>
             _settings ??= File.Exists($"{UiRoot}/settings/Common.json")

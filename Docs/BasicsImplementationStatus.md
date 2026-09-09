@@ -27,6 +27,14 @@
 - 使用该 Editor 的实际编译引用和 Roslyn，开启/关闭宏分别编译 Runtime、Editor、Assembly-CSharp，六次编译均通过。原生 Play Mode 验证已发布的 TMP 输入框接受中文与拉丁字符、静默赋值事件语义、UBB 透明度顶点颜色、文字/字号 gear，以及 Nuo 对话与任务流程。输入框测试使用已有发布夹具，未声称额外的无标记输入夹具重新发布已执行。
 - 当前集成工程不包含 SDK 的 Basics/Transition 测试运行器和 golden。尚未运行 TMP 分支完整 parity 套件，历史 134/134 仅对应此前传统后端。TMP 当前 UBB 适配范围及未验证的 HTML、图片、链接点击边界见 README。
 
+## 2026-09-09 发布代码设置
+
+- Migrate 读取 `Publish.json/codeGeneration` 的 `classNamePrefix`、`memberNamePrefix`、`ignoreNoname`。类名前缀同步用于脚本文件名、同包/跨包类型引用及 Prefab 类型查找；成员前缀同步用于普通字段、控制器绑定和置灰控制器。空成员前缀时控制器枚举追加 `Pages`，避免与字段重名。
+- 默认名称过滤仅针对完整的 `n[0-9]+` 子元件名，保留 `title`、`icon` 等约定名称和所有实际元件。已有生成脚本更换类名前缀时，经 AssetDatabase.MoveAsset 保留 GUID。
+- Nuo 已按 `UI_` / `m_` / `ignoreNoname=true` 完整迁移 24 个生成类、18 份手写调用/partial 扩展及相关 Prefab/场景类型引用，24 个脚本的 `.meta` GUID 保持不变。重建后按源 Prefab 身份保留了 Scene_04 的嵌套对象 ID，场景只同步类型标识。
+- Unity 6000.5.6f1 实际调用转换器完成五组集成测试：自定义前缀、空前缀、过滤开启、过滤关闭、缺省配置。各组生成脚本并通过 Unity 编译，再烘焙/实例化 Prefab，验证成员引用、跨包组件类型、保留 title/icon、过滤不删除对象及控制器切页；全部通过。另有 14 个过滤表达式边界用例通过。
+- 正式产物检查覆盖 24 个 Prefab 的 162 个对象字段，以及 5 个场景的 4 个序列化 UI 绑定：无缺失脚本、托管类型或成员引用。原始 Publish.json 已恢复，临时测试资产已清理，编辑器恢复 Scene_05。测试报告与复现用验证器保留在 Nuo 的 `Temp/CodexPublishSettings/`。本次未运行 SDK 的完整 Basics/Transition parity 套件。
+
 ## 标准验证流程
 
 1. 修改转换器、生成脚本结构或序列化字段后，先跑 `Tools/OpenFairy/Migrate`。
