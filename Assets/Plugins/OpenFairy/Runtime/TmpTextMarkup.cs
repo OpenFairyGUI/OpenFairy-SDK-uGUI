@@ -34,8 +34,8 @@ namespace OpenFairy.UGUI
                 return source;
             var text = source.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\t", "    ");
             if (!ubb)
-                return text;
-            return Tags.Replace(text, match =>
+                return NormalizeSizes(text);
+            return NormalizeSizes(Tags.Replace(text, match =>
             {
                 var closing = match.Groups[1].Value == "/";
                 var tag = match.Groups[2].Value;
@@ -47,8 +47,11 @@ namespace OpenFairy.UGUI
                 if (tag is "color" or "size")
                     return value.Length == 0 ? match.Value : "<" + tag + "=" + (tag == "color" ? ConvertColor(value) : value) + ">";
                 return "<" + tag + ">";
-            }).Replace("\\[", "[");
+            }).Replace("\\[", "["));
         }
+
+        private string NormalizeSizes(string markup) => _text.enableAutoSizing && _text.richText
+            ? TextAutoSize.NormalizeSizeTags(markup, _text.fontSizeMax) : markup;
 
         private static string ConvertColor(string color)
         {

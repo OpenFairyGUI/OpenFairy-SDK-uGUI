@@ -70,8 +70,14 @@ namespace OpenFairy.UGUI
         public float volume = 1;
         public Vector2 positionOffset;  // FairyGUI xy → anchoredPosition 的固定偏移（pivot/anchor/拉伸锚点修正）
         public float[] pathData;
+        public string label;
+        public string endLabel;
 
         [NonSerialized] internal TransitionPath Path;
+        [NonSerialized] internal Action Hook;
+        [NonSerialized] internal Action EndHook;
+        [NonSerialized] internal bool HookStarted;
+        [NonSerialized] internal bool HookEnded;
         [NonSerialized] internal bool Applied;
         [NonSerialized] internal bool Started;
         [NonSerialized] internal TransitionValue ResolvedStart;
@@ -104,7 +110,7 @@ namespace OpenFairy.UGUI
 
         private void Start()
         {
-            if (autoPlay)
+            if (autoPlay && !playing)
                 Play(autoPlayTimes, autoPlayDelay).Forget();
         }
 
@@ -128,6 +134,8 @@ namespace OpenFairy.UGUI
             {
                 item.Applied = false;
                 item.Started = false;
+                item.HookStarted = false;
+                item.HookEnded = false;
                 if (item.pathData is { Length: > 0 })
                     item.Path ??= new TransitionPath(item.pathData);
                 item.RuntimeTarget ??= ResolveTarget(item);
@@ -159,6 +167,41 @@ namespace OpenFairy.UGUI
 
         public bool playing => _playing;
 
+        public void ChangePlayTimes(int times) => _remainingTimes = times;
+
+        // Generated label enums call the index overload; the string overload binds once, not per frame.
+        public void SetHook(int itemIndex, bool tweenEnd, Action callback)
+        {
+            if (tweenEnd)
+                items[itemIndex].EndHook = callback;
+            else
+                items[itemIndex].Hook = callback;
+        }
+
+        public void SetHook(string label, Action callback)
+        {
+            foreach (var item in items)
+            {
+                if (item.label == label)
+                {
+                    item.Hook = callback;
+                    return;
+                }
+                if (item.tween && item.endLabel == label)
+                {
+                    item.EndHook = callback;
+                    return;
+                }
+            }
+            throw new ArgumentException("Unknown transition label.", nameof(label));
+        }
+
+        public void ClearHooks()
+        {
+            foreach (var item in items)
+                item.Hook = item.EndHook = null;
+        }
+
         // 复刻 FairyGUI Stop() 默认 setToComplete：未完成 item 落到终态（倒放落回起态）。
         // Shake 必须归位——否则下次 Play 把偏移位当新基准，反复播放/停止位置越漂越远。
         public void Stop()
@@ -180,7 +223,7 @@ namespace OpenFairy.UGUI
             {
                 var item = items[_reversed ? items.Length - 1 - i : i];
                 if (!item.tween || item.repeat >= 0)
-                    Evaluate(item, effectiveTime - item.time);
+                    EvaluateValue(item, effectiveTime - item.time);
             }
         }
 
@@ -194,22 +237,27 @@ namespace OpenFairy.UGUI
             // 钳到 ≥0，保证收尾时 time=0 的 item 落在 local=0（= start 值），而非负 local 被提前 return 卡在中途。
             // 倒放按数组逆序求值：同帧触发多个瞬时 item 时按时间轴倒序生效（items 按 time 升序烘焙）。
             var effectiveTime = _reversed ? Mathf.Max(0, _totalDuration - _time) : _time;
-            if (_reversed)
-                for (var i = items.Length - 1; i >= 0; i--)
-                    Evaluate(items[i], effectiveTime - items[i].time);
-            else
-                foreach (var item in items)
-                    Evaluate(item, effectiveTime - item.time);
+            var version = _playVersion;
+            for (var i = 0; i < items.Length; i++)
+            {
+                var item = items[_reversed ? items.Length - 1 - i : i];
+                Evaluate(item, effectiveTime - item.time);
+                // Hooks can stop or replace playback. Do not finish or evaluate the replaced timeline.
+                if (version != _playVersion || !_playing)
+                    return;
+            }
 
             if (_hasInfinite || _time < _totalDuration)
                 return;
-            if (--_remainingTimes > 0)
+            if (_remainingTimes < 0 || --_remainingTimes > 0)
             {
                 _time = 0;
                 foreach (var item in items)
                 {
                     item.Applied = false;
                     item.Started = false;
+                    item.HookStarted = false;
+                    item.HookEnded = false;
                 }
             }
             else
@@ -217,6 +265,43 @@ namespace OpenFairy.UGUI
         }
 
         private void Evaluate(TransitionItem item, float local)
+        {
+            var tail = item.type == TransitionItemType.Shake ? item.start[1]
+                : !item.tween ? 0 : item.repeat < 0 ? float.PositiveInfinity
+                : item.duration * (item.repeat + 1);
+            var reached = _reversed ? local <= tail : local >= 0;
+            var version = _playVersion;
+            if (item.tween && reached && !item.HookStarted)
+            {
+                // Resolve unspecified values before the start hook, like the tween's OnStart.
+                if (!item.Started)
+                {
+                    item.Started = true;
+                    item.ResolvedStart = Resolve(item, item.start);
+                    item.ResolvedEnd = Resolve(item, item.end);
+                }
+                item.HookStarted = true;
+                item.Hook?.Invoke();
+                if (version != _playVersion || !_playing)
+                    return;
+            }
+            EvaluateValue(item, local);
+            if (!item.tween && reached && !item.HookStarted)
+            {
+                item.HookStarted = true;
+                item.Hook?.Invoke();
+                if (version != _playVersion || !_playing)
+                    return;
+            }
+            if (item.tween && item.HookStarted && !item.HookEnded
+                && !float.IsPositiveInfinity(tail) && (_reversed ? local <= 0 : local >= tail))
+            {
+                item.HookEnded = true;
+                item.EndHook?.Invoke();
+            }
+        }
+
+        private void EvaluateValue(TransitionItem item, float local)
         {
             if (item.type == TransitionItemType.Shake)
             {

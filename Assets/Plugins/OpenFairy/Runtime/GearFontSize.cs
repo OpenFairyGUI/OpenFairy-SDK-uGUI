@@ -19,7 +19,13 @@ namespace OpenFairy.UGUI
         public override void Apply(T page)
         {
             var index = Array.IndexOf(pages, page);
-            (_textField ??= target.GetComponentInChildren<TextComponent>(true)).fontSize = index >= 0 ? values[index] : defaultValue;
+            _textField ??= target.GetComponentInChildren<TextComponent>(true);
+            int value = index >= 0 ? values[index] : defaultValue;
+#if FAIRYGUI_TMPRO
+            TextAutoSize.SetFontSize(_textField, value);
+#else
+            _textField.fontSize = value;
+#endif
         }
     }
 }

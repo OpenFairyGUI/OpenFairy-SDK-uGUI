@@ -37,6 +37,7 @@ namespace OpenFairy.UGUI.Editor
 
         private class Resource
         {
+            public string Id;
             public Schema.ResourceKind Type;
             public string File;
             public string Package;
@@ -56,9 +57,11 @@ namespace OpenFairy.UGUI.Editor
             public string Name;
             public Type PageType;
             public string[] PageIds;
+            public Schema.Controller Source;
             public object[] PageValues;
             public int Selected;
             public List<object> Gears = new();
+            public List<object> Actions = new();
             public object Value;
 
             public string FieldName => Field(Name);
@@ -156,6 +159,7 @@ namespace OpenFairy.UGUI.Editor
             foreach (var resource in package.Resources)
                 Resources[package.Id + resource.Id] = new Resource
                 {
+                    Id = resource.Id,
                     Type = resource.Kind,
                     File = resource.File,
                     Package = packageName,
@@ -356,7 +360,7 @@ namespace OpenFairy.UGUI.Editor
         {
             var xml = component.ComponentXml;
             var name = ClassName(component);
-            var path = ScriptPath(component.File);
+            var path = ScriptPath(component);
             PreserveScriptGuid(component, path);
             var used = new HashSet<string>();
             var fields = new List<string>();
@@ -375,7 +379,10 @@ namespace OpenFairy.UGUI.Editor
                     foreach (var page in PageMembers(controller))
                         fields.Add($"            {page.Member},");
                     fields.Add("        }");
-                    fields.Add($"        public Controller<{cname}> {field};");
+                    if (controller.Name == "button" && xml.Extension is Schema.ComponentExtension.Button or Schema.ComponentExtension.ComboBox)
+                        fields.Add($"        public ref Controller<{cname}> {field} => ref controller;");
+                    else
+                        fields.Add($"        public Controller<{cname}> {field};");
                     controllerBindings.Add((controllerIndex, cname, field));
                 }
             }
@@ -390,6 +397,13 @@ namespace OpenFairy.UGUI.Editor
                 fields.Add("            _ => -1,");
                 fields.Add("        };");
                 fields.Add("");
+                fields.Add("        protected override bool IsControllerChanging(int controller) => controller switch");
+                fields.Add("        {");
+                foreach (var binding in controllerBindings)
+                    fields.Add($"            {binding.Index} => {binding.Field}.changing,");
+                fields.Add("            _ => false,");
+                fields.Add("        };");
+                fields.Add("");
                 fields.Add("        protected override void SetControllerPage(int controller, int page)");
                 fields.Add("        {");
                 fields.Add("            switch (controller)");
@@ -397,6 +411,12 @@ namespace OpenFairy.UGUI.Editor
                 foreach (var binding in controllerBindings)
                     fields.Add($"                case {binding.Index}: {binding.Field}.page = ({binding.Type})page; break;");
                 fields.Add("            }");
+                fields.Add("        }");
+                fields.Add("");
+                fields.Add("        protected override void InitializeControllers()");
+                fields.Add("        {");
+                foreach (var binding in controllerBindings)
+                    fields.Add($"            {binding.Field}.Initialize();");
                 fields.Add("        }");
             }
 
@@ -409,6 +429,35 @@ namespace OpenFairy.UGUI.Editor
                 var fieldType = FieldType(child, component.PackageId);
                 if (fieldType != null && used.Add(Field(fieldName)))
                     fields.Add($"        public {fieldType} {Field(fieldName)};");
+            }
+
+            foreach (var transition in xml.Transitions)
+            {
+                var field = TransitionField(transition.Name);
+                fields.Add($"        public OpenFairy.UGUI.Transition {field};");
+                var hooks = new List<(string Name, int Item, bool End)>();
+                var labels = new HashSet<string>();
+                var itemIndex = 0;
+                foreach (var item in TransitionItems(xml, transition))
+                {
+                    if (!string.IsNullOrEmpty(item.Label) && labels.Add(item.Label))
+                        hooks.Add((Identifier(item.Label), itemIndex, false));
+                    if (item.Tween && !string.IsNullOrEmpty(item.EndLabel) && labels.Add(item.EndLabel))
+                        hooks.Add((Identifier(item.EndLabel), itemIndex, true));
+                    itemIndex++;
+                }
+                if (hooks.Count == 0)
+                    continue;
+                var namePrefix = Identifier(transition.Name);
+                fields.Add($"        public enum {namePrefix}Hook {{ {string.Join(", ", hooks.AsValueEnumerable().Select(hook => hook.Name).ToArray())} }}");
+                fields.Add($"        public void Set{namePrefix}Hook({namePrefix}Hook label, System.Action callback)");
+                fields.Add("        {");
+                fields.Add("            switch (label)");
+                fields.Add("            {");
+                foreach (var hook in hooks)
+                    fields.Add($"                case {namePrefix}Hook.{hook.Name}: {field}.SetHook({hook.Item}, {(hook.End ? "true" : "false")}, callback); break;");
+                fields.Add("            }");
+                fields.Add("        }");
             }
 
             // FairyGUI 的 GButton/GComboBox 状态控制器固定名为 "button"（GetController("button")），不靠位置。
@@ -569,6 +618,7 @@ namespace OpenFairy.UGUI.Editor
                         Name = name,
                         PageType = pageType,
                         PageIds = pages.AsValueEnumerable().Select(page => page.Id).ToArray(),
+                        Source = element,
                         PageValues = pages.AsValueEnumerable().Select(page => Enum.Parse(pageType, page.Member)).ToArray(),
                         Selected = element.Selected,
                     };
@@ -629,6 +679,7 @@ namespace OpenFairy.UGUI.Editor
                         }
 
                 BuildTransitions(root, xml, byId, component.PackageId);
+                BuildActions(component, comp, controllers, byId);
 
                 // 按钮关联控制器（<Button controller=.. page=..>）：点击换 owner 上该控制器的页，实现 tab/radio 组
                 //（复刻 relatedController）；并给该控制器烘 GearButton，使换页（含程序化）反向同步按钮选中态
@@ -713,6 +764,12 @@ namespace OpenFairy.UGUI.Editor
                         field.SetValue(comp, field.FieldType == typeof(RectTransform) ? go.transform : (object)go.GetComponent(field.FieldType));
                 }
 
+                foreach (var transition in root.GetComponents<Transition>())
+                    comp.GetType().GetField(TransitionField(transition.transitionName)).SetValue(comp, transition);
+                comp.controllerChildren = children.AsValueEnumerable().Select(child => child.Go.GetComponent<Component>())
+                    .Where(child => child != null).ToArray();
+                comp.Initialize();
+
                 var prefabPath = Path.ChangeExtension(AssetPath(component.File), ".prefab");
                 Directory.CreateDirectory(Path.GetDirectoryName(prefabPath));
                 Prefabs[prefabPath] = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
@@ -788,6 +845,7 @@ namespace OpenFairy.UGUI.Editor
                 {
                     go = NewChild(name, parent, typeof(Loader));
                     var loader = go.GetComponent<Loader>();
+                    loader.autoSize = element.LoaderAutoSize;
                     loader.fill = element.Fill switch
                     {
                         Schema.LoaderFill.Scale => Loader.FillType.Scale,
@@ -845,6 +903,8 @@ namespace OpenFairy.UGUI.Editor
             }
 
             SetRect((RectTransform)go.transform, element, size ?? Vector2.zero, parent);
+            if (go.GetComponent<Loader>() is { autoSize: true, sprite: not null } autoLoader)
+                autoLoader.SetNativeSize();
             if (go.GetComponent<TextField>() is { } createdText)
                 createdText.RebuildImages(); // 依赖最终 rect 的排版，须在 SetRect 之后烘焙
             ApplyElement(go, element);
@@ -925,7 +985,13 @@ namespace OpenFairy.UGUI.Editor
                     ConfigureGearAni(gearType, gear, gearXml);
                 else if (kind == Schema.GearKind.FontSize)
                 {
-                    var def = gearXml.Default is { } value ? int.Parse(value) : (int)go.GetComponentInChildren<TextComponent>(true).fontSize;
+                    var text = go.GetComponentInChildren<TextComponent>(true);
+#if FAIRYGUI_TMPRO
+                    var defaultSize = text.enableAutoSizing ? text.fontSizeMax : text.fontSize;
+#else
+                    var defaultSize = text.fontSize;
+#endif
+                    var def = gearXml.Default is { } value ? int.Parse(value) : (int)defaultSize;
                     gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').AsValueEnumerable().Select(value => value == "-" ? def : int.Parse(value)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
                 }
@@ -970,7 +1036,91 @@ namespace OpenFairy.UGUI.Editor
             var controllerType = typeof(Controller<>).MakeGenericType(data.PageType);
             data.Value = Activator.CreateInstance(controllerType);
             controllerType.GetField("gears").SetValue(data.Value, gears);
-            controllerType.GetProperty("page").SetValue(data.Value, data.PageValues[data.Selected]);
+            controllerType.GetMethod("Bake", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                .Invoke(data.Value, new[] { data.PageValues[data.Selected] });
+            var actions = Array.CreateInstance(typeof(ControllerAction<>).MakeGenericType(data.PageType), data.Actions.Count);
+            for (var i = 0; i < data.Actions.Count; i++)
+                actions.SetValue(data.Actions[i], i);
+            controllerType.GetField("actions").SetValue(data.Value, actions);
+        }
+
+        private static void BuildActions(Resource owner, Component comp, Dictionary<string, ControllerData> controllers,
+            Dictionary<string, (Schema.Display Xml, GameObject Go)> byId)
+        {
+            var transitions = comp.GetComponents<Transition>();
+            foreach (var source in controllers.Values)
+                foreach (var xml in source.Source.Actions)
+                {
+                    object action;
+                    if (xml.Type == Schema.ControllerActionType.ChangePage)
+                    {
+                        var target = comp;
+                        var targetXml = owner.ComponentXml;
+                        if (!string.IsNullOrEmpty(xml.ObjectId))
+                        {
+                            if (!byId.TryGetValue(xml.ObjectId, out var child) || child.Xml.Source == null
+                                || !TryResolve(child.Xml.Source, owner.PackageId, out var resource)
+                                || resource.Type != Schema.ResourceKind.Component)
+                                continue; // A deleted target is a no-op in the authored action.
+                            target = child.Go.GetComponent<Component>();
+                            targetXml = resource.ComponentXml;
+                        }
+                        var controllerIndex = Array.FindIndex(targetXml.Controllers, controller => controller.Name == xml.Controller);
+                        if (controllerIndex < 0 || target == comp && controllerIndex == source.Index)
+                            continue;
+                        var map = ChangePageMap(source.Source, targetXml.Controllers[controllerIndex], xml.TargetPage);
+                        var type = typeof(ChangePageAction<>).MakeGenericType(source.PageType);
+                        action = Activator.CreateInstance(type);
+                        type.GetField("target").SetValue(action, target);
+                        type.GetField("controller").SetValue(action, controllerIndex);
+                        var pages = Array.CreateInstance(source.PageType, source.PageValues.Length);
+                        for (var i = 0; i < pages.Length; i++)
+                            pages.SetValue(source.PageValues[i], i);
+                        type.GetField("sourcePages").SetValue(action, pages);
+                        type.GetField("targetPages").SetValue(action, map);
+                    }
+                    else
+                    {
+                        var transition = Array.Find(transitions, value => value.transitionName == xml.Transition);
+                        if (transition == null)
+                            continue;
+                        var type = typeof(PlayTransitionAction<>).MakeGenericType(source.PageType);
+                        action = Activator.CreateInstance(type);
+                        type.GetField("transition").SetValue(action, transition);
+                        type.GetField("playTimes").SetValue(action, xml.Repeat);
+                        type.GetField("delay").SetValue(action, xml.Delay);
+                        type.GetField("stopOnExit").SetValue(action, xml.StopOnExit);
+                    }
+                    var baseType = action.GetType().BaseType;
+                    baseType.GetField("fromPages").SetValue(action, ActionPages(source, xml.FromPage));
+                    baseType.GetField("toPages").SetValue(action, ActionPages(source, xml.ToPage));
+                    source.Actions.Add(action);
+                }
+        }
+
+        private static Array ActionPages(ControllerData controller, string ids)
+        {
+            if (string.IsNullOrEmpty(ids))
+                return null;
+            var indices = ids.Split(',').AsValueEnumerable().Select(id => Array.IndexOf(controller.PageIds, id))
+                .Where(index => index >= 0).ToArray();
+            var pages = Array.CreateInstance(controller.PageType, indices.Length);
+            for (var i = 0; i < indices.Length; i++)
+                pages.SetValue(controller.PageValues[indices[i]], i);
+            return pages;
+        }
+
+        private static int[] ChangePageMap(Schema.Controller source, Schema.Controller target, string targetPage)
+        {
+            var map = new int[source.Pages.Length];
+            for (var i = 0; i < map.Length; i++)
+                map[i] = targetPage switch
+                {
+                    "~1" => i < target.Pages.Length ? i : -1,
+                    "~2" => Math.Max(0, Array.FindIndex(target.Pages, page => page.Name == source.Pages[i].Name)),
+                    _ => Array.FindIndex(target.Pages, page => page.Id == targetPage),
+                };
+            return map;
         }
 
         // gear 的 pages 引用控制器已删的陈旧页 id 时，把该槽连同平行的 values 槽一并剔除——
@@ -1440,6 +1590,8 @@ namespace OpenFairy.UGUI.Editor
             source.itemSize = itemSize;
             source.lineGap = lineGap;
             source.colGap = colGap;
+            source.lineItemCount = element.LineItemCount;
+            source.alignment = TextAlignment(element);
             source.layout = layout switch
             {
                 Schema.ListLayout.SingleRow => ListLayoutType.SingleRow,
@@ -1547,6 +1699,25 @@ namespace OpenFairy.UGUI.Editor
         }
 
         // 动效：XML 时间/时长单位是 24fps 帧；值里 "-" 表示保持当前（NaN）。
+        private static TextAnchor TextAlignment(Schema.Display element) => (element.VAlign, element.Align) switch
+        {
+            (Schema.VAlign.Middle, Schema.Align.Center) => TextAnchor.MiddleCenter,
+            (Schema.VAlign.Middle, Schema.Align.Right) => TextAnchor.MiddleRight,
+            (Schema.VAlign.Middle, _) => TextAnchor.MiddleLeft,
+            (Schema.VAlign.Bottom, Schema.Align.Center) => TextAnchor.LowerCenter,
+            (Schema.VAlign.Bottom, Schema.Align.Right) => TextAnchor.LowerRight,
+            (Schema.VAlign.Bottom, _) => TextAnchor.LowerLeft,
+            (_, Schema.Align.Center) => TextAnchor.UpperCenter,
+            (_, Schema.Align.Right) => TextAnchor.UpperRight,
+            _ => TextAnchor.UpperLeft,
+        };
+
+        private static string TransitionField(string name) => "t_" + Identifier(name);
+
+        private static IEnumerable<Schema.TransitionItem> TransitionItems(Schema.Component component, Schema.Transition transition) =>
+            transition.Items.AsValueEnumerable().Where(item => ParseTransitionType(item.Type) != null
+                && (item.Target == "" || component.DisplayList.AsValueEnumerable().Any(child => child.Id == item.Target))).ToArray();
+
         private static void BuildTransitions(GameObject root, Schema.Component xml, Dictionary<string, (Schema.Display Xml, GameObject Go)> byId, string packageId)
         {
             foreach (var transitionXml in xml.Transitions)
@@ -1558,7 +1729,7 @@ namespace OpenFairy.UGUI.Editor
                 transition.autoPlayDelay = transitionXml.AutoPlayDelay;
 
                 var items = new List<TransitionItem>();
-                foreach (var itemXml in transitionXml.Items)
+                foreach (var itemXml in TransitionItems(xml, transitionXml))
                 {
                     var targetId = itemXml.Target;
                     (Schema.Display Xml, GameObject Go) target = default;
@@ -1578,6 +1749,8 @@ namespace OpenFairy.UGUI.Editor
                         ease = ParseEase(itemXml.Ease),
                         repeat = itemXml.Repeat,
                         yoyo = itemXml.Yoyo,
+                        label = itemXml.Label,
+                        endLabel = itemXml.EndLabel,
                     };
 
                     if (item.tween)
@@ -1954,6 +2127,14 @@ namespace OpenFairy.UGUI.Editor
             text.overflowMode = inputText || element.AutoSize != Schema.TextAutoSize.None
                 ? TextOverflowModes.Overflow
                 : TextOverflowModes.Truncate;
+            if (!inputText)
+            {
+                var authoredFontSize = element.FontSize ?? Settings().fontSize;
+                if (element.AutoSize == Schema.TextAutoSize.Shrink)
+                    TextAutoSize.ConfigureShrink(text, authoredFontSize);
+                else if (element.AutoSize == Schema.TextAutoSize.Ellipsis)
+                    TextAutoSize.ConfigureEllipsis(text, authoredFontSize);
+            }
             text.alignment = (element.VAlign, element.Align) switch
             {
                 (Schema.VAlign.Middle, Schema.Align.Center) => TextAlignmentOptions.Center,
@@ -1994,7 +2175,8 @@ namespace OpenFairy.UGUI.Editor
                 foreach (var guid in AssetDatabase.FindAssets("t:TMP_FontAsset"))
                 {
                     font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(AssetDatabase.GUIDToAssetPath(guid));
-                    if (font.name == name || (font.sourceFontFile != null && font.sourceFontFile.name == name))
+                    if (string.Equals(font.name, name, StringComparison.OrdinalIgnoreCase)
+                        || font.sourceFontFile != null && string.Equals(font.sourceFontFile.name, name, StringComparison.OrdinalIgnoreCase))
                         return font;
                 }
                 throw new InvalidOperationException($"No TMP font asset matches FairyGUI font '{name}'.");
@@ -2259,8 +2441,14 @@ namespace OpenFairy.UGUI.Editor
             return id.Length == 0 || char.IsDigit(id[0]) || Keywords.Contains(id) ? "_" + id : id;
         }
 
-        private static string ClassName(Resource component) =>
-            Identifier(CodeSettings().classNamePrefix + Path.GetFileNameWithoutExtension(component.File));
+        private static string ClassName(Resource component)
+        {
+            var name = Identifier(CodeSettings().classNamePrefix + Path.GetFileNameWithoutExtension(component.File));
+            var duplicated = Resources.Values.AsValueEnumerable().Any(other => other.Type == Schema.ResourceKind.Component
+                && other.PackageId == component.PackageId && other.File != component.File
+                && Identifier(CodeSettings().classNamePrefix + Path.GetFileNameWithoutExtension(other.File)) == name);
+            return duplicated ? name + "_" + Identifier(component.Id) : name;
+        }
 
         private static string Field(string name) => Identifier(CodeSettings().memberNamePrefix + Identifier(name));
 
@@ -2274,10 +2462,10 @@ namespace OpenFairy.UGUI.Editor
         private static string SpritePath(Resource resource) =>
             resource.Type == Schema.ResourceKind.MovieClip ? FramePath(AssetPath(resource.File), 0) : AssetPath(resource.File);
 
-        private static string ScriptPath(string file)
+        private static string ScriptPath(Resource component)
         {
-            var relativePath = Path.GetRelativePath($"{UiRoot}/assets", file);
-            var name = Identifier(CodeSettings().classNamePrefix + Path.GetFileNameWithoutExtension(file));
+            var relativePath = Path.GetRelativePath($"{UiRoot}/assets", component.File);
+            var name = ClassName(component);
             return $"{OutputRoot}/Scripts/{Path.GetDirectoryName(relativePath)}/{name}.cs".Replace('\\', '/');
         }
 

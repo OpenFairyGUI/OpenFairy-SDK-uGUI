@@ -32,6 +32,18 @@ namespace OpenFairy.UGUI
         public FillType fill;
         public AlignType align;
         public VertAlignType vAlign;
+        public bool autoSize;
+
+        public new Sprite sprite
+        {
+            get => base.sprite;
+            set
+            {
+                base.sprite = value;
+                if (autoSize && value != null)
+                    SetNativeSize();
+            }
+        }
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {

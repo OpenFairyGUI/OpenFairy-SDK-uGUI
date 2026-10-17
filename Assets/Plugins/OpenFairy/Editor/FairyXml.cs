@@ -128,7 +128,15 @@ namespace OpenFairy.UGUI.Editor
                     // <jta> 是 movieclip 实例的扩展名标签，归一到 movieclip 类型
                     var tag = xml.Name.LocalName == "jta" ? "movieclip" : xml.Name.LocalName;
                     display.Kind = (Schema.DisplayKind)ParseEnum(typeof(Schema.DisplayKind), tag);
-                    display.Source = display.Src ?? display.Url;
+                    display.Source = display.Src != null && !string.IsNullOrEmpty(display.Package)
+                        ? "ui://" + display.Package + display.Src : display.Src ?? display.Url;
+                    if (xml.Attribute("autoSize") is { } autoSize)
+                    {
+                        if (display.Kind == Schema.DisplayKind.Loader)
+                            display.LoaderAutoSize = autoSize.Value == "true";
+                        else
+                            display.AutoSize = (Schema.TextAutoSize)Convert(autoSize.Value, typeof(Schema.TextAutoSize));
+                    }
                     break;
                 case Schema.Gear gear:
                     gear.Kind = (Schema.GearKind)ParseEnum(typeof(Schema.GearKind), xml.Name.LocalName);
@@ -182,7 +190,7 @@ namespace OpenFairy.UGUI.Editor
                 return value == "" ? Enum.ToObject(type, 0) : ParseEnum(type, value); // 空属性值（如 scale=""）= 缺省
             if (type.IsArray && type.GetElementType().IsEnum)
             {
-                var parts = value.Split(',');
+                var parts = value.Split(',', StringSplitOptions.RemoveEmptyEntries);
                 var array = Array.CreateInstance(type.GetElementType(), parts.Length);
                 for (var i = 0; i < parts.Length; i++)
                     array.SetValue(ParseEnum(type.GetElementType(), parts[i]), i);
@@ -193,6 +201,11 @@ namespace OpenFairy.UGUI.Editor
 
         private static object ParseEnum(Type type, string value)
         {
+            if (type == typeof(Schema.ListLayout))
+            {
+                if (value == "hz") return Schema.ListLayout.SingleRow;
+                if (value == "vt") return Schema.ListLayout.SingleColumn;
+            }
             if (!EnumAliases.TryGetValue(type, out var aliases))
             {
                 aliases = new Dictionary<string, object>();
@@ -286,8 +299,8 @@ namespace OpenFairy.UGUI.Editor.Schema
 
     public enum Scroll
     {
-        [XmlEnum("vertical")] Vertical,
-        [XmlEnum("horizontal")] Horizontal,
+        [XmlEnum("vt")] Vertical,
+        [XmlEnum("hz")] Horizontal,
         [XmlEnum("both")] Both,
     }
 
@@ -358,6 +371,13 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlEnum("flow_hz")] FlowHorizontal,
         [XmlEnum("flow_vt")] FlowVertical,
         [XmlEnum("pagination")] Pagination,
+    }
+
+    public enum ListRenderOrder
+    {
+        Ascent,
+        Descent,
+        Arch,
     }
 
     // 文本自动尺寸。Shrink/Ellipsis 未实现，转换时按 Height 处理。
@@ -500,6 +520,27 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("name")] public string Name;
         [XmlAttribute("selected")] public int Selected;
         [XmlAttribute("pages")] public (string Id, string Name)[] Pages = Array.Empty<(string Id, string Name)>();
+        [XmlElement("action")] public ControllerAction[] Actions = Array.Empty<ControllerAction>();
+    }
+
+    public enum ControllerActionType
+    {
+        [XmlEnum("change_page")] ChangePage,
+        [XmlEnum("play_transition")] PlayTransition,
+    }
+
+    public class ControllerAction
+    {
+        [XmlAttribute("type")] public ControllerActionType Type;
+        [XmlAttribute("fromPage")] public string FromPage;
+        [XmlAttribute("toPage")] public string ToPage;
+        [XmlAttribute("objectId")] public string ObjectId;
+        [XmlAttribute("controller")] public string Controller;
+        [XmlAttribute("targetPage")] public string TargetPage;
+        [XmlAttribute("transition")] public string Transition;
+        [XmlAttribute("repeat")] public int Repeat = 1;
+        [XmlAttribute("delay")] public float Delay;
+        [XmlAttribute("stopOnExit")] public bool StopOnExit;
     }
 
     public class Display
@@ -507,6 +548,10 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("id")] public string Id;
         [XmlAttribute("name")] public string Name;
         [XmlAttribute("src")] public string Src;
+        [XmlAttribute("pkg")] public string Package;
+        [XmlAttribute("lineItemCount")] public int LineItemCount;
+        [XmlAttribute("renderOrder")] public ListRenderOrder RenderOrder;
+        [XmlAttribute("apex")] public int Apex;
         [XmlAttribute("url")] public string Url;
         [XmlAttribute("group")] public string Group;
         [XmlAttribute("defaultItem")] public string DefaultItem;
@@ -568,7 +613,8 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("prompt")] public string Prompt;
         [XmlAttribute("bold")] public bool Bold;
         [XmlAttribute("italic")] public bool Italic;
-        [XmlAttribute("autoSize")] public TextAutoSize AutoSize = TextAutoSize.Both;
+        public TextAutoSize AutoSize = TextAutoSize.Both;
+        public bool LoaderAutoSize;
         [XmlAttribute("singleLine")] public bool SingleLine;
         [XmlAttribute("font")] public string Font;
         // Optional TMP font override; the backend is selected by FAIRYGUI_TMPRO.
@@ -668,5 +714,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("endValue")] public string EndValue;
         [XmlAttribute("value")] public string Value;
         [XmlAttribute("path")] public string Path;
+        [XmlAttribute("label")] public string Label;
+        [XmlAttribute("label2")] public string EndLabel;
     }
 }

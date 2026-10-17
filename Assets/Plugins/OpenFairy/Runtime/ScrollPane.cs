@@ -13,13 +13,14 @@ namespace OpenFairy.UGUI
     {
         private const float Deceleration = 0.967f;   // 每 60fps 帧的速度衰减（同 FairyGUI）
         private const float SpringBack = 0.0333f;     // 越界回弹时间常数
-        private const float WheelStep = 40f;          // 单档滚轮位移
+        public float scrollStep = 40f;          // 单档滚轮位移
         private const float BounceMargin = 0.25f;     // 越界拖动阻尼
         private const float MinGrip = 20f;            // grip 最短像素长（避免内容极长时 grip 消失）
         internal const string HitName = "__scrollHit"; // 透明射线面保留名（FairyGUI 不产出双下划线名，不会撞名）
 
         public bool bounceEffect = true;
         public bool mouseWheelEnabled = true;
+        internal bool loopHorizontal;
         public UnityEvent onScroll = new();
 
         private RectTransform _viewport;
@@ -30,6 +31,10 @@ namespace OpenFairy.UGUI
         private Vector2 _startContent, _startPointer;
         private Vector2 _velocity;
         private Vector2 _lastPos;
+        private Vector2? _explicitContentSize;
+        private Vector2? _scrollTarget;
+        private Vector2 _scrollStart;
+        private float _scrollElapsed;
         private bool _dragging;
         private int _motionVersion;
 
@@ -105,11 +110,58 @@ namespace OpenFairy.UGUI
 
         private Vector2 MaxScroll => new(Mathf.Max(0, _contentSize.x - _viewSize.x), Mathf.Max(0, _contentSize.y - _viewSize.y));
 
-        private static Vector2 ClampToBounds(Vector2 pos, Vector2 max) => new(Mathf.Clamp(pos.x, -max.x, 0), Mathf.Clamp(pos.y, 0, max.y));
+        private Vector2 ClampToBounds(Vector2 pos, Vector2 max) =>
+            new(loopHorizontal ? pos.x : Mathf.Clamp(pos.x, -max.x, 0), Mathf.Clamp(pos.y, 0, max.y));
+
+        public Vector2 viewportSize => _viewport.rect.size;
+        public Vector2 contentSize => _contentSize;
+        public Vector2 maxScroll => MaxScroll;
+        // Positive design coordinates: right/down.
+        public Vector2 position => new(-_content.anchoredPosition.x, _content.anchoredPosition.y);
+
+        // Virtual children only cover the visible interval; their transforms
+        // cannot define the logical content size.
+        public void SetContentSize(Vector2 size)
+        {
+            _explicitContentSize = size;
+            RefreshContent();
+        }
+
+        public void SetPosition(Vector2 position, bool animated = false)
+        {
+            StopMotion();
+            var target = ClampToBounds(new Vector2(-position.x, position.y), MaxScroll);
+            if (animated)
+            {
+                _scrollStart = _content.anchoredPosition;
+                _scrollTarget = target;
+                _scrollElapsed = 0;
+                RunMotion(_motionVersion).Forget();
+                return;
+            }
+            _content.anchoredPosition = target;
+            UpdateGrips();
+            onScroll.Invoke();
+        }
+
+        // Keep dragging and inertia continuous when a loop or measured row
+        // changes the content origin. This does not dispatch another onScroll.
+        internal void Rebase(Vector2 shift)
+        {
+            var delta = new Vector2(shift.x, -shift.y);
+            _content.anchoredPosition += delta;
+            _startContent += delta;
+            _lastPos += delta;
+            _scrollStart += delta;
+            if (_scrollTarget.HasValue)
+                _scrollTarget += delta;
+            UpdateGrips();
+        }
 
         public void RefreshContent()
         {
-            _contentSize = ContentBounds(_content);
+            _viewSize = _viewport.rect.size;
+            _contentSize = _explicitContentSize ?? ContentBounds(_content);
             _content.sizeDelta = _contentSize;
             EnsureHit();
             UpdateGrips();
@@ -138,7 +190,7 @@ namespace OpenFairy.UGUI
             if (e.button != PointerEventData.InputButton.Left)
                 return;
             RefreshContent(); // 内容可能在 Attach 之后被 ListSource.Fill 填充，起拖时重算滚动范围
-            _motionVersion++;
+            StopMotion();
             _dragging = true;
             _velocity = Vector2.zero;
             _startContent = _content.anchoredPosition;
@@ -155,7 +207,8 @@ namespace OpenFairy.UGUI
             var max = MaxScroll;
             if (bounceEffect)
             {
-                pos.x = RubberBand(pos.x, -max.x, 0);
+                if (!loopHorizontal)
+                    pos.x = RubberBand(pos.x, -max.x, 0);
                 pos.y = RubberBand(pos.y, 0, max.y);
             }
             else
@@ -183,9 +236,10 @@ namespace OpenFairy.UGUI
             var max = MaxScroll;
             var pos = _content.anchoredPosition;
             if (max.y > 0)
-                pos.y = Mathf.Clamp(pos.y - e.scrollDelta.y * WheelStep, 0, max.y);
+                pos.y = Mathf.Clamp(pos.y - e.scrollDelta.y * scrollStep, 0, max.y);
             else if (max.x > 0)
-                pos.x = Mathf.Clamp(pos.x + e.scrollDelta.y * WheelStep, -max.x, 0);
+                pos.x = loopHorizontal ? pos.x + e.scrollDelta.y * scrollStep
+                    : Mathf.Clamp(pos.x + e.scrollDelta.y * scrollStep, -max.x, 0);
             _content.anchoredPosition = pos;
             StopMotion();
             UpdateGrips();
@@ -246,6 +300,7 @@ namespace OpenFairy.UGUI
         {
             _motionVersion++;
             _velocity = Vector2.zero;
+            _scrollTarget = null;
         }
 
         private async UniTask RunMotion(int version)
@@ -264,7 +319,15 @@ namespace OpenFairy.UGUI
             var max = MaxScroll;
             var target = ClampToBounds(pos, max);
 
-            if (pos != target)
+            if (_scrollTarget.HasValue)
+            {
+                _scrollElapsed += Time.unscaledDeltaTime;
+                float progress = Mathf.Min(1, _scrollElapsed / 0.3f);
+                pos = Vector2.LerpUnclamped(_scrollStart, _scrollTarget.Value, 1 - Mathf.Pow(1 - progress, 3));
+                if (progress == 1)
+                    _scrollTarget = null;
+            }
+            else if (pos != target)
             {
                 // 越界：弹回边界（无视惯性）。
                 pos = Vector2.Lerp(pos, target, Mathf.Clamp01(Time.unscaledDeltaTime / SpringBack));
