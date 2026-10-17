@@ -23,8 +23,8 @@ namespace OpenFairy.UGUI
         private readonly Dictionary<GameObject, int> _indices = new();
         private readonly Dictionary<int, GameObject> _rebased = new();
         private readonly List<int> _release = new();
-        private ScrollPane _pane;
-        private RectTransform _content;
+        public ScrollPane scrollPane;
+        public RectTransform content;
         private Action<GameObject, int> _setup;
         private Func<GameObject, int, float> _measureHeight;
         private float[] _heights = Array.Empty<float>();
@@ -37,7 +37,7 @@ namespace OpenFairy.UGUI
         private int _physicalCount;
         private int _centerCycle;
 
-        public int count { get; private set; }
+        [field: SerializeField] public int count { get; internal set; }
         public int version { get; private set; }
         public bool isVirtual => _virtual;
         public IReadOnlyDictionary<int, GameObject> visibleItems => _visible;
@@ -50,11 +50,11 @@ namespace OpenFairy.UGUI
                 throw new InvalidOperationException("Loop lists must use SingleRow layout.");
             _virtual = true;
             _loop = loop;
-            _pane = ScrollPane.Attach((RectTransform)transform);
-            _pane.loopHorizontal = loop;
-            _content = List.Container((RectTransform)transform);
-            _pane.onScroll.RemoveListener(OnScroll);
-            _pane.onScroll.AddListener(OnScroll);
+            scrollPane ??= ScrollPane.Attach((RectTransform)transform);
+            scrollPane.loopHorizontal = loop;
+            content = scrollPane.content;
+            scrollPane.onScroll.RemoveListener(OnScroll);
+            scrollPane.onScroll.AddListener(OnScroll);
         }
 
         public void Fill(int count, Action<GameObject, int> setup, bool rebindSelection = true,
@@ -71,9 +71,9 @@ namespace OpenFairy.UGUI
             }
 
             bool first = _setup == null;
-            bool atBottom = !first && (_pane.maxScroll.y == 0 || _pane.percY >= 1);
+            bool atBottom = !first && (scrollPane.maxScroll.y == 0 || scrollPane.percY >= 1);
             int anchor = FirstPhysicalIndex();
-            float anchorOffset = _pane.position.y - ItemPosition(anchor).y;
+            float anchorOffset = scrollPane.position.y - ItemPosition(anchor).y;
             this.count = count;
             _setup = setup;
             _measureHeight = measureHeight;
@@ -91,12 +91,12 @@ namespace OpenFairy.UGUI
 
             ConfigureExtent();
             if (_loop && first && count > 0)
-                _pane.SetPosition(new Vector2(_centerCycle * count * (itemSize.x + colGap), 0));
+                scrollPane.SetPosition(new Vector2(_centerCycle * count * (itemSize.x + colGap), 0));
             else if (measureHeight != null)
-                _pane.SetPosition(new Vector2(0, atBottom ? _pane.maxScroll.y
+                scrollPane.SetPosition(new Vector2(0, atBottom ? scrollPane.maxScroll.y
                     : ItemPosition(Math.Min(anchor, Math.Max(0, count - 1))).y + anchorOffset));
             else
-                _pane.SetPosition(_pane.position);
+                scrollPane.SetPosition(scrollPane.position);
             UpdateVisible(rebindSelection);
         }
 
@@ -104,7 +104,7 @@ namespace OpenFairy.UGUI
         {
             var list = (RectTransform)transform;
             var container = List.Container(list);
-            var pane = list.GetComponent<ScrollPane>();
+            var pane = scrollPane;
             Vector2 viewSize = pane != null ? pane.viewportSize : container.rect.size;
             ReleaseChildren();
             _indices.Clear();
@@ -136,18 +136,18 @@ namespace OpenFairy.UGUI
                 contentSize = Vector2.Max(contentSize, new Vector2(rt.anchoredPosition.x + rt.rect.width,
                     -rt.anchoredPosition.y + rt.rect.height));
             }
-            Vector2 offset = AlignmentOffset(viewSize, contentSize);
+            Vector2 offset = _contentOffset = AlignmentOffset(viewSize, contentSize);
             foreach (var item in _indices.Keys)
                 ((RectTransform)item.transform).anchoredPosition += new Vector2(offset.x, -offset.y);
             if (_poolRoot != null)
                 _poolRoot.SetAsLastSibling();
-            list.GetComponent<ScrollPane>()?.RefreshContent();
+            scrollPane?.RefreshContent();
             if (rebindSelection && list.GetComponent<ListSelection>() is { enabled: true } selection)
                 selection.Rebind();
         }
 
         private bool Horizontal => layout == ListLayoutType.SingleRow || layout == ListLayoutType.FlowVertical;
-        private float Position => Horizontal ? _pane.position.x : _pane.position.y;
+        private float Position => Horizontal ? scrollPane.position.x : scrollPane.position.y;
         private float ViewExtent => Horizontal ? _viewport.x : _viewport.y;
         private float ItemExtent => Horizontal ? itemSize.x : itemSize.y;
         private float Gap => Horizontal ? colGap : lineGap;
@@ -155,7 +155,7 @@ namespace OpenFairy.UGUI
 
         private void ConfigureExtent()
         {
-            _viewport = _pane.viewportSize;
+            _viewport = scrollPane.viewportSize;
             float crossSize = Horizontal ? itemSize.y : itemSize.x;
             float crossGap = Horizontal ? lineGap : colGap;
             float crossView = Horizontal ? _viewport.y : _viewport.x;
@@ -175,7 +175,7 @@ namespace OpenFairy.UGUI
             float cross = crossLanes == 0 ? 0 : crossLanes * crossSize + (crossLanes - 1) * crossGap;
             var size = Horizontal ? new Vector2(extent, cross) : new Vector2(cross, extent);
             _contentOffset = AlignmentOffset(_viewport, size);
-            _pane.SetContentSize(size);
+            scrollPane.SetContentSize(size);
         }
 
         private Vector2 AlignmentOffset(Vector2 view, Vector2 size) => new(
@@ -224,7 +224,7 @@ namespace OpenFairy.UGUI
                 var shift = VirtualListLayout.LoopRebase(Position, count, ItemExtent + Gap, _centerCycle);
                 if (shift.SlotShift != 0)
                 {
-                    _pane.Rebase(new Vector2(shift.PixelShift, 0));
+                    scrollPane.Rebase(new Vector2(shift.PixelShift, 0));
                     _rebased.Clear();
                     foreach (var pair in _visible)
                     {
@@ -264,12 +264,12 @@ namespace OpenFairy.UGUI
                 }
                 int anchor = FirstPhysicalIndex();
                 float offset = _measureHeight == null ? 0 : Position - ItemPosition(anchor).y;
-                bool atBottom = _measureHeight != null && (_pane.maxScroll.y == 0 || _pane.percY >= 1);
+                bool atBottom = _measureHeight != null && (scrollPane.maxScroll.y == 0 || scrollPane.percY >= 1);
                 for (int slot = range.First; slot < range.End; slot++)
                 {
                     if (_visible.ContainsKey(slot))
                         continue;
-                    var item = GetItem(_content);
+                    var item = GetItem(content);
                     int index = VirtualListLayout.LogicalIndex(slot, count);
                     _visible.Add(slot, item);
                     _indices[item] = index;
@@ -290,7 +290,7 @@ namespace OpenFairy.UGUI
                 {
                     RebuildStarts();
                     ConfigureExtent();
-                    _pane.Rebase(new Vector2(0, Position - (atBottom ? _pane.maxScroll.y : ItemPosition(anchor).y + offset)));
+                    scrollPane.Rebase(new Vector2(0, Position - (atBottom ? scrollPane.maxScroll.y : ItemPosition(anchor).y + offset)));
                 }
                 foreach (var pair in _visible)
                     SetItemPosition(pair.Value, pair.Key);
@@ -330,18 +330,38 @@ namespace OpenFairy.UGUI
             float position = center ? start + size / 2 - ViewExtent / 2
                 : size > ViewExtent || start < Position ? start
                 : start + size > Position + ViewExtent ? start + size - ViewExtent : Position;
-            _pane.SetPosition(Horizontal ? new Vector2(position, _pane.position.y) : new Vector2(_pane.position.x, position), animated);
+            scrollPane.SetPosition(Horizontal ? new Vector2(position, scrollPane.position.y) : new Vector2(scrollPane.position.x, position), animated);
+        }
+
+        internal Vector2 SnapPosition(Vector2 position)
+        {
+            if (count == 0) return Vector2.zero;
+            var axis = Horizontal ? 0 : 1;
+            if (_measureHeight == null)
+                position[axis] = MainOffset + Mathf.Round((position[axis] - MainOffset) / (ItemExtent + Gap)) * (ItemExtent + Gap);
+            else
+            {
+                var value = position.y - MainOffset;
+                var index = Array.BinarySearch(_starts, value);
+                if (index < 0)
+                {
+                    index = ~index;
+                    if (index > 0 && (index == _starts.Length || value - _starts[index - 1] < _starts[index] - value)) index--;
+                }
+                position.y = MainOffset + _starts[Math.Min(index, count - 1)];
+            }
+            return position;
         }
 
         private void LateUpdate()
         {
-            if (_virtual && _setup != null && _viewport != _pane.viewportSize)
+            if (_virtual && _setup != null && _viewport != scrollPane.viewportSize)
                 Fill(count, _setup, true, _measureHeight);
             else if (_measureHeight != null)
             {
                 int anchor = FirstPhysicalIndex();
                 float offset = Position - ItemPosition(anchor).y;
-                bool atBottom = _pane.maxScroll.y == 0 || _pane.percY >= 1;
+                bool atBottom = scrollPane.maxScroll.y == 0 || scrollPane.percY >= 1;
                 bool changed = false;
                 foreach (var pair in _visible)
                 {
@@ -357,7 +377,7 @@ namespace OpenFairy.UGUI
                 {
                     RebuildStarts();
                     ConfigureExtent();
-                    _pane.Rebase(new Vector2(0, Position - (atBottom ? _pane.maxScroll.y : ItemPosition(anchor).y + offset)));
+                    scrollPane.Rebase(new Vector2(0, Position - (atBottom ? scrollPane.maxScroll.y : ItemPosition(anchor).y + offset)));
                     UpdateVisible(true);
                 }
             }
@@ -369,7 +389,7 @@ namespace OpenFairy.UGUI
             for (int i = content.childCount - 1; i >= 0; i--)
             {
                 var child = content.GetChild(i);
-                if (child.name != ScrollPane.HitName && child.name != PoolName)
+                if (child.name != PoolName)
                 {
                     EnsurePool();
                     _pool.Release(child.gameObject);
@@ -440,8 +460,8 @@ namespace OpenFairy.UGUI
 
         private void OnDestroy()
         {
-            if (_pane != null)
-                _pane.onScroll.RemoveListener(OnScroll);
+            if (scrollPane != null)
+                scrollPane.onScroll.RemoveListener(OnScroll);
             _pool?.Clear();
         }
     }

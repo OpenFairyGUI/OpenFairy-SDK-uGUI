@@ -16,6 +16,7 @@ namespace OpenFairy.UGUI
         private readonly GameObject _content;
         private readonly RectTransform _contentRt;
         private readonly RectTransform _list;
+        private readonly RectTransform _items;
         private readonly GameObject _itemPrefab;
         private readonly Vector2 _itemSize;
         private readonly float _authoredContentH;
@@ -31,6 +32,7 @@ namespace OpenFairy.UGUI
             _content = UnityEngine.Object.Instantiate(contentPrefab);
             _contentRt = (RectTransform)_content.transform;
             _list = (RectTransform)_contentRt.Find("list");
+            _items = List.Container(_list);
             _itemPrefab = itemPrefab;
             _itemSize = ((RectTransform)itemPrefab.transform).sizeDelta;
             _authoredContentH = _contentRt.rect.height; // Layout 用 authored 高度重算，避免重开时累加
@@ -52,13 +54,12 @@ namespace OpenFairy.UGUI
                 },
                 UnityEngine.Object.Destroy,
                 false);
-            for (var i = _list.childCount - 1; i >= 0; i--)
-                _itemPool.Release(_list.GetChild(i).gameObject);
+            for (var i = _items.childCount - 1; i >= 0; i--)
+                _itemPool.Release(_items.GetChild(i).gameObject);
             // 菜单项点击 + 尺寸由 AddItem/Layout 自管，去掉列表自带的选择/自挂滚动接线。
             if (_list.GetComponent<ListSelection>() is { } listSelection)
                 listSelection.enabled = false;
-            if (_list.GetComponent<ScrollPaneHost>() is { } host)
-                host.enabled = false;
+            if (_list.TryGetComponent<ScrollPane>(out var pane)) pane.enabled = false;
             _content.SetActive(false);
         }
 
@@ -67,7 +68,7 @@ namespace OpenFairy.UGUI
         {
             var index = _count++;
             var itemGo = _itemPool.Get();
-            itemGo.transform.SetParent(_list, false);
+            itemGo.transform.SetParent(_items, false);
             itemGo.SetActive(true);
             var rt = (RectTransform)itemGo.transform;
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
@@ -82,8 +83,8 @@ namespace OpenFairy.UGUI
 
         public void ClearItems()
         {
-            for (var i = _list.childCount - 1; i >= 0; i--)
-                _itemPool.Release(_list.GetChild(i).gameObject);
+            for (var i = _items.childCount - 1; i >= 0; i--)
+                _itemPool.Release(_items.GetChild(i).gameObject);
             _count = 0;
         }
 
@@ -145,6 +146,7 @@ namespace OpenFairy.UGUI
         {
             var listH = _count * _itemSize.y;
             _list.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, listH);
+            if (_items != _list) _items.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, listH);
             _contentRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, _authoredContentH + (listH - _authoredListH));
         }
     }

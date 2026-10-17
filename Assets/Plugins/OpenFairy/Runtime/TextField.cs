@@ -118,7 +118,7 @@ namespace OpenFairy.UGUI
 
         protected override void OnEnable()
         {
-            raycastTarget = _onClickLink != null;
+            raycastTarget = _onClickLink != null || GetComponent<Tooltip>() != null;
             // 位图字体也需要挂一个动态字体占位：UI.Text.UpdateGeometry 在 font == null 时不生成网格。
             if (font == null)
             {
@@ -493,6 +493,28 @@ namespace OpenFairy.UGUI
         private readonly List<Character> _pendingCharacters = new();
         private readonly List<Character> _characters = new();
         private readonly List<Line> _lines = new();
+
+        public override float preferredWidth
+        {
+            get
+            {
+                EnsureLayout();
+                var width = 0f;
+                foreach (var line in _lines) width = Mathf.Max(width, line.Width);
+                return width + 4;
+            }
+        }
+
+        public override float preferredHeight
+        {
+            get
+            {
+                EnsureLayout();
+                var height = 4f;
+                foreach (var line in _lines) height += line.Height;
+                return height + Mathf.Max(0, _lines.Count - 1) * (leading - 1);
+            }
+        }
 
         private void Layout()
         {

@@ -95,7 +95,7 @@ namespace OpenFairy.UGUI
 
         public override void OnPointerClick(PointerEventData eventData)
         {
-            if (eventData.button != PointerEventData.InputButton.Left || grayed)
+            if (eventData.button != PointerEventData.InputButton.Left)
                 return;
             // 展开时点按钮外区域由 Root 的透明 blocker 收起（blocker 在按钮之上截获点击），故这里只管展开。
             RefreshState();
@@ -140,9 +140,8 @@ namespace OpenFairy.UGUI
             // 下拉项点击 + 滚动由 ComboBox 自管，去掉列表自带的选择/自挂滚动接线（否则未超可见数也会挂 ScrollPane）。
             if (list.GetComponent<ListSelection>() is { } listSelection)
                 listSelection.enabled = false;
-            if (list.GetComponent<ScrollPaneHost>() is { } host)
-                host.enabled = false;
             var source = list.GetComponent<ListSource>();
+            if (source.scrollPane != null) source.scrollPane.enabled = false;
             source.Fill(_items.Length, (itemGo, i) =>
             {
                 var button = itemGo.GetComponent<ButtonBase>();
@@ -158,7 +157,7 @@ namespace OpenFairy.UGUI
             // 背景等其余子件带容器 relation，已烘成拉伸锚点，随下拉根缩放自动跟随。
             // 项数超出可见数：viewport 已被裁到可见高，内容更高，挂 ScrollPane 支持拖动/滚轮滚动。
             if (_items.Length > visible)
-                ScrollPane.Attach(list);
+                ScrollPane.Attach(list).enabled = true;
         }
 
         private void Select(int index)

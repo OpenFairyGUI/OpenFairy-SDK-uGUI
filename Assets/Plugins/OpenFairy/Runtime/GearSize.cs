@@ -1,6 +1,7 @@
 using System;
 using DG.Tweening;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace OpenFairy.UGUI
 {
@@ -20,8 +21,11 @@ namespace OpenFairy.UGUI
 
         private static void SetSize(RectTransform rt, Vector2 size)
         {
-            rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
-            rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
+            var fitter = rt.GetComponent<ContentSizeFitter>();
+            if (fitter == null || fitter.horizontalFit == ContentSizeFitter.FitMode.Unconstrained)
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
+            if (fitter == null || fitter.verticalFit == ContentSizeFitter.FitMode.Unconstrained)
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
         }
 
         public override void Apply(T page)

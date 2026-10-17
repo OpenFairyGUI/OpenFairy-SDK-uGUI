@@ -1,3 +1,4 @@
+using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
 
@@ -9,12 +10,21 @@ namespace OpenFairy.UGUI
     public class TextInput : Component
     {
         public InputField field;
+#if !FAIRYGUI_TMPRO
+        [SerializeField] internal InputEditing editing;
+#endif
         public InputSubmit submit; // 挂在 field 上的 Enter 提交中继（Migrate 烘焙）
 
         public string text
         {
             get => field.text;
-            set => field.SetTextWithoutNotify(value); // 复刻 FairyGUI：程序化赋值不发 onChanged，避免回写自触发
+            set
+            {
+#if !FAIRYGUI_TMPRO
+                if (editing != null) { editing.SetTextWithoutNotify(value); return; }
+#endif
+                field.SetTextWithoutNotify(value);
+            }
         }
 
         public bool password

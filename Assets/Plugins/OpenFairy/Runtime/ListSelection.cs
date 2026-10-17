@@ -46,7 +46,7 @@ namespace OpenFairy.UGUI
             for (var i = 0; i < content.childCount; i++)
             {
                 var child = content.GetChild(i);
-                if (child.name == ScrollPane.HitName || child.name == ListSource.PoolName)
+                if (child.name == ListSource.PoolName)
                     continue;
                 int index = _source != null && _source.TryGetItemIndex(child.gameObject, out int logical)
                     ? logical : _items.Count;

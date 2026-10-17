@@ -4,6 +4,19 @@
 
 ## 当前结论
 
+### 2026-10-18 嵌入包能力与验证
+
+- 滚动交互使用原生 `ScrollRect`/`Scrollbar`，保留虚拟窗口、对象池、变高行、循环索引和选择；显式滚条、分页/吸附标志与页面控制器在导入期烘焙。
+- 增加原生 UI 对象捕获、对象模糊和容器颜色滤镜，共用捕获、预乘透明度、遮罩及释放生命周期。管线通过同步渲染回调接入；刷新不挂在 `Canvas.willRenderCanvases` 上。捕获扫描使用对象内复用 List，网格仍按引擎借用语义读取。
+- 提示框使用作者配置的 Label prefab 直接引用。普通文本自动尺寸交给原生 `ContentSizeFitter`；根关系与尺寸 gear 尊重内容拥有的自动轴。立即显示提示框时刷新实际文字布局节点，避免非布局容器阻断子树遍历。
+- 输入框通过 Input System 支持焦点期五步撤销/重做、选区恢复和单行 Tab 导航，程序赋值清除历史。灰显保留视觉语义，命中与点击由独立触摸/交互通道决定。
+- 生成器支持发布命名空间前缀，避开 Unity 原生序列化保留字段。未绘图的 Graph 节点生成 `RectTransform` 引用。Transition 使用各自动画的帧率，缺省仍为 24。
+- 嵌入包真实 Test Runner 已通过 71 项 PlayMode 与 44 项 Editor 测试。此处对应 TMP 后端及这些包内测试；传统 Basics/Transition 的历史 golden 套件没有重新运行，不能合并计数。两种文字后端另有离线编译检查，不能替代原生行为验证。
+- 捕获相机的 `useOcclusionCulling` 在新引擎有弃用警告，目前没有等价的逐相机新接口；保留隔离捕获的明确关闭语义。`CanvasRenderer.GetMesh()` 未弃用，不增加网格复制或改变借用所有权。
+- 后续已知缺口：位图字体在同域改写 glyph 后需失效已有查找缓存；滤镜的自动运行接入必须晚于 `Relation` 的 `PostLateUpdate` 同步，不能直接放普通 `LateUpdate` 或 `willRenderCanvases`。本次测试不证明这些尚未接入的路径。
+
+### 既有示例状态
+
 - `Basics` demo 的静态渲染、主要交互、窗口/弹窗、拖拽、滚动、下拉、文本链接、列表填充、翻页动效已完成。
 - `Transition` demo 的主要动效已完成，路径、嵌套 transition、滤镜、shake、循环/yoyo 等运行时行为已覆盖。
 - 当前公开 Unity 菜单只保留：

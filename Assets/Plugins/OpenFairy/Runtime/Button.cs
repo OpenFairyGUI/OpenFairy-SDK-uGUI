@@ -85,7 +85,7 @@ namespace OpenFairy.UGUI
             }
         }
 
-        // 复刻 GButton.grayed（HandleGrayedChanged）：置灰后进 disabled/selectedDisabled 页并拦截交互（守卫在各 handler 里）。
+        // Graying selects the disabled visual pages; it does not disable pointer input.
         public bool grayed
         {
             get => _grayed;
@@ -152,14 +152,14 @@ namespace OpenFairy.UGUI
 
         private bool _down, _over;
 
-        // grayed 只拦视觉/动作，指针状态照常维护——否则灰显期间移入移出后 _down/_over 残留，恢复时状态画错。
+        // Keep pointer state while grayed, including the authored pressed-disabled page.
         public void OnPointerDown(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left) // 复刻 GButton.__touchBegin：仅左键
                 return;
             _down = true;
-            if (!grayed && mode == ButtonMode.Common) // 仅 Common 按下进 down 态，Check/Radio 按住不变
-                SetState(VisualState.Down);
+            if (mode == ButtonMode.Common)
+                SetState(grayed && StatePages.HasDisabled ? VisualState.SelectedDisabled : VisualState.Down);
         }
 
         public void OnPointerUp(PointerEventData eventData)
@@ -167,28 +167,28 @@ namespace OpenFairy.UGUI
             if (eventData.button != PointerEventData.InputButton.Left)
                 return;
             _down = false;
-            if (!grayed && mode == ButtonMode.Common)
+            if (mode == ButtonMode.Common)
                 RefreshState();
         }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
             _over = true;
-            if (!grayed && !_down)
+            if (!_down)
                 RefreshState();
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             _over = false;
-            if (!grayed && !_down)
+            if (!_down)
                 RefreshState();
         }
 
         // 复刻 GButton.__click：Check/Radio 经 Selected setter 翻选并驱动关联控制器；Common 直接换页。
         public virtual void OnPointerClick(PointerEventData eventData)
         {
-            if (eventData.button != PointerEventData.InputButton.Left || grayed)
+            if (eventData.button != PointerEventData.InputButton.Left)
                 return;
             if (mode == ButtonMode.Check)
             {

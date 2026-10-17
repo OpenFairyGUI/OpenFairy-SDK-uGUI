@@ -1,4 +1,4 @@
-using Cysharp.Threading.Tasks;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
@@ -6,472 +6,313 @@ using UnityEngine.UI;
 
 namespace OpenFairy.UGUI
 {
-    // 运行时滚动（复刻 FairyGUI ScrollPane 的交互部分）：把 viewport（RectMask2D）里的内容包进一个 content 容器，
-    // 拖动/滚轮/拖动滚动条/点轨道翻页时在内容边界内平移 content，越界时橡皮筋回弹，松手带惯性衰减。
-    // Migrate 给 overflow=scroll 的根挂 ScrollPaneHost，运行时自挂本组件——转换后的滚动组件无需业务胶水即可滚动。
-    public sealed class ScrollPane : UIBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IScrollHandler
+    public sealed class ScrollPane : ScrollRect, IPointerEnterHandler, IPointerExitHandler
     {
-        private const float Deceleration = 0.967f;   // 每 60fps 帧的速度衰减（同 FairyGUI）
-        private const float SpringBack = 0.0333f;     // 越界回弹时间常数
-        public float scrollStep = 40f;          // 单档滚轮位移
-        private const float BounceMargin = 0.25f;     // 越界拖动阻尼
-        private const float MinGrip = 20f;            // grip 最短像素长（避免内容极长时 grip 消失）
-        internal const string HitName = "__scrollHit"; // 透明射线面保留名（FairyGUI 不产出双下划线名，不会撞名）
-
-        public bool bounceEffect = true;
         public bool mouseWheelEnabled = true;
-        internal bool loopHorizontal;
+        public bool touchEffect = true;
+        public bool snapToItem;
+        public bool pageMode;
+        public ListSource source;
+        public Component pageOwner;
+        public int pageController = -1;
+        public int pageCount;
+        public CanvasGroup[] autoHideBars = System.Array.Empty<CanvasGroup>();
         public UnityEvent onScroll = new();
 
-        private RectTransform _viewport;
-        private RectTransform _content;
-        private RectTransform _hit;
-        private RectTransform _vtBar, _vtGrip, _hzBar, _hzGrip;
-        private Vector2 _contentSize, _viewSize;
-        private Vector2 _startContent, _startPointer;
-        private Vector2 _velocity;
-        private Vector2 _lastPos;
-        private Vector2? _explicitContentSize;
-        private Vector2? _scrollTarget;
-        private Vector2 _scrollStart;
-        private float _scrollElapsed;
-        private bool _dragging;
-        private int _motionVersion;
+        private bool _loop, _dragging, _updating, _notifying, _autoAxes, _needsSnap;
+        private Vector2? _explicitSize;
+        private Vector2 _previousPosition, _notifiedPosition, _notifiedSize, _notifiedView;
+        private Vector2 _scrollStart, _scrollTarget;
+        private Tween _scrollTween;
+        private bool _hovered, _barDragging;
+        private MovementType _boundedMovement = MovementType.Elastic;
 
-        // 复刻 ScrollPane.percX/percY：滚动位置比例（0 顶/左，1 底/右）。setter 直接跳转（不带惯性）。
-        public float percX
+        public float scrollStep { get => scrollSensitivity / 2; set => scrollSensitivity = value * 2; }
+        public bool bounceEffect
         {
-            get => MaxScroll.x > 0 ? Mathf.Clamp01(-_content.anchoredPosition.x / MaxScroll.x) : 0;
-            set => SetPercent(true, value);
+            get => movementType == MovementType.Elastic;
+            set
+            {
+                _boundedMovement = value ? MovementType.Elastic : MovementType.Clamped;
+                movementType = _loop ? MovementType.Unrestricted : _boundedMovement;
+            }
+        }
+        internal bool loopHorizontal
+        {
+            get => _loop;
+            set
+            {
+                if (_loop == value) return;
+                if (value) _boundedMovement = movementType;
+                _loop = value;
+                if (value)
+                {
+                    horizontal = true;
+                    vertical = false;
+                    movementType = MovementType.Unrestricted;
+                }
+                else movementType = _boundedMovement;
+            }
         }
 
-        public float percY
+        public Vector2 viewportSize => viewport.rect.size;
+        public Vector2 contentSize => content.rect.size;
+        public Vector2 maxScroll => Vector2.Max(Vector2.zero, contentSize - viewportSize);
+        public Vector2 position => new(-content.anchoredPosition.x, content.anchoredPosition.y);
+        public float percX { get => maxScroll.x > 0 ? Mathf.Clamp01(position.x / maxScroll.x) : 0; set => SetPosition(new(value * maxScroll.x, position.y)); }
+        public float percY { get => maxScroll.y > 0 ? Mathf.Clamp01(position.y / maxScroll.y) : 0; set => SetPosition(new(position.x, value * maxScroll.y)); }
+        internal bool updatingPage => _notifying;
+
+        public void OnPointerEnter(PointerEventData data) { _hovered = true; ShowBars(); }
+        public void OnPointerExit(PointerEventData data) { _hovered = false; ShowBars(); }
+        internal void SetBarDragging(bool dragging)
         {
-            get => MaxScroll.y > 0 ? Mathf.Clamp01(_content.anchoredPosition.y / MaxScroll.y) : 0;
-            set => SetPercent(false, value);
+            if (_barDragging && !dragging) _needsSnap = snapToItem || pageMode;
+            _barDragging = dragging;
+            ShowBars();
+        }
+        private void ShowBars()
+        {
+            var show = _hovered || _dragging || _barDragging;
+            foreach (var group in autoHideBars)
+            {
+                group.alpha = show ? 1 : 0;
+                group.interactable = group.blocksRaycasts = show;
+            }
         }
 
-        // 给已烘焙的滚动根（有名为 "viewport" 的 RectMask2D 子节点）挂上运行时滚动。已挂则直接返回（幂等）。返回 null 表示不是滚动结构。
-        public static ScrollPane Attach(RectTransform scrollRoot)
+        // Only programmatically assembled views need this path. Imported views are fully baked.
+        public static ScrollPane Attach(RectTransform root)
         {
-            if (scrollRoot.GetComponent<ScrollPane>() is { } existing)
-                return existing;
-            var viewportTf = scrollRoot.Find("viewport");
-            if (viewportTf == null || viewportTf.GetComponent<RectMask2D>() == null)
-                return null;
-            var viewport = (RectTransform)viewportTf;
-
-            // 把 viewport 的现有子节点包进 content 容器（原点与 viewport 一致，故 anchoredPosition 不变）。
-            // 无 ScrollPane 时（上面的早返回已挡住重入）content 必不存在，直接新建——不按名复用，避免 FairyGUI 元素恰名为
-            // "content" 时被误当容器、其余子物体没被移进去。
+            if (root.TryGetComponent<ScrollPane>(out var existing)) return existing;
+            if (root.Find("viewport") is not RectTransform viewport || !viewport.TryGetComponent<RectMask2D>(out _)) return null;
             var content = new GameObject("content", typeof(RectTransform)).GetComponent<RectTransform>();
             content.SetParent(viewport, false);
             content.anchorMin = content.anchorMax = content.pivot = new Vector2(0, 1);
-            content.anchoredPosition = Vector2.zero;
-            while (viewport.GetChild(0) != content) // 正向搬移保持兄弟序（渲染/射线顺序），content 是最后一个子物体
-                viewport.GetChild(0).SetParent(content, false);
-
-            var pane = scrollRoot.gameObject.AddComponent<ScrollPane>();
-            pane._viewport = viewport;
-            pane._content = content;
-            pane._viewSize = viewport.rect.size;
-
-            // 滚动条轨道/grip 引用由 Migrate 烘在 ScrollPaneHost 上（滚动条组件名任意，不按名查找）；
-            // 无 host 的调用方（ComboBox 下拉手动 Attach、代码手搭结构）视作无滚动条。
-            if (scrollRoot.TryGetComponent(out ScrollPaneHost host))
+            while (viewport.GetChild(0) != content) viewport.GetChild(0).SetParent(content, false);
+            if (!viewport.TryGetComponent<Graphic>(out _)) viewport.gameObject.AddComponent<Image>().color = Color.clear;
+            var pane = root.gameObject.AddComponent<ScrollPane>();
+            pane.viewport = viewport;
+            pane.content = content;
+            pane._autoAxes = true;
+            pane.scrollStep = 25;
+            pane.decelerationRate = Mathf.Pow(.967f, 60);
+            if (root.TryGetComponent<ListSource>(out var source))
             {
-                pane._vtBar = host.vtBar;
-                pane._vtGrip = host.vtGrip;
-                pane._hzBar = host.hzBar;
-                pane._hzGrip = host.hzGrip;
+                pane.source = source;
+                source.content = content;
+                source.scrollPane = pane;
             }
-            ScrollBarGrip.Bind(pane._vtGrip, pane._vtBar, pane, false);
-            ScrollBarGrip.Bind(pane._hzGrip, pane._hzBar, pane, true);
-            ScrollBarTrack.Bind(pane._vtBar, pane._vtGrip, pane, false);
-            ScrollBarTrack.Bind(pane._hzBar, pane._hzGrip, pane, true);
             pane.RefreshContent();
             return pane;
         }
 
-        // 内容边界（y-down）：用 Relation.TopLeft 计入各子物体的 pivot/anchor，故内容用非 (0,1) 轴心也测得准（对齐 Migrate.ContentBounds）。
-        private static Vector2 ContentBounds(RectTransform content)
-        {
-            var bounds = Vector2.zero;
-            for (var i = 0; i < content.childCount; i++)
-            {
-                var rt = (RectTransform)content.GetChild(i);
-                if (rt.name == HitName)
-                    continue;
-                var topLeft = Relation.TopLeft(rt);
-                bounds = Vector2.Max(bounds, new Vector2(topLeft.x + rt.rect.width, rt.rect.height - topLeft.y));
-            }
-            return bounds;
-        }
-
-        private Vector2 MaxScroll => new(Mathf.Max(0, _contentSize.x - _viewSize.x), Mathf.Max(0, _contentSize.y - _viewSize.y));
-
-        private Vector2 ClampToBounds(Vector2 pos, Vector2 max) =>
-            new(loopHorizontal ? pos.x : Mathf.Clamp(pos.x, -max.x, 0), Mathf.Clamp(pos.y, 0, max.y));
-
-        public Vector2 viewportSize => _viewport.rect.size;
-        public Vector2 contentSize => _contentSize;
-        public Vector2 maxScroll => MaxScroll;
-        // Positive design coordinates: right/down.
-        public Vector2 position => new(-_content.anchoredPosition.x, _content.anchoredPosition.y);
-
-        // Virtual children only cover the visible interval; their transforms
-        // cannot define the logical content size.
         public void SetContentSize(Vector2 size)
         {
-            _explicitContentSize = size;
+            _explicitSize = size;
             RefreshContent();
-        }
-
-        public void SetPosition(Vector2 position, bool animated = false)
-        {
-            StopMotion();
-            var target = ClampToBounds(new Vector2(-position.x, position.y), MaxScroll);
-            if (animated)
-            {
-                _scrollStart = _content.anchoredPosition;
-                _scrollTarget = target;
-                _scrollElapsed = 0;
-                RunMotion(_motionVersion).Forget();
-                return;
-            }
-            _content.anchoredPosition = target;
-            UpdateGrips();
-            onScroll.Invoke();
-        }
-
-        // Keep dragging and inertia continuous when a loop or measured row
-        // changes the content origin. This does not dispatch another onScroll.
-        internal void Rebase(Vector2 shift)
-        {
-            var delta = new Vector2(shift.x, -shift.y);
-            _content.anchoredPosition += delta;
-            _startContent += delta;
-            _lastPos += delta;
-            _scrollStart += delta;
-            if (_scrollTarget.HasValue)
-                _scrollTarget += delta;
-            UpdateGrips();
         }
 
         public void RefreshContent()
         {
-            _viewSize = _viewport.rect.size;
-            _contentSize = _explicitContentSize ?? ContentBounds(_content);
-            _content.sizeDelta = _contentSize;
-            EnsureHit();
-            UpdateGrips();
-        }
-
-        private void EnsureHit()
-        {
-            if (_hit == null && (_hit = _content.Find(HitName) as RectTransform) == null)
+            var size = Vector2.zero;
+            if (_explicitSize is { } explicitSize) size = explicitSize;
+            else
+                foreach (RectTransform child in content)
+                {
+                    var corner = Relation.TopLeft(child);
+                    size = Vector2.Max(size, new(corner.x + child.rect.width, child.rect.height - corner.y));
+                }
+            content.sizeDelta = size;
+            if (_autoAxes && !_loop)
             {
-                var go = new GameObject(HitName, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
-                _hit = (RectTransform)go.transform;
-                _hit.SetParent(_content, false);
-                go.GetComponent<UnityEngine.UI.Image>().color = new Color(0, 0, 0, 0);
+                horizontal = size.x > viewportSize.x;
+                vertical = size.y > viewportSize.y;
             }
-            _hit.anchorMin = _hit.anchorMax = _hit.pivot = new Vector2(0, 1);
-            var size = Vector2.Max(_contentSize, _viewSize);
-            if (_hit.sizeDelta != size)
-                _hit.sizeDelta = size;
-            _hit.anchoredPosition = Vector2.zero;
-            if (_hit.GetSiblingIndex() != 0)
-                _hit.SetAsFirstSibling();
+            UpdateBounds();
         }
 
-        public void OnBeginDrag(PointerEventData e)
+        public void SetPosition(Vector2 value, bool animated = false)
         {
-            if (e.button != PointerEventData.InputButton.Left)
-                return;
-            RefreshContent(); // 内容可能在 Attach 之后被 ListSource.Fill 填充，起拖时重算滚动范围
-            StopMotion();
-            _dragging = true;
-            _velocity = Vector2.zero;
-            _startContent = _content.anchoredPosition;
-            _lastPos = _startContent;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(_viewport, e.position, e.pressEventCamera, out _startPointer);
-        }
-
-        public void OnDrag(PointerEventData e)
-        {
-            if (!_dragging)
-                return;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(_viewport, e.position, e.pressEventCamera, out var local);
-            var pos = _startContent + (local - _startPointer);
-            var max = MaxScroll;
-            if (bounceEffect)
+            StopMovement();
+            if (!_loop) value.x = Mathf.Clamp(value.x, 0, maxScroll.x);
+            value.y = Mathf.Clamp(value.y, 0, maxScroll.y);
+            var target = new Vector2(-value.x, value.y);
+            if (animated && Application.isPlaying)
             {
-                if (!loopHorizontal)
-                    pos.x = RubberBand(pos.x, -max.x, 0);
-                pos.y = RubberBand(pos.y, 0, max.y);
+                _scrollStart = content.anchoredPosition;
+                _scrollTarget = target;
+                var progress = 0f;
+                _scrollTween = DOTween.To(() => progress, t => {
+                    progress = t;
+                    MoveTo(Vector2.LerpUnclamped(_scrollStart, _scrollTarget, t));
+                }, 1, .3f).SetEase(Ease.OutCubic).SetUpdate(true).OnComplete(() => _scrollTween = null);
             }
             else
-                pos = ClampToBounds(pos, max);
-            _velocity = (pos - _lastPos) / Mathf.Max(Time.unscaledDeltaTime, 1e-4f);
-            _lastPos = pos;
-            _content.anchoredPosition = pos;
-            UpdateGrips();
-            onScroll.Invoke();
+            {
+                MoveTo(target);
+            }
         }
 
-        public void OnEndDrag(PointerEventData e)
+        private void MoveTo(Vector2 value)
         {
-            if (!_dragging)
-                return;
-            _dragging = false;
-            RunMotion(++_motionVersion).Forget();
+            content.anchoredPosition = value;
+            UpdateBounds();
+            Notify();
         }
 
-        public void OnScroll(PointerEventData e)
+        internal void Rebase(Vector2 shift)
         {
-            if (!mouseWheelEnabled)
-                return;
-            RefreshContent(); // 内容可能在 Attach 后被 ListSource.Fill 填充，滚轮前重算范围
-            var max = MaxScroll;
-            var pos = _content.anchoredPosition;
-            if (max.y > 0)
-                pos.y = Mathf.Clamp(pos.y - e.scrollDelta.y * scrollStep, 0, max.y);
-            else if (max.x > 0)
-                pos.x = loopHorizontal ? pos.x + e.scrollDelta.y * scrollStep
-                    : Mathf.Clamp(pos.x + e.scrollDelta.y * scrollStep, -max.x, 0);
-            _content.anchoredPosition = pos;
-            StopMotion();
-            UpdateGrips();
-            onScroll.Invoke();
+            var delta = new Vector2(shift.x, -shift.y);
+            var current = content.anchoredPosition + delta;
+            m_ContentStartPosition += delta;
+            _scrollStart += delta;
+            _scrollTarget += delta;
+            // Refresh the native velocity baseline as well as the drag origin.
+            // Outside its LateUpdate, retain the previous sample rather than sampling this frame's drag early.
+            content.anchoredPosition = _updating ? current : _previousPosition + delta;
+            UpdateBounds();
+            UpdatePrevData();
+            content.anchoredPosition = current;
+            UpdateBounds();
+            _previousPosition += delta;
         }
 
-        // 拖动滚动条 grip：percent 为沿轨道的比例（0 顶/左），映射到内容位置。
-        // 内容边界由调用方保证已刷新（grip 拖动会话在 OnPointerDown 刷一次，不逐帧重算）。
-        internal void SetPercent(bool horizontal, float percent)
-        {
-            var max = MaxScroll;
-            var pos = _content.anchoredPosition;
-            percent = Mathf.Clamp01(percent);
-            if (horizontal)
-                pos.x = -percent * max.x;
-            else
-                pos.y = percent * max.y;
-            _content.anchoredPosition = pos;
-            StopMotion();
-            UpdateGrips();
-            onScroll.Invoke();
-        }
-
-        // 点滚动条轨道空白处翻一页（复刻 GScrollBar 轨道点按 ScrollUp/Down(4)）：往点击一侧移动一个 view 高/宽。
-        internal void PageScroll(bool horizontal, bool forward)
-        {
-            RefreshContent();
-            var max = MaxScroll;
-            var pos = _content.anchoredPosition;
-            if (horizontal)
-                pos.x = Mathf.Clamp(pos.x + (forward ? -_viewSize.x : _viewSize.x), -max.x, 0);
-            else
-                pos.y = Mathf.Clamp(pos.y + (forward ? _viewSize.y : -_viewSize.y), 0, max.y);
-            _content.anchoredPosition = pos;
-            StopMotion();
-            UpdateGrips();
-            onScroll.Invoke();
-        }
-
-        // 把子节点滚到可见区（复刻 ScrollPane.ScrollToView 的简版）。
         public void ScrollToView(RectTransform target)
         {
             RefreshContent();
-            StopMotion();
-            var max = MaxScroll;
-            var top = -target.anchoredPosition.y;
-            var pos = _content.anchoredPosition;
-            if (top < pos.y)
-                pos.y = top;
-            else if (top + target.rect.height > pos.y + _viewSize.y)
-                pos.y = top + target.rect.height - _viewSize.y;
-            pos.y = Mathf.Clamp(pos.y, 0, max.y);
-            _content.anchoredPosition = pos;
-            UpdateGrips();
+            var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(content, target);
+            var start = new Vector2(bounds.min.x - content.rect.xMin, content.rect.yMax - bounds.max.y);
+            var value = position;
+            for (var axis = 0; axis < 2; axis++)
+                if (start[axis] < value[axis]) value[axis] = start[axis];
+                else if (start[axis] + bounds.size[axis] > value[axis] + viewportSize[axis])
+                    value[axis] = start[axis] + bounds.size[axis] - viewportSize[axis];
+            SetPosition(value);
         }
 
-        private void StopMotion()
+        internal void Step(bool alongX, bool forward, float steps)
         {
-            _motionVersion++;
-            _velocity = Vector2.zero;
-            _scrollTarget = null;
+            var value = position;
+            var axis = alongX ? 0 : 1;
+            value[axis] += (forward ? 1 : -1) * steps * (pageMode ? viewportSize[axis] : scrollStep);
+            SetPosition(value);
+            _needsSnap = snapToItem || pageMode;
         }
 
-        private async UniTask RunMotion(int version)
+        public void SetPage(int page, bool animated = false)
         {
-            while (true)
+            var value = position;
+            var axis = horizontal ? 0 : 1;
+            value[axis] = page * viewportSize[axis];
+            SetPosition(value, animated);
+        }
+
+        public override void StopMovement()
+        {
+            base.StopMovement();
+            _scrollTween?.Kill();
+            _scrollTween = null;
+            _needsSnap = false;
+        }
+
+        public override void OnBeginDrag(PointerEventData data)
+        {
+            if (!touchEffect || data.button != PointerEventData.InputButton.Left || !IsActive()) return;
+            StopMovement();
+            RefreshContent();
+            _dragging = true;
+            ShowBars();
+            base.OnBeginDrag(data);
+        }
+
+        public override void OnInitializePotentialDrag(PointerEventData data) { if (touchEffect) base.OnInitializePotentialDrag(data); }
+
+        public override void OnDrag(PointerEventData data) { if (touchEffect) base.OnDrag(data); }
+        public override void OnEndDrag(PointerEventData data)
+        {
+            if (!_dragging || data.button != PointerEventData.InputButton.Left) return;
+            base.OnEndDrag(data);
+            _dragging = false;
+            ShowBars();
+            _needsSnap = snapToItem || pageMode;
+        }
+        public override void OnScroll(PointerEventData data)
+        {
+            if (!mouseWheelEnabled) return;
+            StopMovement();
+            RefreshContent();
+            base.OnScroll(data);
+            Notify();
+            _needsSnap = snapToItem || pageMode;
+        }
+
+        protected override void SetNormalizedPosition(float value, int axis)
+        {
+            StopMovement();
+            base.SetNormalizedPosition(value, axis);
+            Notify();
+        }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            onValueChanged.AddListener(OnChanged);
+            _previousPosition = content != null ? content.anchoredPosition : Vector2.zero;
+            ShowBars();
+        }
+        protected override void OnDisable()
+        {
+            onValueChanged.RemoveListener(OnChanged);
+            StopMovement();
+            _dragging = false;
+            _hovered = _barDragging = false;
+            ShowBars();
+            base.OnDisable();
+        }
+
+        protected override void LateUpdate()
+        {
+            if (content == null) return;
+            _updating = true;
+            try { base.LateUpdate(); }
+            finally { _updating = false; }
+            _previousPosition = content.anchoredPosition;
+            if (!_needsSnap || _dragging || velocity.sqrMagnitude > 1) return;
+            var value = position;
+            if (!_loop && (value.x < -.01f || value.x > maxScroll.x + .01f)
+                || value.y < -.01f || value.y > maxScroll.y + .01f) return;
+            if (pageMode)
             {
-                await UniTask.Yield(PlayerLoopTiming.Update);
-                if (this == null || version != _motionVersion || _dragging || !isActiveAndEnabled || !StepMotion())
-                    return;
+                var axis = horizontal ? 0 : 1;
+                value[axis] = Mathf.Round(value[axis] / viewportSize[axis]) * viewportSize[axis];
             }
+            else if (source != null) value = source.SnapPosition(value);
+            SetPosition(value, true);
         }
 
-        private bool StepMotion()
+        private void OnChanged(Vector2 _) => Notify();
+        private void Notify()
         {
-            var pos = _content.anchoredPosition;
-            var max = MaxScroll;
-            var target = ClampToBounds(pos, max);
-
-            if (_scrollTarget.HasValue)
+            if (_notifying || content == null) return;
+            if (content.anchoredPosition == _notifiedPosition && contentSize == _notifiedSize && viewportSize == _notifiedView) return;
+            _notifying = true;
+            try
             {
-                _scrollElapsed += Time.unscaledDeltaTime;
-                float progress = Mathf.Min(1, _scrollElapsed / 0.3f);
-                pos = Vector2.LerpUnclamped(_scrollStart, _scrollTarget.Value, 1 - Mathf.Pow(1 - progress, 3));
-                if (progress == 1)
-                    _scrollTarget = null;
+                onScroll.Invoke();
+                if (Application.isPlaying && pageOwner != null && !pageOwner.IsControllerChanging(pageController))
+                {
+                    var pagePosition = _scrollTween != null ? new Vector2(-_scrollTarget.x, _scrollTarget.y) : position;
+                    pageOwner.SetControllerPage(pageController, Mathf.Clamp(Mathf.RoundToInt((horizontal ? pagePosition.x : pagePosition.y) / (horizontal ? viewportSize.x : viewportSize.y)), 0, pageCount - 1));
+                }
             }
-            else if (pos != target)
+            finally
             {
-                // 越界：弹回边界（无视惯性）。
-                pos = Vector2.Lerp(pos, target, Mathf.Clamp01(Time.unscaledDeltaTime / SpringBack));
-                if ((pos - target).sqrMagnitude < 0.01f)
-                    pos = target;
-                _velocity = Vector2.zero;
+                _notifiedPosition = content.anchoredPosition;
+                _notifiedSize = contentSize;
+                _notifiedView = viewportSize;
+                _notifying = false;
             }
-            else if (_velocity.sqrMagnitude > 1f)
-            {
-                pos += _velocity * Time.unscaledDeltaTime;
-                _velocity *= Mathf.Pow(Deceleration, Time.unscaledDeltaTime * 60f);
-                if (!bounceEffect)
-                    pos = ClampToBounds(pos, max);
-            }
-            else
-                return false;
-
-            _content.anchoredPosition = pos;
-            UpdateGrips();
-            onScroll.Invoke();
-            return true;
-        }
-
-        // 越界橡皮筋：超出 [min,max] 的部分按阻尼压缩。
-        private static float RubberBand(float v, float min, float max)
-        {
-            if (v < min)
-                return min - (min - v) * BounceMargin;
-            if (v > max)
-                return max + (v - max) * BounceMargin;
-            return v;
-        }
-
-        // grip 长度按 view/content 比例随内容实时缩放（复刻 GScrollBar.SetDisplayPerc），位置按滚动比例。
-        private void UpdateGrips()
-        {
-            UpdateGrip(_vtBar, _vtGrip, false);
-            UpdateGrip(_hzBar, _hzGrip, true);
-        }
-
-        private void UpdateGrip(RectTransform bar, RectTransform grip, bool horizontal)
-        {
-            if (grip == null || bar == null)
-                return;
-            var barLen = horizontal ? bar.rect.width : bar.rect.height;
-            var view = horizontal ? _viewSize.x : _viewSize.y;
-            var content = horizontal ? _contentSize.x : _contentSize.y;
-            if (content <= view)
-                return; // 不可滚动：保留烘焙的 grip（本工程滚动条常显）
-            var gripLen = Mathf.Max(MinGrip, Mathf.FloorToInt(Mathf.Min(1, view / Mathf.Max(content, 1)) * barLen));
-            var percent = horizontal
-                ? Mathf.Clamp01(-_content.anchoredPosition.x / (content - view))
-                : Mathf.Clamp01(_content.anchoredPosition.y / (content - view));
-            if (horizontal)
-            {
-                grip.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, gripLen);
-                grip.anchoredPosition = new Vector2(Relation.TopLeft(bar).x + percent * (barLen - gripLen), grip.anchoredPosition.y);
-            }
-            else
-            {
-                grip.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, gripLen);
-                grip.anchoredPosition = new Vector2(grip.anchoredPosition.x, Relation.TopLeft(bar).y - percent * (barLen - gripLen));
-            }
-        }
-    }
-
-    // 挂在滚动条 grip 上：保持按下点相对 grip 的偏移沿轨道拖动（复刻 GScrollBar._dragOffset，不吸附 grip 中心）。
-    public sealed class ScrollBarGrip : UIBehaviour, IPointerDownHandler, IDragHandler
-    {
-        private ScrollPane _pane;
-        private RectTransform _bar;
-        private bool _horizontal;
-        private Vector2 _dragOffset; // 按下点相对 grip 左上角（bar 本地系）
-
-        internal static void Bind(RectTransform grip, RectTransform bar, ScrollPane pane, bool horizontal)
-        {
-            if (grip == null || bar == null || grip.GetComponent<Graphic>() == null)
-                return; // 无图形的 grip 收不到射线，不接拖动（烘焙的可见 grip 都带 Image）
-            if (!grip.TryGetComponent(out ScrollBarGrip g))
-                g = grip.gameObject.AddComponent<ScrollBarGrip>();
-            g._pane = pane;
-            g._bar = bar;
-            g._horizontal = horizontal;
-        }
-
-        private Vector2 GripTopLeft()
-        {
-            var grip = (RectTransform)transform;
-            return _bar.InverseTransformPoint(grip.TransformPoint(new Vector2(grip.rect.xMin, grip.rect.yMax)));
-        }
-
-        public void OnPointerDown(PointerEventData e)
-        {
-            if (e.button != PointerEventData.InputButton.Left)
-                return;
-            _pane.RefreshContent(); // 拖动会话起点刷一次内容边界，SetPercent 不逐帧重算
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(_bar, e.position, e.pressEventCamera, out var local);
-            _dragOffset = local - GripTopLeft();
-        }
-
-        public void OnDrag(PointerEventData e)
-        {
-            if (e.button != PointerEventData.InputButton.Left)
-                return;
-            var grip = (RectTransform)transform;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(_bar, e.position, e.pressEventCamera, out var local);
-            var topLeft = local - _dragOffset; // grip 左上角目标位（bar 本地）
-            var percent = _horizontal
-                ? (topLeft.x - _bar.rect.xMin) / Mathf.Max(1, _bar.rect.width - grip.rect.width)
-                : (_bar.rect.yMax - topLeft.y) / Mathf.Max(1, _bar.rect.height - grip.rect.height);
-            _pane.SetPercent(_horizontal, percent);
-        }
-    }
-
-    // 挂在滚动条轨道（bar）上：点 grip 之外的轨道空白翻一页（复刻 GScrollBar 轨道点按）。
-    public sealed class ScrollBarTrack : UIBehaviour, IPointerDownHandler
-    {
-        private ScrollPane _pane;
-        private RectTransform _grip;
-        private bool _horizontal;
-
-        internal static void Bind(RectTransform bar, RectTransform grip, ScrollPane pane, bool horizontal)
-        {
-            if (bar == null || grip == null || bar.GetComponent<Graphic>() == null)
-                return; // 轨道需可收射线（烘焙的 bar 带 Image）
-            if (!bar.TryGetComponent(out ScrollBarTrack t))
-                t = bar.gameObject.AddComponent<ScrollBarTrack>();
-            t._pane = pane;
-            t._grip = grip;
-            t._horizontal = horizontal;
-        }
-
-        public void OnPointerDown(PointerEventData e)
-        {
-            if (e.button != PointerEventData.InputButton.Left)
-                return;
-            if (RectTransformUtility.RectangleContainsScreenPoint(_grip, e.position, e.pressEventCamera))
-                return; // 点在 grip 上：交给 grip 拖动
-            var bar = (RectTransform)transform;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(bar, e.position, e.pressEventCamera, out var local);
-            // grip 与 bar 常是同容器兄弟、坐标系不同（差一个箭头缩进），须换到 bar 本地再比较方向，否则阈值偏移。
-            var gripLocal = (Vector2)bar.InverseTransformPoint(_grip.TransformPoint(_grip.rect.center));
-            var forward = _horizontal ? local.x > gripLocal.x : local.y < gripLocal.y;
-            _pane.PageScroll(_horizontal, forward);
         }
     }
 }

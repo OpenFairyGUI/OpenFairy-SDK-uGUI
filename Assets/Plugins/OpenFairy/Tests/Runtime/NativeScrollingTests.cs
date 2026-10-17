@@ -1,0 +1,214 @@
+using System.Collections;
+using System.Collections.Generic;
+using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.TestTools;
+using UnityEngine.UI;
+using Page = OpenFairy.UGUI.Tests.ControllerActionTestPanel.Page;
+
+namespace OpenFairy.UGUI.Tests
+{
+    public class NativeScrollingTests
+    {
+        private readonly List<GameObject> _objects = new();
+
+        private RectTransform Rect(string name, RectTransform parent, Vector2 size, Vector2 position)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            _objects.Add(go);
+            var rect = (RectTransform)go.transform;
+            rect.SetParent(parent, false);
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
+            rect.sizeDelta = size;
+            rect.anchoredPosition = position;
+            return rect;
+        }
+
+        private ListSource List(bool horizontal = false)
+        {
+            var root = Rect("List", null, new Vector2(200, 120), Vector2.zero);
+            var viewport = Rect("viewport", root, root.rect.size, Vector2.zero);
+            viewport.gameObject.AddComponent<RectMask2D>();
+            var template = Rect("Template", null, horizontal ? new Vector2(40, 120) : new Vector2(200, 30), Vector2.zero);
+            template.gameObject.SetActive(false);
+            var source = root.gameObject.AddComponent<ListSource>();
+            source.itemPrefab = template.gameObject;
+            source.itemSize = template.rect.size;
+            source.layout = horizontal ? ListLayoutType.SingleRow : ListLayoutType.SingleColumn;
+            return source;
+        }
+
+        private EventSystem Events()
+        {
+            var go = new GameObject("Events", typeof(EventSystem));
+            _objects.Add(go);
+            return go.GetComponent<EventSystem>();
+        }
+
+        private static PointerEventData Pointer(EventSystem events, RectTransform rect, Vector2 local)
+        {
+            var position = (Vector2)rect.TransformPoint(local);
+            return new PointerEventData(events) { position = position,
+                pointerPressRaycast = new RaycastResult { gameObject = rect.gameObject, screenPosition = position } };
+        }
+
+        [UnityTearDown]
+        public IEnumerator TearDown()
+        {
+            for (var i = _objects.Count - 1; i >= 0; i--)
+                if (_objects[i] != null) Object.Destroy(_objects[i]);
+            _objects.Clear();
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator Native_drag_wheel_and_programmatic_events_respect_input_modes()
+        {
+            var source = List();
+            source.SetVirtual();
+            source.Fill(20, (_, _) => { });
+            var pane = source.scrollPane;
+            Assert.IsInstanceOf<ScrollRect>(pane);
+            pane.bounceEffect = false;
+            pane.inertia = false;
+            yield return null;
+            var pointer = Pointer(Events(), pane.viewport, new Vector2(100, -60));
+            pane.OnBeginDrag(pointer);
+            pointer.position += new Vector2(0, 20);
+            pane.OnDrag(pointer);
+            pane.OnEndDrag(pointer);
+            Assert.That(pane.position.y, Is.EqualTo(20).Within(.01f));
+            pointer.scrollDelta = new Vector2(0, -1);
+            pane.OnScroll(pointer);
+            Assert.That(pane.position.y, Is.EqualTo(70).Within(.01f));
+            pane.touchEffect = false;
+            pane.OnBeginDrag(pointer);
+            pointer.position += new Vector2(0, 50);
+            pane.OnDrag(pointer);
+            pane.OnEndDrag(pointer);
+            Assert.That(pane.position.y, Is.EqualTo(70).Within(.01f));
+            pane.mouseWheelEnabled = false;
+            pane.OnScroll(pointer);
+            Assert.That(pane.position.y, Is.EqualTo(70).Within(.01f));
+            var events = 0;
+            pane.onScroll.AddListener(() => events++);
+            pane.SetPosition(new Vector2(0, 200));
+            Assert.That(events, Is.EqualTo(1));
+            yield return null;
+            Assert.That(events, Is.EqualTo(1));
+        }
+
+        [UnityTest]
+        public IEnumerator Native_drag_origin_survives_loop_rebasing()
+        {
+            var source = List(true);
+            source.colGap = 5;
+            source.SetVirtual(true);
+            source.Fill(2, (_, _) => { });
+            var pane = source.scrollPane;
+            pane.inertia = false;
+            yield return null;
+            var pointer = Pointer(Events(), pane.viewport, new Vector2(100, -60));
+            pane.OnBeginDrag(pointer);
+            pointer.position -= new Vector2(270, 0);
+            pane.OnDrag(pointer);
+            yield return null;
+            var before = pane.position.x;
+            pointer.position -= new Vector2(1, 0);
+            pane.OnDrag(pointer);
+            Assert.That(pane.position.x - before, Is.EqualTo(1).Within(.01f));
+            pane.OnEndDrag(pointer);
+            Assert.That(source.visibleItems.Count, Is.LessThanOrEqualTo(8));
+        }
+
+        [UnityTest]
+        public IEnumerator Measured_resize_during_native_drag_keeps_the_pointer_origin_and_velocity_baseline()
+        {
+            var source = List();
+            source.SetVirtual();
+            var heights = new float[1000];
+            for (var i = 0; i < heights.Length; i++) heights[i] = 30;
+            source.Fill(1000, (_, _) => { }, measureHeight: (_, index) => heights[index]);
+            var pane = source.scrollPane;
+            pane.bounceEffect = false;
+            yield return null;
+            var pointer = Pointer(Events(), pane.viewport, new Vector2(100, -60));
+            pane.OnBeginDrag(pointer);
+            pointer.position += new Vector2(0, 50);
+            pane.OnDrag(pointer);
+            yield return null;
+            var anchor = source.firstVisibleIndex;
+            Assert.Greater(anchor, 0);
+            heights[anchor - 1] += 40;
+            pane.velocity = new Vector2(0, 140);
+            yield return null;
+            Assert.That(Mathf.Abs(pane.velocity.y), Is.LessThan(1000));
+            var before = pane.position.y;
+            pointer.position += new Vector2(0, 1);
+            pane.OnDrag(pointer);
+            Assert.That(pane.position.y - before, Is.EqualTo(1).Within(.01f));
+            pane.OnEndDrag(pointer);
+        }
+
+        [UnityTest]
+        public IEnumerator Native_scrollbar_preserves_grip_offset_and_authored_track_step()
+        {
+            var source = List();
+            source.SetVirtual();
+            source.Fill(20, (_, _) => { });
+            var pane = source.scrollPane;
+            var outer = Rect("Scrollbar", (RectTransform)source.transform, new Vector2(20, 120), new Vector2(210, 0));
+            var area = Rect("Track", outer, new Vector2(20, 100), new Vector2(0, -10));
+            var grip = Rect("Grip", area, new Vector2(20, 20), Vector2.zero);
+            var bar = outer.gameObject.AddComponent<AuthoredScrollbar>();
+            bar.direction = Scrollbar.Direction.BottomToTop;
+            bar.handleRect = grip;
+            grip.offsetMin = grip.offsetMax = Vector2.zero;
+            bar.pane = pane;
+            bar.horizontal = false;
+            pane.verticalScrollbar = bar;
+            pane.SetPosition(Vector2.zero);
+            yield return null;
+            Assert.That(bar.size, Is.EqualTo(.2f).Within(.001f));
+            var pointer = Pointer(Events(), grip, new Vector2(10, -5));
+            bar.OnBeginDrag(pointer);
+            pointer.position -= new Vector2(0, 20);
+            bar.OnDrag(pointer);
+            Assert.That(pane.position.y, Is.EqualTo(120).Within(.1f));
+            bar.OnEndDrag(pointer);
+            pointer.position = area.TransformPoint(new Vector2(10, -95));
+            bar.OnPointerDown(pointer);
+            Assert.That(pane.position.y, Is.EqualTo(220).Within(.1f));
+        }
+
+        [UnityTest]
+        public IEnumerator Page_controller_and_native_position_update_in_both_directions_without_feedback()
+        {
+            var source = List();
+            source.SetVirtual();
+            source.Fill(12, (_, _) => { });
+            var pane = source.scrollPane;
+            var panel = source.gameObject.AddComponent<ControllerActionTestPanel>();
+            var gear = new GearScrollPage<Page> { target = source.gameObject, pane = pane,
+                pages = new[] { Page.First, Page.Second, Page.Third } };
+            panel.first.gears = new Gear<Page>[] { gear };
+            pane.pageOwner = panel;
+            pane.pageController = 0;
+            pane.pageCount = 3;
+            pane.pageMode = true;
+            pane.SetPage(2);
+            Assert.That(panel.first.page, Is.EqualTo(Page.Third));
+            Assert.That(pane.position.y, Is.EqualTo(240).Within(.01f));
+            gear.Apply(Page.Second);
+            Assert.That(panel.first.page, Is.EqualTo(Page.Second));
+            Assert.That(pane.position.y, Is.EqualTo(120).Within(.01f));
+            panel.first.page = Page.Third;
+            yield return null;
+            Assert.That(panel.first.page, Is.EqualTo(Page.Third));
+            yield return new WaitForSecondsRealtime(.35f);
+            Assert.That(panel.first.page, Is.EqualTo(Page.Third));
+            Assert.That(pane.position.y, Is.EqualTo(240).Within(.1f));
+        }
+    }
+}

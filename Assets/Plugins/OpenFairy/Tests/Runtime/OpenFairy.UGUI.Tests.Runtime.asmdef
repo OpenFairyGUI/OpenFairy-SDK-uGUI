@@ -2,6 +2,7 @@
     "name": "OpenFairy.UGUI.Tests.Runtime",
     "rootNamespace": "OpenFairy.UGUI.Tests",
     "references": [
+        "Unity.InputSystem",
         "OpenFairy.UGUI",
         "UnityEngine.UI",
         "UnityEngine.TestRunner",

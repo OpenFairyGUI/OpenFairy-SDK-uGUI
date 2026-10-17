@@ -100,6 +100,9 @@ namespace OpenFairy.UGUI.Editor
 
             var components = new List<Resource>();
             var images = new HashSet<Resource>();
+            // Build the configured tooltip before consumers, including an unexported template.
+            if (!string.IsNullOrEmpty(Settings().tipsRes))
+                Collect(Resolve(Settings().tipsRes, null), components, images);
             // 默认滚动条是运行时 UIConfig 注入，任何 displayList 都不引用它，必须显式补建。
             foreach (var bar in new[] { Settings().scrollBars?.vertical, Settings().scrollBars?.horizontal })
                 if (!string.IsNullOrEmpty(bar) && TryResolve(bar, null, out var barRes))
@@ -189,7 +192,11 @@ namespace OpenFairy.UGUI.Editor
                 }
                 if (child.DefaultItem is { } defaultItem && TryResolve(defaultItem, component.PackageId, out var item))
                     Collect(item, components, images);
+                foreach (var uri in child.ScrollBarRes ?? Array.Empty<string>())
+                    if (TryResolve(uri, component.PackageId, out var bar)) Collect(bar, components, images);
             }
+            foreach (var uri in xml.ScrollBarRes ?? Array.Empty<string>())
+                if (TryResolve(uri, component.PackageId, out var bar)) Collect(bar, components, images);
             // ComboBox 的 dropdown 组件只在根 <ComboBox dropdown> 属性引用（displayList 里没有），单独跟随。
             if (xml.ComboBox?.Dropdown is { } dropdown
                 && TryResolve(dropdown, component.PackageId, out var dropdownRes) && dropdownRes.Type == Schema.ResourceKind.Component)
@@ -212,68 +219,79 @@ namespace OpenFairy.UGUI.Editor
             }
 
             var target = SpritePath(image);
-            Directory.CreateDirectory(Path.GetDirectoryName(target));
-            if (image.Scale == Schema.ImageScale.Tile)
-                File.WriteAllBytes(target, TrimTransparent(File.ReadAllBytes(image.File))); // FairyGUI 图集会裁透明边，平铺单元按裁剪后尺寸
-            else
-                File.Copy(image.File, target, true);
-            ImportSprite(target, image.Scale == Schema.ImageScale.Tile);
-
+            var bytes = File.ReadAllBytes(image.File);
+            var border = Vector4.zero;
             if (image.Scale9Grid != null)
             {
-                var importer = (TextureImporter)AssetImporter.GetAtPath(target);
                 var texture = new Texture2D(2, 2);
-                texture.LoadImage(File.ReadAllBytes(image.File));
+                texture.LoadImage(bytes);
                 var grid = image.Scale9Grid.Split(',').AsValueEnumerable().Select(int.Parse).ToArray();
-                importer.spriteBorder = new Vector4(grid[0], texture.height - grid[1] - grid[3], texture.width - grid[0] - grid[2], grid[1]);
+                border = new Vector4(grid[0], texture.height - grid[1] - grid[3], texture.width - grid[0] - grid[2], grid[1]);
                 Object.DestroyImmediate(texture);
-                importer.SaveAndReimport();
             }
+            if (image.Scale == Schema.ImageScale.Tile)
+                bytes = TrimTransparent(bytes); // Match the authored atlas's transparent-edge trimming.
+            ImportSprite(target, image.Scale == Schema.ImageScale.Tile, border, WriteFileIfChanged(target, bytes));
         }
 
-        private static void ImportSprite(string target, bool tile = false)
+        private static bool WriteFileIfChanged(string target, byte[] bytes)
         {
-            AssetDatabase.ImportAsset(target);
-            var importer = (TextureImporter)AssetImporter.GetAtPath(target);
-            importer.textureType = TextureImporterType.Sprite;
-            importer.spriteImportMode = SpriteImportMode.Single;
-            importer.mipmapEnabled = false;
-            importer.alphaIsTransparency = true;
-            importer.npotScale = TextureImporterNPOTScale.None;
-            importer.wrapMode = tile ? TextureWrapMode.Repeat : TextureWrapMode.Clamp;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            SetMinimumMaxTextureSize(importer);
-            importer.SaveAndReimport();
+            if (File.Exists(target) && File.ReadAllBytes(target).AsSpan().SequenceEqual(bytes)) return false;
+            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            File.WriteAllBytes(target, bytes);
+            return true;
         }
 
-        private static void SetMinimumMaxTextureSize(TextureImporter importer)
+        private static void ImportSprite(string target, bool tile = false, Vector4 border = default, bool contentChanged = false)
+        {
+            var importer = AssetImporter.GetAtPath(target) as TextureImporter;
+            if (importer == null || contentChanged)
+            {
+                AssetDatabase.ImportAsset(target);
+                importer = (TextureImporter)AssetImporter.GetAtPath(target);
+            }
+            var wrap = tile ? TextureWrapMode.Repeat : TextureWrapMode.Clamp;
+            var changed = importer.textureType != TextureImporterType.Sprite
+                || importer.spriteImportMode != SpriteImportMode.Single
+                || importer.mipmapEnabled || !importer.alphaIsTransparency
+                || importer.npotScale != TextureImporterNPOTScale.None
+                || importer.wrapMode != wrap
+                || importer.textureCompression != TextureImporterCompression.Uncompressed
+                || importer.spriteBorder != border;
+            if (changed)
+            {
+                importer.textureType = TextureImporterType.Sprite;
+                importer.spriteImportMode = SpriteImportMode.Single;
+                importer.mipmapEnabled = false;
+                importer.alphaIsTransparency = true;
+                importer.npotScale = TextureImporterNPOTScale.None;
+                importer.wrapMode = wrap;
+                importer.textureCompression = TextureImporterCompression.Uncompressed;
+                importer.spriteBorder = border;
+            }
+            changed |= SetMinimumMaxTextureSize(importer);
+            if (changed) importer.SaveAndReimport();
+        }
+
+        private static bool SetMinimumMaxTextureSize(TextureImporter importer)
         {
             importer.GetSourceTextureWidthAndHeight(out var width, out var height);
-            var longestEdge = Mathf.Max(width, height);
-            var maxTextureSize = Mathf.Clamp(
-                Mathf.NextPowerOfTwo(longestEdge), 32, 16384);
-            importer.maxTextureSize = maxTextureSize;
-
-            // Platform overrides do not inherit the default Max Size. Update
-            // every existing override without changing its format or other
-            // platform-specific settings.
+            var maxTextureSize = Mathf.Clamp(Mathf.NextPowerOfTwo(Mathf.Max(width, height)), 32, 16384);
+            var changed = importer.maxTextureSize != maxTextureSize;
+            if (changed) importer.maxTextureSize = maxTextureSize;
+            // Keep each platform's format and other settings; only correct its existing size override.
             var serializedImporter = new SerializedObject(importer);
-            var platformSettings = serializedImporter.FindProperty(
-                "m_PlatformSettings");
-            if (platformSettings == null || !platformSettings.isArray)
-                return;
-
-            for (var i = 0; i < platformSettings.arraySize; i++)
-            {
-                var settings = platformSettings.GetArrayElementAtIndex(i);
-                var overridden = settings.FindPropertyRelative("m_Overridden");
-                var platformMaxSize = settings.FindPropertyRelative(
-                    "m_MaxTextureSize");
-                if (overridden?.boolValue == true && platformMaxSize != null)
-                    platformMaxSize.intValue = maxTextureSize;
-            }
-
-            serializedImporter.ApplyModifiedPropertiesWithoutUndo();
+            var platformSettings = serializedImporter.FindProperty("m_PlatformSettings");
+            if (platformSettings != null && platformSettings.isArray)
+                for (var i = 0; i < platformSettings.arraySize; i++)
+                {
+                    var settings = platformSettings.GetArrayElementAtIndex(i);
+                    var overridden = settings.FindPropertyRelative("m_Overridden");
+                    var platformMaxSize = settings.FindPropertyRelative("m_MaxTextureSize");
+                    if (overridden?.boolValue == true && platformMaxSize != null && platformMaxSize.intValue != maxTextureSize)
+                        platformMaxSize.intValue = maxTextureSize;
+                }
+            return serializedImporter.ApplyModifiedPropertiesWithoutUndo() || changed;
         }
 
         // jta 格式："yytou" 头 + interval(ms) + 8字节保留 + 尺寸 + 标志字节 + 帧数，
@@ -313,9 +331,10 @@ namespace OpenFairy.UGUI.Editor
                 canvas.SetPixels32(new Color32[width * height]);
                 canvas.SetPixels32(frame.X, height - frame.Y - frame.H, frame.W, frame.H, images[frame.Image].GetPixels32());
                 canvas.Apply();
-                File.WriteAllBytes(FramePath(basePath, i), canvas.EncodeToPNG());
+                var target = FramePath(basePath, i);
+                var changed = WriteFileIfChanged(target, canvas.EncodeToPNG());
                 Object.DestroyImmediate(canvas);
-                ImportSprite(FramePath(basePath, i));
+                ImportSprite(target, contentChanged: changed);
             }
             foreach (var image in images)
                 Object.DestroyImmediate(image);
@@ -500,7 +519,7 @@ namespace OpenFairy.UGUI.Editor
                 code.AppendLine("#endif");
             }
             code.AppendLine();
-            code.AppendLine($"namespace {Identifier(component.Package)}");
+            code.AppendLine($"namespace {GeneratedNamespace(component)}");
             code.AppendLine("{");
             code.AppendLine($"    public partial class {name} : {baseType}");
             code.AppendLine("    {");
@@ -573,13 +592,14 @@ namespace OpenFairy.UGUI.Editor
         private static string FieldType(Schema.Display child, string packageId) => child.Kind switch
         {
             Schema.DisplayKind.Image => "UnityEngine.UI.Image",
+            Schema.DisplayKind.Graph when child.Type == Schema.ShapeType.None => "UnityEngine.RectTransform",
             Schema.DisplayKind.Graph => "OpenFairy.UGUI.Graph",
             Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText => TextFieldType(child),
             Schema.DisplayKind.Loader => "OpenFairy.UGUI.Loader",
             Schema.DisplayKind.Component when TryResolve(child.Source, packageId, out var dep) =>
                 dep.PackageId == packageId
                     ? ClassName(dep)
-                    : $"global::{Identifier(dep.Package)}.{ClassName(dep)}",
+                    : $"global::{GeneratedNamespace(dep)}.{ClassName(dep)}",
             Schema.DisplayKind.Component => null,
             _ when IsMovieClip(child, packageId) => "OpenFairy.UGUI.MovieClip",
             _ => "UnityEngine.RectTransform",
@@ -603,7 +623,7 @@ namespace OpenFairy.UGUI.Editor
                 if (xml.Overflow == Schema.Overflow.Hidden)
                     root.AddComponent<RectMask2D>();
 
-                var componentType = FindType($"{Identifier(component.Package)}.{ClassName(component)}");
+                var componentType = FindType($"{GeneratedNamespace(component)}.{ClassName(component)}");
                 var comp = (Component)root.AddComponent(componentType);
 
                 var controllers = new Dictionary<string, ControllerData>();
@@ -647,12 +667,11 @@ namespace OpenFairy.UGUI.Editor
                 if (xml.Overflow == Schema.Overflow.Scroll)
                 {
                     var view = BuildScrollView(root, xml, rt.sizeDelta);
-                    relationSpace = view.Viewport;
+                    relationSpace = view.Content;
                     foreach (var (_, childGo) in children)
                         if (childGo.transform.parent == rt)
-                            ReparentPreservingRect((RectTransform)childGo.transform, view.Viewport, false);
+                            ReparentPreservingRect((RectTransform)childGo.transform, view.Content, false);
                     SetGrips(view, ContentBounds(children));
-                    AddScrollHost(root, view); // 运行时自挂 ScrollPane，转换后无需胶水即可滚动
                 }
 
                 var byId = new Dictionary<string, (Schema.Display Xml, GameObject Go)>();
@@ -661,8 +680,26 @@ namespace OpenFairy.UGUI.Editor
                 foreach (var (element, go) in children)
                     BuildRelations((RectTransform)root.transform, relationSpace, element, go, byId);
 
+                BuildRelations(rt, rt, new Schema.Display { Relations = xml.Relations }, root, byId);
+
                 BuildTransitions(root, xml, byId, component.PackageId);
                 BuildActions(component, comp, controllers, byId);
+                foreach (var (element, go) in children)
+                    if (element.PageController is { } page && controllers.TryGetValue(page, out var data)
+                        && go.TryGetComponent<ScrollPane>(out var pane))
+                    {
+                        pane.pageOwner = comp;
+                        pane.pageController = data.Index;
+                        pane.pageCount = data.PageValues.Length;
+                        var type = typeof(GearScrollPage<>).MakeGenericType(data.PageType);
+                        var gear = Activator.CreateInstance(type);
+                        type.GetField("target").SetValue(gear, go);
+                        type.GetField("pane").SetValue(gear, pane);
+                        var pages = Array.CreateInstance(data.PageType, data.PageValues.Length);
+                        for (var i = 0; i < pages.Length; i++) pages.SetValue(data.PageValues[i], i);
+                        type.GetField("pages").SetValue(gear, pages);
+                        data.Gears.Add(gear);
+                    }
 
                 // 按钮关联控制器（<Button controller=.. page=..>）：点击换 owner 上该控制器的页，实现 tab/radio 组
                 //（复刻 relatedController）；并给该控制器烘 GearButton，使换页（含程序化）反向同步按钮选中态
@@ -688,6 +725,9 @@ namespace OpenFairy.UGUI.Editor
 
                 foreach (var controller in controllers.Values)
                     BuildController(controller);
+                foreach (var fitter in root.GetComponentsInChildren<ContentSizeFitter>())
+                    LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)fitter.transform);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
                 SyncRelations(root);
 
                 if (comp is ButtonBase buttonComp)
@@ -730,9 +770,11 @@ namespace OpenFairy.UGUI.Editor
                     SetupSlider(slider, xml, children, root);
                 else if (comp is Label label)
                 {
-                    label.titleText = Child(children, "title")?.GetComponent<TextComponent>();
+                    BindLabelTitle(label, Child(children, "title")?.transform);
                     label.iconLoader = Child(children, "icon")?.GetComponent<Loader>();
                 }
+                else if (xml.Extension == Schema.ComponentExtension.ScrollBar)
+                    SetupScrollBar(root, children);
 
                 var byName = new Dictionary<string, GameObject>();
                 foreach (var (element, go) in children)
@@ -755,6 +797,7 @@ namespace OpenFairy.UGUI.Editor
 
                 var prefabPath = Path.ChangeExtension(AssetPath(component.File), ".prefab");
                 Directory.CreateDirectory(Path.GetDirectoryName(prefabPath));
+                InputEditingBuilder.Bake(root);
                 Prefabs[prefabPath] = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             }
             finally
@@ -766,6 +809,7 @@ namespace OpenFairy.UGUI.Editor
         private static GameObject CreateChild(Schema.Display element, RectTransform parent, Resource owner,
             Dictionary<string, ControllerData> controllers)
         {
+            PrepareTextRelations(element);
             var name = element.Name;
             var size = element.Size;
             GameObject go;
@@ -890,6 +934,7 @@ namespace OpenFairy.UGUI.Editor
                 autoLoader.SetNativeSize();
             if (go.GetComponent<TextField>() is { } createdText)
                 createdText.RebuildImages(); // 依赖最终 rect 的排版，须在 SetRect 之后烘焙
+            ConfigureTextLayout(go, element);
             ApplyElement(go, element);
             if (!element.Visible)
                 go.SetActive(false);
@@ -1182,12 +1227,46 @@ namespace OpenFairy.UGUI.Editor
             button.RefreshState();
         }
 
+        private static void BindLabelTitle(Label label, Transform title)
+        {
+            label.titleText = title?.GetComponent<TextComponent>();
+#if FAIRYGUI_TMPRO
+            label.titleInput = title?.GetComponent<TMP_InputField>();
+#else
+            label.titleInput = title?.GetComponent<TextInput>();
+#endif
+        }
+
         private static void ConfigureLabel(GameObject go, Schema.Extension labelXml, string packageId)
         {
-            if (labelXml.Title is { } title && FindChild(go.transform, "title")?.GetComponent<TextComponent>() is { } titleText)
+            var titleObject = FindChild(go.transform, "title");
+#if FAIRYGUI_TMPRO
+            var input = titleObject?.GetComponent<TMP_InputField>();
+            var titleText = input != null ? input.textComponent : titleObject?.GetComponent<TextComponent>();
+            if (input != null)
+            {
+                if (labelXml.MaxLength is { } maxLength) input.characterLimit = maxLength;
+                if (labelXml.Password is { } password) input.contentType = password
+                    ? TMP_InputField.ContentType.Password : TMP_InputField.ContentType.Standard;
+                if (labelXml.Prompt is { } prompt) ConfigureTmpPrompt(input, prompt);
+                if (labelXml.Title is { } inputTitle) input.SetTextWithoutNotify(inputTitle);
+            }
+#else
+            var input = titleObject?.GetComponent<TextInput>();
+            UnityEngine.UI.Text titleText = input != null ? input.field.textComponent : titleObject?.GetComponent<TextComponent>();
+            if (input != null)
+            {
+                if (labelXml.MaxLength is { } maxLength) input.maxLength = maxLength;
+                if (labelXml.Password is { } password) input.password = password;
+                if (labelXml.Prompt is { } prompt && input.field.placeholder is TextField placeholder)
+                    placeholder.text = prompt;
+                if (labelXml.Title is { } inputTitle) input.text = inputTitle;
+            }
+#endif
+            if (input == null && labelXml.Title is { } title && titleText != null)
                 titleText.text = title;
-            if (labelXml.TitleColor is { } titleColor && FindChild(go.transform, "title")?.GetComponent<TextComponent>() is { } colorText)
-                colorText.color = ParseColor(titleColor);
+            if (labelXml.TitleColor is { } titleColor && titleText != null)
+                titleText.color = ParseColor(titleColor);
             if (labelXml.Icon is { } icon && FindChild(go.transform, "icon")?.GetComponent<UnityEngine.UI.Image>() is { } image)
             {
                 image.sprite = LoadSprite(icon, packageId);
@@ -1381,6 +1460,31 @@ namespace OpenFairy.UGUI.Editor
                 if (!element.Touchable)
                     group.blocksRaycasts = false;
             }
+            if (!string.IsNullOrEmpty(element.Tooltips))
+            {
+                var tooltip = go.GetComponent<Tooltip>();
+                if (tooltip == null) tooltip = go.AddComponent<Tooltip>();
+                tooltip.text = element.Tooltips;
+                if (!string.IsNullOrEmpty(Settings().tipsRes))
+                    tooltip.template = LoadPrefab(Resolve(Settings().tipsRes, null)).GetComponent<Label>()
+                        ?? throw new InvalidDataException("The configured tooltip template must be a Label.");
+                if (element.Touchable)
+                {
+                    var hit = go.GetComponent<Graphic>();
+                    if (hit == null)
+                    {
+                        hit = go.AddComponent<UnityEngine.UI.Image>();
+                        hit.color = Color.clear;
+                    }
+                    hit.raycastTarget = true;
+                }
+            }
+            if (element.Filter == Schema.FilterKind.Color)
+            {
+                var filter = ConfigureColorFilter(go, element.Kind);
+                var data = element.FilterData;
+                filter.Set(data.Brightness, data.Contrast, data.Saturation, data.Hue);
+            }
             if (element.Grayed)
             {
                 var button = go.GetComponent<ButtonBase>();
@@ -1401,6 +1505,27 @@ namespace OpenFairy.UGUI.Editor
             }
         }
 
+        private static ColorAdjust ConfigureColorFilter(GameObject go, Schema.DisplayKind kind)
+        {
+            var capture = kind is Schema.DisplayKind.Component or Schema.DisplayKind.List
+                or Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText
+                or Schema.DisplayKind.Group || go.GetComponent<Graphic>() == null;
+            Material presentation = null;
+            if (capture)
+            {
+                var path = $"{OutputRoot}/ObjectFilterPresentation.mat";
+                presentation = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (presentation == null)
+                {
+                    Directory.CreateDirectory(OutputRoot);
+                    presentation = new Material(Shader.Find("OpenFairy/UI Premultiplied"));
+                    AssetDatabase.CreateAsset(presentation, path);
+                }
+            }
+            return ColorFilterBuilder.Configure(go, capture, ColorMatrixShader,
+                Shader.Find("OpenFairy/UI Capture"), presentation, Settings().captureLayer);
+        }
+
         private static void ConfigureGearLook(Type gearType, object gear, Schema.Gear xml, GameObject go)
         {
             (float Alpha, float Rotation, bool Grayed, bool Touchable) Parse(string value, (float Alpha, float Rotation, bool Grayed, bool Touchable) def)
@@ -1413,7 +1538,7 @@ namespace OpenFairy.UGUI.Editor
             }
 
             var def = Parse(xml.Default ?? "1,0,0,1", (1, 0, false, true));
-            var values = xml.Values.Split('|').AsValueEnumerable().Select(value => Parse(value, def)).ToArray();
+            var values = (xml.Values?.Split('|') ?? Array.Empty<string>()).AsValueEnumerable().Select(value => Parse(value, def)).ToArray();
             gearType.GetField("alphas").SetValue(gear, values.AsValueEnumerable().Select(value => value.Alpha).ToArray());
             gearType.GetField("defaultAlpha").SetValue(gear, def.Alpha);
             gearType.GetField("rotations").SetValue(gear, values.AsValueEnumerable().Select(value => value.Rotation).ToArray());
@@ -1458,92 +1583,155 @@ namespace OpenFairy.UGUI.Editor
 
         private class ScrollView
         {
-            public RectTransform Viewport;
-            public GameObject VtBar;
-            public GameObject HzBar;
-            public Vector2 ViewportSize; // 设计态 viewport 尺寸：拉伸锚点后 sizeDelta/rect 不可靠，布局与 grip 用它
+            public RectTransform Viewport, Content;
+            public ScrollPane Pane;
+            public Vector2 ViewportSize;
         }
 
-        // 复刻 ScrollPane 静态布局：viewport 缩进 margin 与滚动条宽度，滚动条常显，grip 长度按显示比例。
         private static ScrollView BuildScrollView(GameObject root, Schema.Component element, Vector2 size) =>
-            BuildScrollView(root, size, element.Margin, element.ScrollBarMargin, element.Scroll, element.ScrollBar, element.ScrollBarFlags, element.ClipSoftness);
+            BuildScrollView(root, size, element.Margin, element.ScrollBarMargin, element.Scroll, element.ScrollBar,
+                element.ScrollBarRes, element.ScrollBarFlags, element.ClipSoftness);
 
-        private static ScrollView BuildScrollView(GameObject root, Schema.Display element, Vector2 size)
-        {
-            return BuildScrollView(root, size, element.Margin, element.ScrollBarMargin, element.Scroll, element.ScrollBar, element.ScrollBarFlags, element.ClipSoftness);
-        }
+        private static ScrollView BuildScrollView(GameObject root, Schema.Display element, Vector2 size) =>
+            BuildScrollView(root, size, element.Margin, element.ScrollBarMargin, element.Scroll, element.ScrollBar,
+                element.ScrollBarRes, element.ScrollBarFlags, element.ClipSoftness);
 
-        private static ScrollView BuildScrollView(GameObject root, Vector2 size, string marginValue, string scrollBarMarginValue, Schema.Scroll scroll, string scrollBar, int scrollBarFlags, string clipSoftness)
+        private static ScrollView BuildScrollView(GameObject root, Vector2 size, string marginValue, string barMarginValue,
+            Schema.Scroll scroll, Schema.ScrollBarDisplay display, string[] barResources, Schema.ScrollFlags flags, string clipSoftness)
         {
             var margin = ParseMargin(marginValue);
-            var barMargin = ParseMargin(scrollBarMarginValue);
-            var hideBars = scrollBar == "hidden";
-            // scrollBarFlags bit0 = displayOnLeft：竖直滚动条放左侧、内容从左内缩（FairyGUI ScrollPane._displayOnLeft）。
-            var displayOnLeft = (scrollBarFlags & 1) != 0;
-            var vtBar = !hideBars && scroll is Schema.Scroll.Vertical or Schema.Scroll.Both ? InstantiateScrollBar(Settings().scrollBars?.vertical, root.transform) : null;
-            var hzBar = !hideBars && scroll is Schema.Scroll.Horizontal or Schema.Scroll.Both ? InstantiateScrollBar(Settings().scrollBars?.horizontal, root.transform) : null;
-            var vtWidth = vtBar != null ? ((RectTransform)vtBar.transform).sizeDelta.x : 0;
-            var hzHeight = hzBar != null ? ((RectTransform)hzBar.transform).sizeDelta.y : 0;
-            var leftInset = displayOnLeft ? vtWidth : 0;
-            var rightInset = displayOnLeft ? 0 : vtWidth;
-
-            // viewport 与滚动条一律用拉伸锚点：组件被以非设计尺寸实例化时（如 Clip&Scroll 里 425 设计→387 实例的
-            // 横向面板）滚动几何随根尺寸自适应。设计尺寸下与固定锚点逐像素等价。
-            var viewport = NewChild("viewport", (RectTransform)root.transform, typeof(RectMask2D));
-            var viewportRt = (RectTransform)viewport.transform;
-            viewportRt.pivot = new Vector2(0, 1);
-            viewportRt.anchorMin = Vector2.zero;
-            viewportRt.anchorMax = Vector2.one;
-            viewportRt.offsetMin = new Vector2(margin.Left + leftInset, margin.Bottom + hzHeight);
-            viewportRt.offsetMax = new Vector2(-(margin.Right + rightInset), -margin.Top);
+            var barMargin = ParseMargin(barMarginValue);
+            var defaults = Settings().scrollBars;
+            if (display == Schema.ScrollBarDisplay.Default)
+                display = string.IsNullOrEmpty(defaults?.defaultDisplay) ? Schema.ScrollBarDisplay.Visible
+                    : Enum.Parse<Schema.ScrollBarDisplay>(defaults.defaultDisplay, true);
+            var floating = flags.HasFlag(Schema.ScrollFlags.Floating);
+            var left = flags.HasFlag(Schema.ScrollFlags.DisplayOnLeft);
+            var vtRef = barResources is { Length: > 0 } && !string.IsNullOrEmpty(barResources[0]) ? barResources[0] : defaults?.vertical;
+            var hzRef = barResources is { Length: > 1 } && !string.IsNullOrEmpty(barResources[1]) ? barResources[1] : defaults?.horizontal;
+            var show = display != Schema.ScrollBarDisplay.Hidden;
+            var vt = show && scroll is Schema.Scroll.Vertical or Schema.Scroll.Both ? InstantiateScrollBar(vtRef, root.transform) : null;
+            var hz = show && scroll is Schema.Scroll.Horizontal or Schema.Scroll.Both ? InstantiateScrollBar(hzRef, root.transform) : null;
+            var vtWidth = vt != null ? ((RectTransform)vt.transform).rect.width : 0;
+            var hzHeight = hz != null ? ((RectTransform)hz.transform).rect.height : 0;
+            var insetX = floating ? 0 : vtWidth;
+            var insetY = floating ? 0 : hzHeight;
+            var viewport = NewChild("viewport", (RectTransform)root.transform, typeof(RectMask2D), typeof(Image));
+            var vr = (RectTransform)viewport.transform;
+            vr.pivot = new Vector2(0, 1);
+            vr.anchorMin = Vector2.zero;
+            vr.anchorMax = Vector2.one;
+            vr.offsetMin = new Vector2(margin.Left + (left ? insetX : 0), margin.Bottom + insetY);
+            vr.offsetMax = new Vector2(-(margin.Right + (left ? 0 : insetX)), -margin.Top);
+            viewport.GetComponent<Image>().color = Color.clear;
+            viewport.GetComponent<RectMask2D>().enabled = !flags.HasFlag(Schema.ScrollFlags.MaskDisabled);
             viewport.transform.SetSiblingIndex(0);
             if (clipSoftness is { } softness)
             {
                 var parts = softness.Split(',');
                 viewport.GetComponent<RectMask2D>().softness = new Vector2Int(int.Parse(parts[0]), int.Parse(parts[1]));
             }
-
-            if (vtBar != null)
+            var content = (RectTransform)NewChild("content", vr).transform;
+            content.anchorMin = content.anchorMax = content.pivot = new Vector2(0, 1);
+            content.anchoredPosition = Vector2.zero;
+            var pane = root.AddComponent<ScrollPane>();
+            pane.viewport = vr;
+            pane.content = content;
+            pane.horizontal = scroll != Schema.Scroll.Vertical;
+            pane.vertical = scroll != Schema.Scroll.Horizontal;
+            pane.scrollStep = 25;
+            pane.decelerationRate = Mathf.Pow(.967f, 60);
+            pane.touchEffect = !flags.HasFlag(Schema.ScrollFlags.TouchOff) || flags.HasFlag(Schema.ScrollFlags.TouchOn);
+            pane.bounceEffect = !flags.HasFlag(Schema.ScrollFlags.BounceOff) || flags.HasFlag(Schema.ScrollFlags.BounceOn);
+            pane.inertia = !flags.HasFlag(Schema.ScrollFlags.InertiaDisabled);
+            pane.snapToItem = flags.HasFlag(Schema.ScrollFlags.SnapToItem);
+            pane.pageMode = flags.HasFlag(Schema.ScrollFlags.PageMode);
+            pane.mouseWheelEnabled = show;
+            var demand = flags.HasFlag(Schema.ScrollFlags.DisplayInDemand);
+            // Native expansion owns the entire viewport rect. Keep authored margins when it cannot express them.
+            var expand = demand && !floating && !left && margin == (0f, 0f, 0f, 0f);
+            var visibility = expand ? ScrollRect.ScrollbarVisibility.AutoHideAndExpandViewport
+                : demand ? ScrollRect.ScrollbarVisibility.AutoHide : ScrollRect.ScrollbarVisibility.Permanent;
+            pane.verticalScrollbarVisibility = pane.horizontalScrollbarVisibility = visibility;
+            var hidden = new List<CanvasGroup>();
+            if (vt != null)
             {
-                var barRt = (RectTransform)vtBar.transform;
-                barRt.anchorMin = new Vector2(displayOnLeft ? 0 : 1, 0);
-                barRt.anchorMax = new Vector2(displayOnLeft ? 0 : 1, 1);
-                barRt.offsetMin = new Vector2(displayOnLeft ? 0 : -vtWidth, barMargin.Bottom + hzHeight);
-                barRt.offsetMax = new Vector2(displayOnLeft ? vtWidth : 0, -barMargin.Top);
+                var rt = (RectTransform)vt.transform;
+                rt.anchorMin = new Vector2(left ? 0 : 1, 0);
+                rt.anchorMax = new Vector2(left ? 0 : 1, 1);
+                rt.offsetMin = new Vector2(left ? 0 : -vtWidth, barMargin.Bottom + insetY);
+                rt.offsetMax = new Vector2(left ? vtWidth : 0, -barMargin.Top);
+                pane.verticalScrollbar = BindScrollBar(vt, pane, false, display, hidden);
             }
-            if (hzBar != null)
+            if (hz != null)
             {
-                var barRt = (RectTransform)hzBar.transform;
-                barRt.anchorMin = new Vector2(0, 0);
-                barRt.anchorMax = new Vector2(1, 0);
-                barRt.offsetMin = new Vector2(barMargin.Left + leftInset, 0);
-                barRt.offsetMax = new Vector2(-(barMargin.Right + rightInset), hzHeight);
+                var rt = (RectTransform)hz.transform;
+                rt.anchorMin = new Vector2(0, 0);
+                rt.anchorMax = new Vector2(1, 0);
+                rt.offsetMin = new Vector2(barMargin.Left + (left ? insetX : 0), 0);
+                rt.offsetMax = new Vector2(-(barMargin.Right + (left ? 0 : insetX)), hzHeight);
+                pane.horizontalScrollbar = BindScrollBar(hz, pane, true, display, hidden);
             }
-
-            return new ScrollView
-            {
-                Viewport = viewportRt, VtBar = vtBar, HzBar = hzBar,
-                ViewportSize = new Vector2(size.x - margin.Left - margin.Right - vtWidth, size.y - margin.Top - margin.Bottom - hzHeight),
-            };
+            pane.autoHideBars = hidden.ToArray();
+            return new ScrollView { Viewport = vr, Content = content, Pane = pane,
+                ViewportSize = new Vector2(size.x - margin.Left - margin.Right - insetX, size.y - margin.Top - margin.Bottom - insetY) };
         }
 
-        private static void SetGrips(ScrollView view, Vector2 content)
+        private static AuthoredScrollbar BindScrollBar(GameObject root, ScrollPane pane, bool horizontal,
+            Schema.ScrollBarDisplay display, List<CanvasGroup> hidden)
         {
-            var viewSize = view.ViewportSize;
-            if (view.VtBar != null)
+            var bar = root.GetComponent<AuthoredScrollbar>();
+            bar.pane = pane;
+            bar.horizontal = horizontal;
+            bar.direction = horizontal ? Scrollbar.Direction.LeftToRight : Scrollbar.Direction.BottomToTop;
+            bar.value = horizontal ? 0 : 1;
+            if (display == Schema.ScrollBarDisplay.Auto)
             {
-                var bar = (RectTransform)FindChild(view.VtBar.transform, "bar");
-                var grip = (RectTransform)FindChild(view.VtBar.transform, "grip");
-                grip.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, Mathf.FloorToInt(Mathf.Min(1, viewSize.y / Mathf.Max(content.y, 1)) * bar.rect.height));
-                grip.anchoredPosition = new Vector2(grip.anchoredPosition.x, Relation.TopLeft(bar).y);
+                if (!root.TryGetComponent<CanvasGroup>(out var group))
+                    group = root.AddComponent<CanvasGroup>();
+                group.alpha = 0;
+                group.interactable = group.blocksRaycasts = false;
+                hidden.Add(group);
             }
-            if (view.HzBar != null)
-            {
-                var bar = (RectTransform)FindChild(view.HzBar.transform, "bar");
-                var grip = (RectTransform)FindChild(view.HzBar.transform, "grip");
-                grip.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, Mathf.FloorToInt(Mathf.Min(1, viewSize.x / Mathf.Max(content.x, 1)) * bar.rect.width));
-                grip.anchoredPosition = new Vector2(Relation.TopLeft(bar).x, grip.anchoredPosition.y);
-            }
+            return bar;
+        }
+
+        private static void SetGrips(ScrollView view, Vector2 size)
+        {
+            if (view.Pane == null) return;
+            view.Content.sizeDelta = size;
+            if (view.Pane.verticalScrollbar != null)
+                view.Pane.verticalScrollbar.size = Mathf.Min(1, view.ViewportSize.y / Mathf.Max(1, size.y));
+            if (view.Pane.horizontalScrollbar != null)
+                view.Pane.horizontalScrollbar.size = Mathf.Min(1, view.ViewportSize.x / Mathf.Max(1, size.x));
+        }
+
+        private static void SetupScrollBar(GameObject root, List<(Schema.Display Xml, GameObject Go)> children)
+        {
+            var track = (RectTransform)Child(children, "bar").transform;
+            var grip = (RectTransform)Child(children, "grip").transform;
+            var horizontal = ((RectTransform)root.transform).rect.width > ((RectTransform)root.transform).rect.height;
+            var size = grip.rect.size;
+            var point = track.InverseTransformPoint(grip.TransformPoint(new Vector3(grip.rect.xMin, grip.rect.yMax)));
+            var extent = horizontal ? track.rect.width : track.rect.height;
+            var handle = horizontal ? size.x : size.y;
+            var start = horizontal ? point.x - track.rect.xMin : track.rect.yMax - point.y;
+            var percent = extent > handle ? start / (extent - handle) : 0;
+            var bar = root.AddComponent<AuthoredScrollbar>();
+            bar.direction = horizontal ? Scrollbar.Direction.LeftToRight : Scrollbar.Direction.BottomToTop;
+            bar.size = handle / extent;
+            bar.value = horizontal ? percent : 1 - percent;
+            ReparentPreservingRect(grip, track);
+            grip.offsetMin = horizontal ? new Vector2(0, point.y - size.y - track.rect.yMin) : new Vector2(point.x - track.rect.xMin, 0);
+            grip.offsetMax = horizontal ? new Vector2(0, point.y - track.rect.yMax) : new Vector2(point.x + size.x - track.rect.xMax, 0);
+            bar.handleRect = grip;
+            bar.targetGraphic = grip.GetComponent<Graphic>();
+            bar.transition = Selectable.Transition.None;
+            bar.navigation = new Navigation { mode = Navigation.Mode.None };
+            if (Child(children, "arrow1")?.GetComponent<ButtonBase>() is { } back)
+                UnityEditor.Events.UnityEventTools.AddPersistentListener(back.onClick, bar.StepBackward);
+            if (Child(children, "arrow2")?.GetComponent<ButtonBase>() is { } forward)
+                UnityEditor.Events.UnityEventTools.AddPersistentListener(forward.onClick, bar.StepForward);
         }
 
         private static Vector2 ContentBounds(List<(Schema.Display Xml, GameObject Go)> children)
@@ -1570,6 +1758,7 @@ namespace OpenFairy.UGUI.Editor
             // 烘焙动态实例化描述：运行时（PopupMenu/ComboBox 下拉/Window1/Grid）据此从 defaultItem 建项。
             var source = go.AddComponent<ListSource>();
             source.itemPrefab = prefab;
+            source.count = element.Items.Length;
             source.itemSize = itemSize;
             source.lineGap = lineGap;
             source.colGap = colGap;
@@ -1586,8 +1775,11 @@ namespace OpenFairy.UGUI.Editor
 
             var view = element.Overflow == Schema.Overflow.Scroll
                 ? BuildScrollView(go, element, size)
-                : new ScrollView { Viewport = (RectTransform)go.transform };
+                : new ScrollView { Viewport = (RectTransform)go.transform, Content = (RectTransform)go.transform };
             var viewSize = view.Viewport == go.transform ? size : view.ViewportSize;
+            source.content = view.Content;
+            source.scrollPane = view.Pane;
+            if (view.Pane != null) view.Pane.source = source;
 
             var positions = new List<Vector2>();
             float x = 0, y = 0;
@@ -1629,32 +1821,13 @@ namespace OpenFairy.UGUI.Editor
             {
                 var position = positions[index++];
                 content = Vector2.Max(content, position + itemSize);
-                var itemGo = (GameObject)PrefabUtility.InstantiatePrefab(prefab, view.Viewport);
+                var itemGo = (GameObject)PrefabUtility.InstantiatePrefab(prefab, view.Content);
                 ((RectTransform)itemGo.transform).anchoredPosition = new Vector2(position.x, -position.y);
                 ConfigureButton(itemGo, item, owner.PackageId);
             }
             SetGrips(view, content);
-            if (element.Overflow == Schema.Overflow.Scroll)
-                AddScrollHost(go, view); // 运行时自挂 ScrollPane
             if (element.SelectionMode != ListSelectionMode.None)
                 go.AddComponent<ListSelection>().selectionMode = element.SelectionMode; // 点项选中/发 onClickItem
-        }
-
-        // 滚动条轨道/grip 引用烘进 ScrollPaneHost（滚动条组件名任意，运行时不按名查找）；
-        // "bar"/"grip" 是 FairyGUI 滚动条子件的契约名，仅在烘焙期解析一次。
-        private static void AddScrollHost(GameObject go, ScrollView view)
-        {
-            var host = go.AddComponent<ScrollPaneHost>();
-            if (view.VtBar != null)
-            {
-                host.vtBar = (RectTransform)FindChild(view.VtBar.transform, "bar");
-                host.vtGrip = (RectTransform)FindChild(view.VtBar.transform, "grip");
-            }
-            if (view.HzBar != null)
-            {
-                host.hzBar = (RectTransform)FindChild(view.HzBar.transform, "bar");
-                host.hzGrip = (RectTransform)FindChild(view.HzBar.transform, "grip");
-            }
         }
 
         // 默认滚动条来自 Common.json 的 ui:// 引用；未配置则返回 null，viewport 退化为满宽。
@@ -1681,7 +1854,7 @@ namespace OpenFairy.UGUI.Editor
             return (parts[0], parts[1], parts[2], parts[3]);
         }
 
-        // 动效：XML 时间/时长单位是 24fps 帧；值里 "-" 表示保持当前（NaN）。
+        // Timeline time and tween duration are frames at the transition frame rate.
         private static TextAnchor TextAlignment(Schema.Display element) => (element.VAlign, element.Align) switch
         {
             (Schema.VAlign.Middle, Schema.Align.Center) => TextAnchor.MiddleCenter,
@@ -1724,11 +1897,11 @@ namespace OpenFairy.UGUI.Editor
 
                     var item = new TransitionItem
                     {
-                        time = itemXml.Time / 24f,
+                        time = itemXml.Time / (float)transitionXml.FrameRate,
                         target = target.Go != null ? (RectTransform)target.Go.transform : null,
                         type = type.Value,
                         tween = itemXml.Tween,
-                        duration = itemXml.Duration / 24f,
+                        duration = itemXml.Duration / (float)transitionXml.FrameRate,
                         ease = ParseEase(itemXml.Ease),
                         repeat = itemXml.Repeat,
                         yoyo = itemXml.Yoyo,
@@ -1793,12 +1966,10 @@ namespace OpenFairy.UGUI.Editor
                     }
                     else if (item.type == TransitionItemType.ColorFilter)
                     {
-                        // ColorFilter 目标烘一个 disabled 的 ColorAdjust，运行时 Transition 直接 Set。
                         var filterGo = target.Go != null ? target.Go : root;
-                        if (!filterGo.TryGetComponent(out ColorAdjust adjust))
-                            adjust = filterGo.AddComponent<ColorAdjust>();
-                        adjust.shader = ColorMatrixShader;
-                        adjust.enabled = false;
+                        // A static filter remains active before its first transition sample.
+                        if (!filterGo.TryGetComponent<ColorAdjust>(out _))
+                            ConfigureColorFilter(filterGo, target.Xml?.Kind ?? Schema.DisplayKind.Component).enabled = false;
                     }
 
                     items.Add(item);
@@ -1868,9 +2039,8 @@ namespace OpenFairy.UGUI.Editor
             if (Sounds.TryGetValue(resource, out var clip))
                 return clip;
             var target = AssetPath(resource.File);
-            Directory.CreateDirectory(Path.GetDirectoryName(target));
-            File.Copy(resource.File, target, true);
-            AssetDatabase.ImportAsset(target);
+            if (WriteFileIfChanged(target, File.ReadAllBytes(resource.File)) || AssetImporter.GetAtPath(target) == null)
+                AssetDatabase.ImportAsset(target);
             return Sounds[resource] = AssetDatabase.LoadAssetAtPath<AudioClip>(target);
         }
 
@@ -1940,6 +2110,31 @@ namespace OpenFairy.UGUI.Editor
             host.pivotAsAnchor = element.Anchor;
             host.bindings = bindings.ToArray();
             host.Record();
+        }
+
+        private static bool AutoSizeText(Schema.Display element) => !element.Input
+            && element.Kind is Schema.DisplayKind.Text or Schema.DisplayKind.RichText
+            && element.AutoSize is Schema.TextAutoSize.Both or Schema.TextAutoSize.Height;
+
+        private static void ConfigureTextLayout(GameObject go, Schema.Display element)
+        {
+            if (!AutoSizeText(element)) return;
+            var fitter = go.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = element.AutoSize == Schema.TextAutoSize.Both
+                ? ContentSizeFitter.FitMode.PreferredSize : ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        }
+
+        private static void PrepareTextRelations(Schema.Display element)
+        {
+            if (!AutoSizeText(element)) return;
+            // Content owns automatic axes. Parent size constraints on those axes
+            // must not feed back into a parent whose size follows this text.
+            foreach (var relation in element.Relations)
+                relation.Rules = relation.Rules.AsValueEnumerable().Where(rule =>
+                    !(rule.side == RelationSide.Height || rule.side >= RelationSide.TopExtTop
+                        || element.AutoSize == Schema.TextAutoSize.Both
+                        && (rule.side == RelationSide.Width || rule.side >= RelationSide.LeftExtLeft))).ToArray();
         }
 
         private static void SetRect(RectTransform rt, Schema.Display element, Vector2 size, RectTransform parent)
@@ -2065,27 +2260,43 @@ namespace OpenFairy.UGUI.Editor
             text.raycastTarget = false;
             StretchFull((RectTransform)textGo.transform);
 
-            TextMeshProUGUI placeholder = null;
-            if (!string.IsNullOrEmpty(element.Prompt))
-            {
-                var placeholderGo = NewChild("Placeholder", textAreaRect, typeof(TextMeshProUGUI));
-                placeholder = placeholderGo.GetComponent<TextMeshProUGUI>();
-                ConfigureTmpText(placeholder, element, owner, true);
-                placeholder.text = element.Prompt;
-                placeholder.fontStyle |= FontStyles.Italic;
-                var placeholderColor = placeholder.color;
-                placeholderColor.a *= 0.45f;
-                placeholder.color = placeholderColor;
-                placeholder.raycastTarget = false;
-                StretchFull((RectTransform)placeholderGo.transform);
-            }
-
             field.textViewport = textAreaRect;
             field.textComponent = text;
-            field.placeholder = placeholder;
             field.fontAsset = text.font;
+            field.richText = false;
+            if (element.Prompt != null) ConfigureTmpPrompt(field, element.Prompt);
             field.text = element.Text;
             return root;
+        }
+
+        private static void ConfigureTmpPrompt(TMP_InputField field, string prompt)
+        {
+            if (!(field.placeholder is TMP_Text placeholder))
+            {
+                var go = NewChild("Placeholder", field.textViewport, typeof(TextMeshProUGUI));
+                placeholder = go.GetComponent<TextMeshProUGUI>();
+                var text = field.textComponent;
+                placeholder.font = text.font;
+                placeholder.fontSharedMaterial = text.fontSharedMaterial;
+                placeholder.fontSize = text.fontSize;
+                placeholder.fontStyle = text.fontStyle;
+                placeholder.color = text.color;
+                placeholder.alignment = text.alignment;
+                placeholder.characterSpacing = text.characterSpacing;
+                placeholder.lineSpacing = text.lineSpacing;
+                placeholder.textWrappingMode = text.textWrappingMode;
+                placeholder.overflowMode = text.overflowMode;
+                StretchFull((RectTransform)go.transform);
+                field.placeholder = placeholder;
+            }
+            placeholder.raycastTarget = false;
+            placeholder.richText = true;
+            if (!placeholder.TryGetComponent(out TmpTextMarkup markup))
+                markup = placeholder.gameObject.AddComponent<TmpTextMarkup>();
+            markup.ubb = true;
+            markup.html = false;
+            markup.Bind();
+            placeholder.text = prompt;
         }
 
         private static void ConfigureTmpText(TextMeshProUGUI text, Schema.Display element, Resource owner, bool inputText)
@@ -2283,9 +2494,7 @@ namespace OpenFairy.UGUI.Editor
             {
                 var atlas = Resources[fontResource.PackageId + fontResource.Texture];
                 texturePath = AssetPath(atlas.File);
-                Directory.CreateDirectory(Path.GetDirectoryName(texturePath));
-                File.Copy(atlas.File, texturePath, true);
-                ImportSprite(texturePath);
+                ImportSprite(texturePath, contentChanged: WriteFileIfChanged(texturePath, File.ReadAllBytes(atlas.File)));
                 for (var i = 0; i < charLines.Count; i++)
                 {
                     var attrs = charLines[i];
@@ -2320,10 +2529,9 @@ namespace OpenFairy.UGUI.Editor
                 }
                 canvas.Apply();
                 texturePath = Path.ChangeExtension(AssetPath(fontResource.File), ".png");
-                Directory.CreateDirectory(Path.GetDirectoryName(texturePath));
-                File.WriteAllBytes(texturePath, canvas.EncodeToPNG());
+                var changed = WriteFileIfChanged(texturePath, canvas.EncodeToPNG());
                 Object.DestroyImmediate(canvas);
-                ImportSprite(texturePath);
+                ImportSprite(texturePath, contentChanged: changed);
             }
 
             for (var i = 0; i < charLines.Count; i++)
@@ -2357,11 +2565,18 @@ namespace OpenFairy.UGUI.Editor
                 AssetDatabase.CreateAsset(asset, assetPath);
                 asset = AssetDatabase.LoadAssetAtPath<BitmapFont>(assetPath);
             }
-            asset.size = size;
-            asset.canTint = fontResource.Texture != null; // 标准 BMFont 可着色，逐字图片字体保留原色
-            asset.texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
-            asset.glyphs = glyphs.ToArray();
-            EditorUtility.SetDirty(asset);
+            var textureAsset = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
+            var glyphArray = glyphs.ToArray();
+            var canTint = fontResource.Texture != null;
+            if (asset.size != size || asset.canTint != canTint || asset.texture != textureAsset
+                || asset.glyphs == null || !asset.glyphs.AsValueEnumerable().SequenceEqual(glyphArray))
+            {
+                asset.size = size;
+                asset.canTint = canTint;
+                asset.texture = textureAsset;
+                asset.glyphs = glyphArray;
+                EditorUtility.SetDirty(asset);
+            }
             return FontAssets[fontResource] = asset;
         }
 
@@ -2398,8 +2613,14 @@ namespace OpenFairy.UGUI.Editor
             return go;
         }
 
-        private static Sprite LoadSprite(string src, string packageId) =>
-            AssetDatabase.LoadAssetAtPath<Sprite>(SpritePath(Resolve(src, packageId)));
+        private static Sprite LoadSprite(string src, string packageId)
+        {
+            if (string.IsNullOrWhiteSpace(src)) return null;
+            if (TryResolve(src, packageId, out var resource))
+                return AssetDatabase.LoadAssetAtPath<Sprite>(SpritePath(resource));
+            Debug.LogWarning($"Unresolved FairyGUI icon: {src}");
+            return null;
+        }
 
         private static Resource Resolve(string value, string packageId) =>
             Resources[value.StartsWith("ui://") ? value[5..] : packageId + value];
@@ -2448,7 +2669,18 @@ namespace OpenFairy.UGUI.Editor
             return duplicated ? name + "_" + Identifier(component.Id) : name;
         }
 
-        private static string Field(string name) => Identifier(CodeSettings().memberNamePrefix + Identifier(name));
+        private static readonly HashSet<string> SerializedBaseFields = new(StringComparer.Ordinal)
+        {
+            "m_ObjectHideFlags", "m_CorrespondingSourceObject", "m_PrefabInstance", "m_PrefabAsset",
+            "m_GameObject", "m_Enabled", "m_EditorHideFlags", "m_Script", "m_Name", "m_EditorClassIdentifier",
+            "controllerChildren",
+        };
+
+        private static string Field(string name)
+        {
+            var field = Identifier(CodeSettings().memberNamePrefix + Identifier(name));
+            return SerializedBaseFields.Contains(field) ? field + "_" : field;
+        }
 
         // 空成员前缀时，控制器字段与内嵌枚举不能同名。
         private static string ControllerEnumName(string name) =>
@@ -2476,6 +2708,10 @@ namespace OpenFairy.UGUI.Editor
             return _codeGenerationSettings = publish?.codeGeneration ?? new CodeGenerationSettings();
         }
 
+        private static string GeneratedNamespace(Resource resource) =>
+            string.IsNullOrEmpty(CodeSettings().packageName) ? Identifier(resource.Package)
+                : string.Join(".", Array.ConvertAll(CodeSettings().packageName.Split('.'), Identifier)) + "." + Identifier(resource.Package);
+
         [Serializable]
         private class PublishSettings
         {
@@ -2487,6 +2723,7 @@ namespace OpenFairy.UGUI.Editor
         {
             // 缺少配置时沿用旧版 OpenFairy 的命名和不过滤行为。
             public string classNamePrefix = "";
+            public string packageName = "";
             public string memberNamePrefix = "m_";
             public bool ignoreNoname;
         }
@@ -2508,6 +2745,8 @@ namespace OpenFairy.UGUI.Editor
         [Serializable]
         private class CommonSettings
         {
+            public string tipsRes = "";
+            public int captureLayer = 31;
             public int fontSize = 12;
             public string textColor = "#000000";
             public string font = "";
@@ -2519,6 +2758,7 @@ namespace OpenFairy.UGUI.Editor
         {
             public string vertical;
             public string horizontal;
+            public string defaultDisplay = "visible";
         }
     }
 }

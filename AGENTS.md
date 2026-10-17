@@ -2,6 +2,10 @@
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+当前能力以状态文档的最新日期为准，下文开发经验保留其历史背景。原 `ScrollPaneHost` 已删除，滚动交互由原生 `ScrollRect`/`Scrollbar` 承担；虚拟列表、循环索引与变高行已实现。输入框已补 Input System 撤销/重做与单行 Tab。按钮 `grayed` 只决定视觉，触摸/交互是独立通道，不再以灰显一律拦截点击。
+
+对象捕获/模糊/容器颜色滤镜已有显式同步刷新入口，自动运行接入尚待验证；关系布局在 `PostLateUpdate` 同步，不能在普通 `LateUpdate` 或 `willRenderCanvases` 直接捕获。导出续建的 `delayCall` 依赖 Editor 活动状态，`Pending=false` 不等于 prefab 已完成；观察真正的完成日志，不清空其他系统回调。
+
 ## 环境
 
 - **代码检索**：如果仓库根目录存在 `.codegraph/`，优先用 CodeGraph MCP 的 `codegraph_explore` 理解代码；没有 MCP 时用 `codegraph explore "..."`。没有 `.codegraph/` 才用 `rg`/文件读取。

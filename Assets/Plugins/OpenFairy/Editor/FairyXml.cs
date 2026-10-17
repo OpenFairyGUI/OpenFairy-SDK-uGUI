@@ -182,6 +182,18 @@ namespace OpenFairy.UGUI.Editor
                 return float.Parse(value, CultureInfo.InvariantCulture);
             if (type == typeof(Vector2))
                 return ParsePair(value);
+            if (type == typeof(Schema.ColorFilterData))
+            {
+                var values = value.Split(',');
+                if (values.Length != 4)
+                    throw new FormatException("Color filter data requires brightness, contrast, saturation and hue.");
+                return new Schema.ColorFilterData {
+                    Brightness = float.Parse(values[0], CultureInfo.InvariantCulture),
+                    Contrast = float.Parse(values[1], CultureInfo.InvariantCulture),
+                    Saturation = float.Parse(values[2], CultureInfo.InvariantCulture),
+                    Hue = float.Parse(values[3], CultureInfo.InvariantCulture),
+                };
+            }
             if (type == typeof(string[]))
                 return value.Split(',');
             if (type == typeof(ValueTuple<string, string>[]))
@@ -309,6 +321,13 @@ namespace OpenFairy.UGUI.Editor.Schema
         List,
     }
 
+    public enum FilterKind { None, Color }
+
+    public struct ColorFilterData
+    {
+        public float Brightness, Contrast, Saturation, Hue;
+    }
+
     public enum ComponentExtension
     {
         None,
@@ -332,6 +351,16 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlEnum("vt")] Vertical,
         [XmlEnum("hz")] Horizontal,
         [XmlEnum("both")] Both,
+    }
+
+    public enum ScrollBarDisplay { Default, Visible, Auto, Hidden }
+
+    [Flags]
+    public enum ScrollFlags
+    {
+        None = 0, DisplayOnLeft = 1, SnapToItem = 2, DisplayInDemand = 4, PageMode = 8,
+        TouchOn = 16, TouchOff = 32, BounceOn = 64, BounceOff = 128,
+        InertiaDisabled = 256, MaskDisabled = 512, Floating = 1024,
     }
 
     public enum LoaderFill
@@ -514,13 +543,16 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("overflow")] public Overflow Overflow;
         [XmlAttribute("mask")] public string Mask;
         [XmlAttribute("scroll")] public Scroll Scroll = Scroll.Vertical;
-        [XmlAttribute("scrollBar")] public string ScrollBar;
-        [XmlAttribute("scrollBarFlags")] public int ScrollBarFlags;
+        [XmlAttribute("scrollBar")] public ScrollBarDisplay ScrollBar;
+        [XmlAttribute("scrollBarRes")] public string[] ScrollBarRes;
+        [XmlAttribute("pageController")] public string PageController;
+        [XmlAttribute("scrollBarFlags")] public ScrollFlags ScrollBarFlags;
         [XmlAttribute("margin")] public string Margin;
         [XmlAttribute("scrollBarMargin")] public string ScrollBarMargin;
         [XmlAttribute("clipSoftness")] public string ClipSoftness;
 
         [XmlElement("controller")] public Controller[] Controllers = Array.Empty<Controller>();
+        [XmlElement("relation")] public Relation[] Relations = Array.Empty<Relation>();
 
         [XmlArray("displayList")]
         [XmlArrayItem("image")]
@@ -592,10 +624,13 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("anchor")] public bool Anchor;
         [XmlAttribute("visible")] public bool Visible = true;
         [XmlAttribute("touchable")] public bool Touchable = true;
+        [XmlAttribute("tooltips")] public string Tooltips;
         [XmlAttribute("grayed")] public bool Grayed;
         [XmlAttribute("rotation")] public float? Rotation;
         [XmlAttribute("alpha")] public float? Alpha;
         [XmlAttribute("blend")] public BlendMode BlendMode;
+        [XmlAttribute("filter")] public FilterKind Filter;
+        [XmlAttribute("filterData")] public ColorFilterData FilterData;
         [XmlAttribute("type")] public ShapeType Type;
         [XmlAttribute("color")] public string Color;
         [XmlAttribute("fillMethod")] public ImageFillMethod FillMethod;
@@ -622,8 +657,10 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("frame")] public int Frame;
         [XmlAttribute("overflow")] public Overflow Overflow;
         [XmlAttribute("scroll")] public Scroll Scroll = Scroll.Vertical;
-        [XmlAttribute("scrollBar")] public string ScrollBar;
-        [XmlAttribute("scrollBarFlags")] public int ScrollBarFlags;
+        [XmlAttribute("scrollBar")] public ScrollBarDisplay ScrollBar;
+        [XmlAttribute("scrollBarRes")] public string[] ScrollBarRes;
+        [XmlAttribute("pageController")] public string PageController;
+        [XmlAttribute("scrollBarFlags")] public ScrollFlags ScrollBarFlags;
         [XmlAttribute("margin")] public string Margin;
         [XmlAttribute("scrollBarMargin")] public string ScrollBarMargin;
         [XmlAttribute("clipSoftness")] public string ClipSoftness;
@@ -698,6 +735,9 @@ namespace OpenFairy.UGUI.Editor.Schema
     public class Extension
     {
         [XmlAttribute("title")] public string Title;
+        [XmlAttribute("prompt")] public string Prompt;
+        [XmlAttribute("password")] public bool? Password;
+        [XmlAttribute("maxLength")] public int? MaxLength;
         [XmlAttribute("selectedTitle")] public string SelectedTitle;
         [XmlAttribute("icon")] public string Icon;
         [XmlAttribute("mode")] public OpenFairy.UGUI.ButtonMode? Mode; // 实例级缺省时不覆盖定义级
@@ -727,6 +767,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("autoPlay")] public bool AutoPlay;
         [XmlAttribute("autoPlayRepeat")] public int AutoPlayRepeat = 1;
         [XmlAttribute("autoPlayDelay")] public float AutoPlayDelay;
+        [XmlAttribute("frameRate")] public int FrameRate = 24;
         [XmlElement("item")] public TransitionItem[] Items = Array.Empty<TransitionItem>();
     }
 

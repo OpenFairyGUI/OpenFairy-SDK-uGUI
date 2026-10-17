@@ -28,6 +28,14 @@ namespace OpenFairy.UGUI
         private readonly List<Window> _windows = new();
         private GameObject _blocker;
         private GameObject _modalLayer;
+        private Label _tooltipTemplate;
+        private Label _tooltipView;
+        private Tooltip _tooltipOwner;
+        private PointerEventData _tooltipPointer;
+        private Vector2 _tooltipPosition;
+        private string _tooltipText;
+        private float _tooltipTime;
+        private bool _tooltipPending;
 
         public Color modalColor = new(0, 0, 0, 0.4f);
 
@@ -74,6 +82,7 @@ namespace OpenFairy.UGUI
 
         public UniTask ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
         {
+            HideTooltip();
             if (_popups.Contains(popup))
                 HidePopup(popup); // 去重：已在栈里则先收起该 popup 以上
             popup.SetParent(rect, false);
@@ -106,6 +115,97 @@ namespace OpenFairy.UGUI
         {
             RectTransformUtility.ScreenPointToLocalPointInRectangle(rect, screen, camera, out var local);
             return new Vector2(local.x, -local.y);
+        }
+
+        // Positions use the same top-left design coordinates as popups.
+        public void ShowTooltip(Label template, string message, Vector2 position, float delay = .1f)
+        {
+            HideTooltip();
+            if (template == null || string.IsNullOrEmpty(message))
+                return;
+            if (_tooltipTemplate != template)
+            {
+                if (_tooltipView != null)
+                    Destroy(_tooltipView.gameObject);
+                _tooltipTemplate = template;
+                _tooltipView = Instantiate(template, rect);
+                var group = _tooltipView.GetComponent<CanvasGroup>();
+                if (group == null) group = _tooltipView.gameObject.AddComponent<CanvasGroup>();
+                group.blocksRaycasts = false;
+                group.interactable = false;
+                foreach (var graphic in _tooltipView.GetComponentsInChildren<Graphic>(true))
+                    graphic.raycastTarget = false;
+                _tooltipView.gameObject.SetActive(false);
+            }
+            _tooltipText = message;
+            _tooltipPosition = position;
+            _tooltipTime = Time.unscaledTime + delay;
+            _tooltipPending = true;
+            if (delay <= 0) PresentTooltip();
+        }
+
+        internal void ShowTooltip(Tooltip owner, PointerEventData pointer)
+        {
+            ShowTooltip(owner.template, owner.text, TooltipPosition(pointer), owner.delay);
+            _tooltipOwner = owner;
+            _tooltipPointer = pointer;
+        }
+
+        private Vector2 TooltipPosition(PointerEventData pointer) =>
+            ScreenToDesign(pointer.position + new Vector2(10, -20), pointer.enterEventCamera);
+
+        internal void HideTooltip(Tooltip owner)
+        {
+            if (_tooltipOwner == owner) HideTooltip();
+        }
+
+        public void HideTooltip()
+        {
+            _tooltipPending = false;
+            _tooltipOwner = null;
+            _tooltipPointer = null;
+            if (_tooltipView != null) _tooltipView.gameObject.SetActive(false);
+        }
+
+        private void Update()
+        {
+            // Observe the existing event data without adding a pointer-down handler
+            // that would intercept a parent button or scroll view's input.
+            if (_tooltipPointer != null && (_tooltipPointer.eligibleForClick || _tooltipPointer.pointerPress != null || _tooltipPointer.dragging))
+                HideTooltip();
+            if (_tooltipPending && Time.unscaledTime >= _tooltipTime)
+            {
+                if (_tooltipPointer != null) _tooltipPosition = TooltipPosition(_tooltipPointer);
+                PresentTooltip();
+            }
+        }
+
+        private void PresentTooltip()
+        {
+            _tooltipPending = false;
+            _tooltipView.gameObject.SetActive(true);
+            _tooltipView.transform.SetAsLastSibling();
+            _tooltipView.title = _tooltipText;
+            _tooltipView.titleText.RefreshText();
+            var rt = (RectTransform)_tooltipView.transform;
+            // A Label is not a layout controller. Rebuild the title's own layout
+            // root rather than asking LayoutRebuilder to traverse an unrelated root.
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_tooltipView.titleText.rectTransform);
+            foreach (var relation in _tooltipView.GetComponentsInChildren<Relation>(true))
+                relation.Sync();
+            var position = _tooltipPosition;
+            if (position.x + rt.rect.width > size.x) position.x -= rt.rect.width;
+            if (position.y + rt.rect.height > size.y) position.y -= rt.rect.height + 1;
+            position.x = Mathf.Clamp(position.x, 0, Mathf.Max(0, size.x - rt.rect.width));
+            position.y = Mathf.Clamp(position.y, 0, Mathf.Max(0, size.y - rt.rect.height));
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
+            rt.anchoredPosition = new Vector2(Mathf.Round(position.x), -Mathf.Round(position.y));
+        }
+
+        private void OnDisable() => HideTooltip();
+        private void OnDestroy()
+        {
+            if (_inst == this) _inst = null;
         }
 
         public UniTask TogglePopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
@@ -197,6 +297,7 @@ namespace OpenFairy.UGUI
         // ---- Window 托管（复刻 Root.ShowWindow/HideWindowImmediately/BringToFront）----
         public void ShowWindow(Window win)
         {
+            HideTooltip();
             if (!_windows.Contains(win))
                 _windows.Add(win);
             win.EnsureInited(rect);

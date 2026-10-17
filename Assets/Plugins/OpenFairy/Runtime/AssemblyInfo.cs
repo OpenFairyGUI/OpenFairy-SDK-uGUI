@@ -8,3 +8,5 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("OpenFairy.UGUI.TestSupport")]
 
 [assembly: InternalsVisibleTo("OpenFairy.UGUI.Tests.Runtime")]
+
+[assembly: InternalsVisibleTo("OpenFairy.UGUI.Tests.Editor")]
