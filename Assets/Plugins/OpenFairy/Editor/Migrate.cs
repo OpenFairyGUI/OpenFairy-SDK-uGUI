@@ -725,10 +725,6 @@ namespace OpenFairy.UGUI.Editor
 
                 foreach (var controller in controllers.Values)
                     BuildController(controller);
-                foreach (var fitter in root.GetComponentsInChildren<ContentSizeFitter>())
-                    LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)fitter.transform);
-                LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
-                SyncRelations(root);
 
                 if (comp is ButtonBase buttonComp)
                 {
@@ -798,6 +794,10 @@ namespace OpenFairy.UGUI.Editor
                 var prefabPath = Path.ChangeExtension(AssetPath(component.File), ".prefab");
                 Directory.CreateDirectory(Path.GetDirectoryName(prefabPath));
                 InputEditingBuilder.Bake(root);
+                foreach (var fitter in root.GetComponentsInChildren<ContentSizeFitter>())
+                    LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)fitter.transform);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
+                SyncRelations(root);
                 Prefabs[prefabPath] = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             }
             finally
@@ -902,16 +902,6 @@ namespace OpenFairy.UGUI.Editor
                     go = (GameObject)PrefabUtility.InstantiatePrefab(LoadPrefab(dep), parent);
                     go.name = name;
                     size ??= ((RectTransform)go.transform).sizeDelta;
-                    if (element.Button is { } button)
-                        ConfigureButton(go, button, owner.PackageId);
-                    if (element.Label is { } label)
-                        ConfigureLabel(go, label, owner.PackageId);
-                    if (element.ProgressBar is { } progress)
-                        ConfigureProgressBar(go, progress);
-                    if (element.Slider is { } slider)
-                        ConfigureSlider(go, slider);
-                    if (element.ComboBox is { } comboBox) // 实例级：烘焙 items + 默认标题
-                        ConfigureComboBox(go, comboBox, owner.PackageId);
                     break;
                 }
                 default:
@@ -936,6 +926,20 @@ namespace OpenFairy.UGUI.Editor
                 createdText.RebuildImages(); // 依赖最终 rect 的排版，须在 SetRect 之后烘焙
             ConfigureTextLayout(go, element);
             ApplyElement(go, element);
+            if (element.Kind == Schema.DisplayKind.Component)
+            {
+                ConfigureInstanceControllers(go.GetComponent<Component>(), Resolve(element.Source, owner.PackageId).ComponentXml, element.Controller);
+                if (element.Button is { } button)
+                    ConfigureButton(go, button, owner.PackageId);
+                if (element.Label is { } label)
+                    ConfigureLabel(go, label, owner.PackageId);
+                if (element.ProgressBar is { } progress)
+                    ConfigureProgressBar(go, progress);
+                if (element.Slider is { } slider)
+                    ConfigureSlider(go, slider);
+                if (element.ComboBox is { } comboBox) // 实例级：烘焙 items + 默认标题
+                    ConfigureComboBox(go, comboBox, owner.PackageId);
+            }
             if (!element.Visible)
                 go.SetActive(false);
 
@@ -1207,6 +1211,22 @@ namespace OpenFairy.UGUI.Editor
             {
                 flip.flipX = element.Flip is Schema.Flip.Horizontal or Schema.Flip.Both;
                 flip.flipY = element.Flip is Schema.Flip.Vertical or Schema.Flip.Both;
+            }
+        }
+
+        private static void ConfigureInstanceControllers(Component component, Schema.Component source, string values)
+        {
+            if (string.IsNullOrEmpty(values))
+                return;
+            var pairs = values.Split(',');
+            for (var i = 0; i < pairs.Length; i += 2)
+            {
+                var controller = Array.FindIndex(source.Controllers, item => item.Name == pairs[i]);
+                if (controller < 0)
+                    continue;
+                var page = Array.FindIndex(source.Controllers[controller].Pages, item => item.Id == pairs[i + 1]);
+                if (page >= 0)
+                    component.SetControllerPage(controller, page);
             }
         }
 
@@ -1824,6 +1844,7 @@ namespace OpenFairy.UGUI.Editor
                 var itemGo = (GameObject)PrefabUtility.InstantiatePrefab(prefab, view.Content);
                 ((RectTransform)itemGo.transform).anchoredPosition = new Vector2(position.x, -position.y);
                 ConfigureButton(itemGo, item, owner.PackageId);
+                ConfigureInstanceControllers(itemGo.GetComponent<Component>(), Resolve(element.DefaultItem, owner.PackageId).ComponentXml, item.Controllers);
             }
             SetGrips(view, content);
             if (element.SelectionMode != ListSelectionMode.None)
@@ -2154,11 +2175,11 @@ namespace OpenFairy.UGUI.Editor
             rt.offsetMax = new Vector2(xy.x + size.x - anchorMax.x * pw, ph - xy.y - anchorMax.y * ph);
             if (element.Pivot is { } pivot)
             {
-                // pivot setter 保持 anchoredPosition，需要补偿位移以保持 rect 不动。
+                // Pivot changes also move the anchor reference point; only the residual size needs compensation.
                 var newPivot = new Vector2(pivot.x, 1 - pivot.y);
                 var delta = newPivot - rt.pivot;
                 rt.pivot = newPivot;
-                rt.anchoredPosition += new Vector2(delta.x * size.x, delta.y * size.y);
+                rt.anchoredPosition += Vector2.Scale(delta, rt.sizeDelta);
             }
             if (element.Scale is { } scale)
                 rt.localScale = new Vector3(scale.x, scale.y, 1);

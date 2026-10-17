@@ -4,6 +4,8 @@
 
 当前能力以状态文档的最新日期为准，下文开发经验保留其历史背景。原 `ScrollPaneHost` 已删除，滚动交互由原生 `ScrollRect`/`Scrollbar` 承担；虚拟列表、循环索引与变高行已实现。输入框已补 Input System 撤销/重做与单行 Tab。按钮 `grayed` 只决定视觉，触摸/交互是独立通道，不再以灰显一律拦截点击。
 
+导入器的组件实例 `controller`、列表项 `controllers` 使用页ID而非序号，按原顺序应用后再结算最终布局。测试中需要挂在 GameObject/prefab 上的支持组件放运行时测试程序集，不能放 Editor 程序集；EditMode 测试经引用复用这些支持组件。
+
 对象捕获/模糊/容器颜色滤镜已有显式同步刷新入口，自动运行接入尚待验证；关系布局在 `PostLateUpdate` 同步，不能在普通 `LateUpdate` 或 `willRenderCanvases` 直接捕获。导出续建的 `delayCall` 依赖 Editor 活动状态，`Pending=false` 不等于 prefab 已完成；观察真正的完成日志，不清空其他系统回调。
 
 ## 环境

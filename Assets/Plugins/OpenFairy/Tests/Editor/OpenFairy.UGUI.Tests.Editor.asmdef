@@ -3,7 +3,8 @@
     "references": [
         "OpenFairy.UGUI",
         "OpenFairy.UGUI.Editor",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "OpenFairy.UGUI.Tests.Runtime"
     ],
     "includePlatforms": [
         "Editor"

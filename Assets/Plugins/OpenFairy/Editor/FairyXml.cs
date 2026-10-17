@@ -609,6 +609,7 @@ namespace OpenFairy.UGUI.Editor.Schema
     {
         [XmlAttribute("id")] public string Id;
         [XmlAttribute("name")] public string Name;
+        [XmlAttribute("controller")] public string Controller;
         [XmlAttribute("src")] public string Src;
         [XmlAttribute("pkg")] public string Package;
         [XmlAttribute("lineItemCount")] public int LineItemCount;
@@ -734,6 +735,7 @@ namespace OpenFairy.UGUI.Editor.Schema
 
     public class Extension
     {
+        [XmlAttribute("controllers")] public string Controllers;
         [XmlAttribute("title")] public string Title;
         [XmlAttribute("prompt")] public string Prompt;
         [XmlAttribute("password")] public bool? Password;

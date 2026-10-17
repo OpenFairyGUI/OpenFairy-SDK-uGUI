@@ -11,7 +11,8 @@
 - 提示框使用作者配置的 Label prefab 直接引用。普通文本自动尺寸交给原生 `ContentSizeFitter`；根关系与尺寸 gear 尊重内容拥有的自动轴。立即显示提示框时刷新实际文字布局节点，避免非布局容器阻断子树遍历。
 - 输入框通过 Input System 支持焦点期五步撤销/重做、选区恢复和单行 Tab 导航，程序赋值清除历史。灰显保留视觉语义，命中与点击由独立触摸/交互通道决定。
 - 生成器支持发布命名空间前缀，避开 Unity 原生序列化保留字段。未绘图的 Graph 节点生成 `RectTransform` 引用。Transition 使用各自动画的帧率，缺省仍为 24。
-- 嵌入包真实 Test Runner 已通过 71 项 PlayMode 与 44 项 Editor 测试。此处对应 TMP 后端及这些包内测试；传统 Basics/Transition 的历史 golden 套件没有重新运行，不能合并计数。两种文字后端另有离线编译检查，不能替代原生行为验证。
+- 嵌入包真实 Test Runner 已通过 71 项 PlayMode 与 62 项 Editor 测试。后续18项Editor回归覆盖点/拉伸锚点与pivot、实例/列表作者控制器设置，以及真正保存prefab后的最终标题尺寸。此处对应 TMP 后端及这些包内测试；传统 Basics/Transition 的历史 golden 套件没有重新运行，不能合并计数。两种文字后端另有离线编译检查，不能替代原生行为验证。
+- 修正拉伸锚点改变pivot时的补偿：使用 `sizeDelta`，不能把父锚点跨度重复计入位移。组件实例及列表项的作者控制器设置在导入期按页ID、有序解析为既有静态控制器调用；缺省保留定义默认，失效名称/页ID按原语义跳过。布局结算放在控件配置/初始actions之后，避免将早期标题宽度保存进最终prefab。
 - 捕获相机的 `useOcclusionCulling` 在新引擎有弃用警告，目前没有等价的逐相机新接口；保留隔离捕获的明确关闭语义。`CanvasRenderer.GetMesh()` 未弃用，不增加网格复制或改变借用所有权。
 - 后续已知缺口：位图字体在同域改写 glyph 后需失效已有查找缓存；滤镜的自动运行接入必须晚于 `Relation` 的 `PostLateUpdate` 同步，不能直接放普通 `LateUpdate` 或 `willRenderCanvases`。本次测试不证明这些尚未接入的路径。
 
