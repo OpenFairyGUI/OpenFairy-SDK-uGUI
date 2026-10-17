@@ -186,6 +186,8 @@ namespace OpenFairy.UGUI.Editor
                 return value.Split(',');
             if (type == typeof(ValueTuple<string, string>[]))
                 return ParsePages(value);
+            if (type == typeof(OpenFairy.UGUI.RelationRule[]))
+                return ParseRelations(value);
             if (type.IsEnum)
                 return value == "" ? Enum.ToObject(type, 0) : ParseEnum(type, value); // 空属性值（如 scale=""）= 缺省
             if (type.IsArray && type.GetElementType().IsEnum)
@@ -218,6 +220,34 @@ namespace OpenFairy.UGUI.Editor
                 return alias;
             // XML 词表的标点风格（left-left / multiple_singleclick）折叠成成员名，忽略大小写（titleType="valueAndmax" 等杂写）。
             return Enum.Parse(type, value.Replace("-", "").Replace("_", ""), true);
+        }
+
+        private static OpenFairy.UGUI.RelationRule[] ParseRelations(string value)
+        {
+            var rules = new List<OpenFairy.UGUI.RelationRule>();
+            foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var percent = token.EndsWith('%');
+                var name = token.TrimEnd('%').Replace("-", "").Replace("_", "");
+                if (name.Equals("size", StringComparison.OrdinalIgnoreCase))
+                {
+                    Add(OpenFairy.UGUI.RelationSide.Width, percent);
+                    Add(OpenFairy.UGUI.RelationSide.Height, percent);
+                }
+                else
+                {
+                    if (name.Equals("widthwidth", StringComparison.OrdinalIgnoreCase)) name = "Width";
+                    else if (name.Equals("heightheight", StringComparison.OrdinalIgnoreCase)) name = "Height";
+                    Add((OpenFairy.UGUI.RelationSide)ParseEnum(typeof(OpenFairy.UGUI.RelationSide), name), percent);
+                }
+            }
+            return rules.ToArray();
+
+            void Add(OpenFairy.UGUI.RelationSide side, bool percent)
+            {
+                if (!rules.AsValueEnumerable().Any(rule => rule.side == side))
+                    rules.Add(new OpenFairy.UGUI.RelationRule { side = side, percent = percent });
+            }
         }
 
         private static Vector2 ParsePair(string value)
@@ -647,7 +677,7 @@ namespace OpenFairy.UGUI.Editor.Schema
     public class Relation
     {
         [XmlAttribute("target")] public string Target = "";
-        [XmlAttribute("sidePair")] public OpenFairy.UGUI.RelationSide[] SidePairs = Array.Empty<OpenFairy.UGUI.RelationSide>();
+        [XmlAttribute("sidePair")] public OpenFairy.UGUI.RelationRule[] Rules = Array.Empty<OpenFairy.UGUI.RelationRule>();
     }
 
     public class Gear

@@ -632,7 +632,7 @@ namespace OpenFairy.UGUI.Editor
                     if (element.Kind == Schema.DisplayKind.Group)
                         foreach (var (member, memberGo) in children)
                             if (member.Group == element.Id)
-                                memberGo.transform.SetParent(go.transform, true);
+                                ReparentPreservingRect((RectTransform)memberGo.transform, (RectTransform)go.transform);
 
                 if (xml.Mask is { } mask)
                 {
@@ -640,27 +640,17 @@ namespace OpenFairy.UGUI.Editor
                     maskGo.AddComponent<Mask>().showMaskGraphic = false;
                     foreach (var (_, childGo) in children)
                         if (childGo != maskGo && childGo.transform.parent == rt)
-                            childGo.transform.SetParent(maskGo.transform, true);
+                            ReparentPreservingRect((RectTransform)childGo.transform, (RectTransform)maskGo.transform);
                 }
 
+                var relationSpace = rt;
                 if (xml.Overflow == Schema.Overflow.Scroll)
                 {
                     var view = BuildScrollView(root, xml, rt.sizeDelta);
+                    relationSpace = view.Viewport;
                     foreach (var (_, childGo) in children)
                         if (childGo.transform.parent == rt)
-                        {
-                            var childRt = (RectTransform)childGo.transform;
-                            var stretch = childRt.anchorMax - childRt.anchorMin; // 容器关联映射出的拉伸锚点份额
-                            childRt.SetParent(view.Viewport, false);
-                            if (stretch != Vector2.zero)
-                            {
-                                // offset 按组件根尺寸算，锚点分数进 viewport 后 referencing 更窄的 rect（缩进了 margin+滚动条），
-                                // 拉伸子物体静置尺寸会被削。按差额补回：左/上边不动，右/下边外扩，保持 authored 尺寸。
-                                var d = Vector2.Scale(stretch, rt.sizeDelta - view.ViewportSize);
-                                childRt.offsetMax += new Vector2(d.x, 0);
-                                childRt.offsetMin -= new Vector2(0, d.y);
-                            }
-                        }
+                            ReparentPreservingRect((RectTransform)childGo.transform, view.Viewport, false);
                     SetGrips(view, ContentBounds(children));
                     AddScrollHost(root, view); // 运行时自挂 ScrollPane，转换后无需胶水即可滚动
                 }
@@ -669,14 +659,7 @@ namespace OpenFairy.UGUI.Editor
                 foreach (var (element, go) in children)
                     byId.TryAdd(element.Id, (element, go));
                 foreach (var (element, go) in children)
-                    foreach (var relationXml in element.Relations)
-                        if (relationXml.Target != "" && byId.TryGetValue(relationXml.Target, out var relationTarget))
-                        {
-                            var relation = go.AddComponent<Relation>();
-                            relation.target = (RectTransform)relationTarget.Go.transform;
-                            relation.sidePairs = relationXml.SidePairs;
-                            relation.Record();
-                        }
+                    BuildRelations((RectTransform)root.transform, relationSpace, element, go, byId);
 
                 BuildTransitions(root, xml, byId, component.PackageId);
                 BuildActions(component, comp, controllers, byId);
@@ -1919,45 +1902,53 @@ namespace OpenFairy.UGUI.Editor
             return null;
         }
 
+        private static void ReparentPreservingRect(RectTransform child, RectTransform parent, bool worldPositionStays = true)
+        {
+            var size = child.rect.size;
+            var position = worldPositionStays ? child.position : child.localPosition;
+            child.SetParent(parent, worldPositionStays);
+            child.anchorMin = child.anchorMax = new Vector2(0, 1);
+            child.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
+            child.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
+            if (worldPositionStays) child.position = position;
+            else child.localPosition = position;
+        }
+
+        private static void BuildRelations(RectTransform reference, RectTransform coordinateSpace, Schema.Display element, GameObject go,
+            Dictionary<string, (Schema.Display Xml, GameObject Go)> byId)
+        {
+            var bindings = new List<RelationBinding>();
+            foreach (var relation in element.Relations)
+            {
+                if (relation.Rules.Length == 0)
+                    continue;
+                if (relation.Target == "")
+                {
+                    var native = go.transform.parent == reference && RelationAnchorBaker.TryBake(element,
+                        ((RectTransform)go.transform).rect.size, reference.rect.size, out _, out _);
+                    bindings.Add(new RelationBinding { target = reference, rules = relation.Rules, nativeAnchors = native });
+                }
+                else if (byId.TryGetValue(relation.Target, out var target))
+                    bindings.Add(new RelationBinding { target = (RectTransform)target.Go.transform,
+                        pivotAsAnchor = target.Xml.Anchor, rules = relation.Rules });
+            }
+            if (bindings.Count == 0)
+                return;
+            var host = go.AddComponent<Relation>();
+            host.reference = reference;
+            host.coordinateSpace = coordinateSpace;
+            host.pivotAsAnchor = element.Anchor;
+            host.bindings = bindings.ToArray();
+            host.Record();
+        }
+
         private static void SetRect(RectTransform rt, Schema.Display element, Vector2 size, RectTransform parent)
         {
             var xy = element.Position ?? Vector2.zero;
             if (element.Anchor && element.Pivot is { } anchorPivot)
                 xy -= anchorPivot * size;
             Vector2 anchorMin = new(0, 1), anchorMax = new(0, 1);
-            foreach (var relation in element.Relations)
-            {
-                if (relation.Target != "")
-                    continue;
-                // 容器关联 → uGUI 锚点。*-left/*-top 跟随容器左/上边，容器局部系里该边不动 = 默认左上锚；
-                // ext 关联未在容器关联中出现过（数据里只作兄弟关联），不映射。
-                foreach (var pair in relation.SidePairs)
-                    switch (pair)
-                    {
-                        case RelationSide.Width:
-                        case RelationSide.WidthWidth:
-                            anchorMin.x = 0; anchorMax.x = 1; break;
-                        case RelationSide.Height:
-                        case RelationSide.HeightHeight:
-                            anchorMin.y = 0; anchorMax.y = 1; break;
-                        case RelationSide.Size:
-                            anchorMin = Vector2.zero; anchorMax = Vector2.one; break;
-                        case RelationSide.LeftRight:
-                        case RelationSide.RightRight:
-                            anchorMin.x = anchorMax.x = 1; break;
-                        case RelationSide.LeftCenter:
-                        case RelationSide.CenterCenter:
-                        case RelationSide.RightCenter:
-                            anchorMin.x = anchorMax.x = 0.5f; break;
-                        case RelationSide.TopBottom:
-                        case RelationSide.BottomBottom:
-                            anchorMin.y = anchorMax.y = 0; break;
-                        case RelationSide.TopMiddle:
-                        case RelationSide.MiddleMiddle:
-                        case RelationSide.BottomMiddle:
-                            anchorMin.y = anchorMax.y = 0.5f; break;
-                    }
-            }
+            RelationAnchorBaker.TryBake(element, size, parent.rect.size, out anchorMin, out anchorMax);
 
             var pw = parent.rect.width;
             var ph = parent.rect.height;
@@ -2106,6 +2097,13 @@ namespace OpenFairy.UGUI.Editor
             text.richText = !inputText && (element.Ubb || element.Kind == Schema.DisplayKind.RichText);
             if (text.richText)
             {
+                var inlinePath = Path.ChangeExtension(AssetPath(owner.File), null) + "_" + Identifier(element.Id) + "_InlineSprites.asset";
+                text.text = TmpSpriteAssetBuilder.BakeInlineImages(inlinePath, text.text, element.Ubb,
+                    element.Kind == Schema.DisplayKind.RichText,
+                    uri => TryResolve(uri, owner.PackageId, out var resource)
+                        ? AssetDatabase.LoadAssetAtPath<Sprite>(SpritePath(resource)) : null,
+                    out var spriteAsset);
+                text.spriteAsset = spriteAsset;
                 var markup = text.gameObject.AddComponent<TmpTextMarkup>();
                 markup.ubb = element.Ubb;
                 markup.html = element.Kind == Schema.DisplayKind.RichText;

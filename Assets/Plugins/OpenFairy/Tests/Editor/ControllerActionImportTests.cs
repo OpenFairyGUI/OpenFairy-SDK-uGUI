@@ -53,7 +53,7 @@ namespace OpenFairy.UGUI.Tests
                 Assert.IsTrue(component.DisplayList[0].LoaderAutoSize);
                 Assert.AreEqual("ui://fixture2image", component.DisplayList[0].Source);
                 Assert.AreEqual(Schema.TextAutoSize.None, component.DisplayList[1].AutoSize);
-                Assert.IsEmpty(component.DisplayList[1].Relations[0].SidePairs);
+                Assert.IsEmpty(component.DisplayList[1].Relations[0].Rules);
                 Assert.AreEqual(Schema.ListLayout.SingleColumn, component.DisplayList[2].Layout);
                 Assert.AreEqual("Begin", component.Transitions[0].Items[0].Label);
                 Assert.AreEqual("End", component.Transitions[0].Items[0].EndLabel);
