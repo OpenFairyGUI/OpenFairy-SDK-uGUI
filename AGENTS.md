@@ -8,7 +8,7 @@
 
 对象捕获/模糊/容器颜色滤镜保留显式同步刷新，Play 自动刷新使用 `Application.onBeforeRender`，晚于关系的 `PostLateUpdate` 同步，不能改回普通 `LateUpdate` 或 `willRenderCanvases` 捕获。最外层滤镜负责内层逆序刷新。重复无域/场景重载 Play 的测试按当前原生组件重新取得托管支持对象，不能把旧托管包装器里的观察列表当成当前组件；这一测试已通过，无需为夹具引用问题改生产生命周期。
 
-当前包内测试在 Unity Editor/Mono 的实际结果为 Editor **141/141**、PlayMode **172/172**，对应同一正式源码的完整两套运行，均无跳过或失败。TMP/Builtin 两后端各四个程序集另有离线零错误编译；Builtin 不据此视为原生行为通过。灰显、原生 SingleRow 布局/滚动查询、Hidden 列表裁剪、fitter 关系初态、共享 Transition 声音及十三种混合捕获均有回归。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
+当前包内测试在 Unity Editor/Mono 的实际结果为 Editor **141/141**、PlayMode **175/175**，对应同一正式源码的完整两套运行，均无跳过或失败。TMP/Builtin 两后端各四个程序集另有离线零错误编译；Builtin 不据此视为原生行为通过。灰显、原生 SingleRow 布局/滚动查询、Hidden 列表裁剪、fitter 关系初态、共享 Transition 声音及十三种混合捕获均有回归。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
 
 静态文本与本地化由普通导出器生成 typed 方法、直接原生引用和语言资产；按钮 selected icon、声音和实例控制器覆盖在导入期烘焙。位图字体同域重导会失效查找缓存。Canvas overlay 使用 native anchors；非 Canvas 的兄弟 overlay 复制 anchors/pivot/rect/pose，并在 `LateUpdate` 检查矩形和变换矩阵变化，公开坐标仍从左上起算。
 
@@ -16,7 +16,9 @@
 
 原生 Window/popup 已采用组件与预烘焙 WindowBuilder，关闭等待 Transition、重开取消旧 session，外点由显式选择的 PopupInputModule 在原生派发前检查，不用透明拦截层重发事件。Root 必须继承设计根的 layer；两种相机模式的真实 GPU 对照已确认差异，永久回归通过。十项 popup 首轮失败来自夹具向不接受 null 的 EventSystem.current 赋空；清理仅恢复已有宿主，未给生产逻辑加兜底。
 
-Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事件整体缩放，不运行时解析 URL。image/movie/empty/content 切换与 mask/alpha GPU 检查通过。六项几何测试首轮把 height=60、pivot.y=.7 的顶边写成42，实际应为18；仅修独立测试数值。当前141/172包含所有新增包内回归，不与历史总数累加，消费端和完整Demo/golden仍须单独验证。
+Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事件整体缩放，不运行时解析 URL。image/movie/empty/content 切换与 mask/alpha GPU 检查通过。六项几何测试首轮把 height=60、pivot.y=.7 的顶边写成42，实际应为18；仅修独立测试数值。当前141/175包含所有新增包内回归，不与历史总数累加，消费端和完整Demo/golden仍须单独验证。
+
+整根 Overlay Canvas 停启保留已有 Relation 基线，避免 CanvasScaler 恢复期间的临时尺寸被重复累计；隐藏期间真实父尺寸和内容变化仍在恢复后同步。原生锚点只消化 anchor span 对应的尺寸差，fitter 自身改宽仍保持对齐。新增三项真实 prefab/Canvas 回归覆盖原生父缩放、同帧和隔帧内容变化及三种水平 pivot。
 
 ContentSizeFitter 的 driven 尺寸不会完整序列化；Relation 首次启用时先恢复已有烘焙基线，再 Record 和接受真实重排，不能拿刚反序列化的零尺寸当原始几何。首次活动实例化时，父组件 OnEnable 可能早于子 fitter 原生启用；恢复已保存基线按 enabled 配置判断。self 坐标关系只叠加变化量，不能把自身 pivot 原点当绝对位移。动态修改 MaskableGraphic.maskable 的测试正控还须调用公开 RecalculateClipping，不能将未更新的 clip parent 当渲染结论。声音夹具在首次启用前配置 AudioSource，并为自身提供 AudioListener；不要因宿主无 listener 或不确定的构造时序给生产声音代码加兼容分支。
 

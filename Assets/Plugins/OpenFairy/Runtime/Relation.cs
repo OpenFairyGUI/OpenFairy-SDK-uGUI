@@ -86,6 +86,11 @@ namespace OpenFairy.UGUI
             _ownerSize = ((RectTransform)transform).rect.size;
             _referenceSize = reference.rect.size;
             _recorded = true;
+            Register();
+        }
+
+        private void Register()
+        {
             if (!_registered && isActiveAndEnabled && Application.isPlaying
                 && Array.Exists(bindings, binding => !binding.nativeAnchors))
             {
@@ -127,24 +132,28 @@ namespace OpenFairy.UGUI
         {
             if (!_recorded || _applying)
                 return;
-            var owner = Read((RectTransform)transform, pivotAsAnchor, coordinateSpace);
+            var rect = (RectTransform)transform;
+            var owner = Read(rect, pivotAsAnchor, coordinateSpace);
             var difference = owner.size - _ownerSize;
             _ownerSize = owner.size;
+            // Only the anchor span's size change is native; a fitted-size change still needs alignment.
+            if (Array.Exists(bindings, binding => binding.nativeAnchors))
+                difference -= Vector2.Scale(reference.rect.size - _referenceSize, rect.anchorMax - rect.anchorMin);
+            _referenceSize = reference.rect.size;
             if (difference == Vector2.zero)
                 return;
-            // Native anchors have already applied the parent-size constraints.
-            var nativeResize = reference.rect.size != _referenceSize && Array.Exists(bindings, binding => binding.nativeAnchors);
-            _referenceSize = reference.rect.size;
-            if (!nativeResize)
-            {
-                RelationMath.SelfSize(ref owner, difference, true, bindings);
-                Write(owner);
-            }
+            RelationMath.SelfSize(ref owner, difference, true, bindings);
+            Write(owner);
         }
 
         protected override void OnEnable()
         {
-            if (!_recorded && reference != null)
+            if (_recorded)
+            {
+                Register();
+                return;
+            }
+            if (reference != null)
             {
                 // Native layout omits driven sizes from serialization. Targets without relations need their baseline too.
                 RestoreFittedSize((RectTransform)transform, _ownerSize);

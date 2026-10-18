@@ -33,3 +33,16 @@ owner resizing, reparenting, viewport padding, and resetting the polling loop.
 The loop resets at `SubsystemRegistration`, including when domain reload is
 disabled. A generation marker invalidates a pending continuation from an earlier
 play session.
+
+For an already initialized component, disabling and enabling the hierarchy keeps
+the recorded geometry. Re-enabling registers its polling work without recording
+the CanvasScaler's temporary dimensions during activation. Real parent and
+content changes made while hidden are still compared with the retained baseline
+after activation. An explicit `Record()` continues to replace that baseline.
+
+Native anchors account only for the reference-size delta multiplied by their
+anchor span. A simultaneous ContentSizeFitter size change remains an owner-size
+change, so center/right/bottom alignment is preserved for point anchors as well
+as stretched rectangles. Native overlay tests exercise whole-Canvas activation,
+hidden changes, chained fitted siblings, and same-frame or later-frame parent
+and content changes with horizontal pivots at zero, one half, and one.
