@@ -150,18 +150,25 @@ namespace OpenFairy.UGUI.Tests
             var closed = _root.ShowPopup(window.contentPane).SuppressCancellationThrow().AsTask();
             Assert.That(window.initialized, Is.EqualTo(1));
             Assert.That(window.shown, Is.Zero);
-            yield return new WaitForSeconds(.2f);
+            yield return Until(() => window.shown == 1);
             Assert.That(window.shown, Is.EqualTo(1));
             _root.HidePopup(window.contentPane);
             Assert.That(_root.hasAnyPopup, Is.False);
             Assert.That(window.gameObject.activeSelf, Is.True);
             Assert.That(closed.IsCompleted, Is.False);
             Assert.That(window.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
-            yield return new WaitForSeconds(.2f);
+            yield return Until(() => closed.IsCompleted);
             Assert.That(window.gameObject.activeSelf, Is.False);
             Assert.That(window.hidden, Is.EqualTo(1));
             Assert.That(closed.IsCompleted, Is.True);
             Assert.That(Canceled(closed), Is.False);
+        }
+
+        private static IEnumerator Until(System.Func<bool> completed)
+        {
+            var deadline = Time.realtimeSinceStartupAsDouble + 5;
+            while (!completed() && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
+            Assert.That(completed(), Is.True, "Window transition did not finish within five seconds.");
         }
 
         [UnityTest]

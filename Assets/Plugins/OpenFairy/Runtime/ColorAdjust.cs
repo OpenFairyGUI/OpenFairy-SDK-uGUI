@@ -3,18 +3,21 @@ using UnityEngine.UI;
 
 namespace OpenFairy.UGUI
 {
-    [DisallowMultipleComponent]
+    [ExecuteAlways, DisallowMultipleComponent]
     public sealed class ColorAdjust : ObjectFilter, IMaterialModifier
     {
         public float brightness, contrast, saturation, hue;
         [SerializeField] internal Shader shader;
         // Only image primitives use the direct path; text and containers are captured.
         [SerializeField] internal Graphic graphic;
+        [SerializeField] internal Grayed grayed;
 
         private Material _material;
         private Material _original;
         private readonly ColorMatrix _matrix = new();
+        private bool _colorActive;
         protected override bool ShouldRender => graphic == null;
+        protected override bool IsFilterActive => _colorActive || grayed != null && grayed.active;
         protected override float Padding => 0;
 
         public void Set(float brightnessValue, float contrastValue, float saturationValue, float hueValue)
@@ -29,7 +32,7 @@ namespace OpenFairy.UGUI
 
         public Material GetModifiedMaterial(Material original)
         {
-            if (!isActiveAndEnabled || graphic == null || shader == null) return original;
+            if (!IsFilterActive || graphic == null || shader == null) return original;
             if (_material == null || _original != original)
             {
                 ReleaseMaterial();
@@ -65,7 +68,9 @@ namespace OpenFairy.UGUI
 
         private void ApplyMatrix()
         {
-            _matrix.Set(brightness, contrast, saturation, hue);
+            _matrix.Set(_colorActive ? brightness : 0, _colorActive ? contrast : 0,
+                _colorActive ? saturation : 0, _colorActive ? hue : 0,
+                grayed != null && grayed.active);
             var values = _matrix.Values;
             var matrix = new Matrix4x4();
             for (var row = 0; row < 4; row++)
@@ -79,14 +84,27 @@ namespace OpenFairy.UGUI
 
         protected override void OnEnable()
         {
+            _colorActive = true;
             base.OnEnable();
             if (graphic != null) graphic.SetMaterialDirty();
         }
+        internal void RefreshGrayed()
+        {
+            RefreshActivation();
+            if (graphic != null) graphic.SetMaterialDirty();
+        }
+        public override void Dispose()
+        {
+            if (grayed != null) grayed.enabled = false;
+            base.Dispose();
+        }
         protected override void OnDisable()
         {
+            _colorActive = false;
             base.OnDisable();
             if (graphic != null) graphic.SetMaterialDirty();
             ReleaseMaterial();
+            if (grayed != null && grayed.active) RefreshActivation();
         }
         protected override void OnDestroy()
         {
@@ -111,7 +129,7 @@ namespace OpenFairy.UGUI
         private readonly float[] _matrix = new float[20];
         private readonly float[] _tmp = new float[20];
         internal float[] Values => _matrix;
-        internal void Set(float brightness, float contrast, float saturation, float hue)
+        internal void Set(float brightness, float contrast, float saturation, float hue, bool grayed = false)
         {
             System.Array.Clear(_matrix, 0, 20);
             _matrix[0] = _matrix[6] = _matrix[12] = _matrix[18] = 1;
@@ -119,6 +137,7 @@ namespace OpenFairy.UGUI
             AdjustContrast(contrast);
             AdjustSaturation(saturation);
             AdjustHue(hue);
+            if (grayed) AdjustSaturation(-1);
         }
 
         private void AdjustBrightness(float value)

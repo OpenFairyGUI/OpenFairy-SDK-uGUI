@@ -397,8 +397,12 @@ namespace OpenFairy.UGUI
                     break;
                 }
                 case TransitionItemType.Sound:
-                    if (item.sound != null)
-                        audioSource.PlayOneShot(item.sound, item.volume);
+                    if (item.sound != null && isActiveAndEnabled)
+                    {
+                        var source = Root.inst != null ? Root.inst.soundSource : audioSource;
+                        if (source.isActiveAndEnabled)
+                            source.PlayOneShot(item.sound, item.volume);
+                    }
                     break;
                 case TransitionItemType.Nested:
                 {

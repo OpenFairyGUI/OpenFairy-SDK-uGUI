@@ -116,14 +116,15 @@ namespace OpenFairy.UGUI
         public void RefreshContent()
         {
             var size = Vector2.zero;
-            if (_explicitSize is { } explicitSize) size = explicitSize;
+            if (source != null && source.hasNativeRowLayout) size = content.rect.size;
+            else if (_explicitSize is { } explicitSize) size = explicitSize;
             else
                 foreach (RectTransform child in content)
                 {
                     var corner = Relation.TopLeft(child);
                     size = Vector2.Max(size, new(corner.x + child.rect.width, child.rect.height - corner.y));
                 }
-            content.sizeDelta = size;
+            if (source == null || !source.hasNativeRowLayout) content.sizeDelta = size;
             if (_autoAxes && !_loop)
             {
                 horizontal = size.x > viewportSize.x;
@@ -178,7 +179,9 @@ namespace OpenFairy.UGUI
             _previousPosition += delta;
         }
 
-        public void ScrollToView(RectTransform target)
+        public void ScrollToView(RectTransform target) => ScrollToView(target, false);
+
+        internal void ScrollToView(RectTransform target, bool animated)
         {
             RefreshContent();
             var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(content, target);
@@ -188,7 +191,7 @@ namespace OpenFairy.UGUI
                 if (start[axis] < value[axis]) value[axis] = start[axis];
                 else if (start[axis] + bounds.size[axis] > value[axis] + viewportSize[axis])
                     value[axis] = start[axis] + bounds.size[axis] - viewportSize[axis];
-            SetPosition(value);
+            SetPosition(value, animated);
         }
 
         internal void Step(bool alongX, bool forward, float steps)

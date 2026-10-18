@@ -27,7 +27,9 @@ namespace OpenFairy.UGUI
         public bool isPresenting { get; private set; }
         public Rect bounds { get; private set; }
         public RenderTexture texture => _texture;
+        public bool isFiltering => IsFilterActive;
 
+        protected virtual bool IsFilterActive => isActiveAndEnabled;
         protected abstract bool ShouldRender { get; }
         protected abstract float Padding { get; }
         protected abstract void ProcessPmaTexture(RenderTexture texture);
@@ -35,12 +37,12 @@ namespace OpenFairy.UGUI
         // Call after UI changes, before the UI camera renders. The callback is synchronous.
         public void Refresh(Action<Camera, RenderTexture> render)
         {
-            if (!isActiveAndEnabled)
+            if (!IsFilterActive)
                 return;
             // Native hierarchy order lets inner filters finish before their enclosing filter.
             GetComponentsInChildren(false, _filters);
             for (int i = _filters.Count - 1; i >= 0; i--)
-                if (_filters[i].isActiveAndEnabled)
+                if (_filters[i].IsFilterActive)
                     _filters[i].RefreshSelf(render);
         }
 
@@ -135,10 +137,10 @@ namespace OpenFairy.UGUI
 
         private void RefreshAutomatically()
         {
-            if (!Application.isPlaying || !isActiveAndEnabled)
+            if (!Application.isPlaying || !IsFilterActive)
                 return;
             for (var parent = transform.parent; parent != null; parent = parent.parent)
-                if (parent.TryGetComponent(out ObjectFilter filter) && filter.isActiveAndEnabled)
+                if (parent.TryGetComponent(out ObjectFilter filter) && filter.IsFilterActive)
                     return;
             Canvas.ForceUpdateCanvases();
             Refresh(Render);
@@ -161,8 +163,8 @@ namespace OpenFairy.UGUI
         protected override void OnEnable()
         {
             base.OnEnable();
-            Application.onBeforeRender += RefreshAutomatically;
-            if (presentation != null) presentation.gameObject.SetActive(false);
+            RefreshActivation();
+            if (presentation != null && !isPresenting) presentation.gameObject.SetActive(false);
         }
 
         protected override void OnDisable()
@@ -172,13 +174,21 @@ namespace OpenFairy.UGUI
             base.OnDisable();
         }
 
+        protected void RefreshActivation()
+        {
+            Application.onBeforeRender -= RefreshAutomatically;
+            if (IsFilterActive) Application.onBeforeRender += RefreshAutomatically;
+            else Release();
+        }
+
         protected override void OnDestroy()
         {
+            Application.onBeforeRender -= RefreshAutomatically;
             Release();
             base.OnDestroy();
         }
 
-        public void Dispose() => enabled = false;
+        public virtual void Dispose() => enabled = false;
 
         private void RefreshSourceVisibility()
         {

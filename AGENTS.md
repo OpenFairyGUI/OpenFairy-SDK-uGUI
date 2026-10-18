@@ -8,7 +8,7 @@
 
 对象捕获/模糊/容器颜色滤镜保留显式同步刷新，Play 自动刷新使用 `Application.onBeforeRender`，晚于关系的 `PostLateUpdate` 同步，不能改回普通 `LateUpdate` 或 `willRenderCanvases` 捕获。最外层滤镜负责内层逆序刷新。重复无域/场景重载 Play 的测试按当前原生组件重新取得托管支持对象，不能把旧托管包装器里的观察列表当成当前组件；这一测试已通过，无需为夹具引用问题改生产生命周期。
 
-当前新增包内测试实际结果为 Editor **104/104**、PlayMode **119/119**。自动滤镜运行时 8 项、Root 尺寸 3 项和 selected icon 6 项均已通过。单行 Tab 的旧失败来自后台禁用的虚拟设备；改为官方测试隔离后整套通过，输入设置、设备、当前键盘及泄漏检测模式均恢复。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
+当前包内测试在 Unity Editor/Mono 的实际结果为 Editor **115/115**、PlayMode **143/143**，对应同一正式源码的完整两套运行，均无跳过或失败。TMP/Builtin 两后端各四个程序集另有离线零错误编译；Builtin 不据此视为原生行为通过。灰显、原生 SingleRow 布局/滚动查询、Hidden 列表裁剪、fitter 关系初态、共享 Transition 声音及十三种混合捕获均有回归。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
 
 静态文本与本地化由普通导出器生成 typed 方法、直接原生引用和语言资产；按钮 selected icon、声音和实例控制器覆盖在导入期烘焙。位图字体同域重导会失效查找缓存。Canvas overlay 使用 native anchors；非 Canvas 的兄弟 overlay 复制 anchors/pivot/rect/pose，并在 `LateUpdate` 检查矩形和变换矩阵变化，公开坐标仍从左上起算。
 
@@ -16,7 +16,11 @@
 
 原生 Window/popup 已采用组件与预烘焙 WindowBuilder，关闭等待 Transition、重开取消旧 session，外点由显式选择的 PopupInputModule 在原生派发前检查，不用透明拦截层重发事件。Root 必须继承设计根的 layer；两种相机模式的真实 GPU 对照已确认差异，永久回归通过。十项 popup 首轮失败来自夹具向不接受 null 的 EventSystem.current 赋空；清理仅恢复已有宿主，未给生产逻辑加兜底。
 
-Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事件整体缩放，不运行时解析 URL。image/movie/empty/content 切换与 mask/alpha GPU 检查通过。六项几何测试首轮把 height=60、pivot.y=.7 的顶边写成42，实际应为18；仅修独立测试数值。当前104/119包含所有新增包内回归，不与历史总数累加，项目消费端和完整Demo/golden仍须单独验证。
+Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事件整体缩放，不运行时解析 URL。image/movie/empty/content 切换与 mask/alpha GPU 检查通过。六项几何测试首轮把 height=60、pivot.y=.7 的顶边写成42，实际应为18；仅修独立测试数值。当前115/143包含所有新增包内回归，不与历史总数累加，消费端和完整Demo/golden仍须单独验证。
+
+ContentSizeFitter 的 driven 尺寸不会完整序列化；Relation 首次启用时先恢复已有烘焙基线，再 Record 和接受真实重排，不能拿刚反序列化的零尺寸当原始几何。动态修改 MaskableGraphic.maskable 的测试正控还须调用公开 RecalculateClipping，不能将未更新的 clip parent 当渲染结论。声音夹具在首次启用前配置 AudioSource，并为自身提供 AudioListener；不要因宿主无 listener 或不确定的构造时序给生产声音代码加兼容分支。
+
+捕获必须按原生顺序运行完整材质 modifier 链，只跳过源隐藏 modifier。不能向 ColorAdjust/BlendModeEffect 的同一缓存传入去掉原生 Stencil 的不同输入，否则会释放源 CanvasRenderer 仍在使用的材质。源蒙版参数只在 owned 副本上恢复到 base 值，再由代理树重算本地遮罩；新增两项跨帧 GPU 回归及增强 TMP 图文混排覆盖源材质、pop、图集、外罩排除与内部蒙版。
 
 ## 环境
 

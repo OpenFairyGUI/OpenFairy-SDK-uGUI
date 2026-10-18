@@ -85,6 +85,45 @@ namespace OpenFairy.UGUI.Tests
             _objects.Clear();
         }
 
+        [UnityTest]
+        public IEnumerator Fitted_prefab_geometry_is_restored_before_recording_and_later_reflow_still_preserves_alignment()
+        {
+            var root = Rect("Root");
+            Size(root, 800, 400);
+            root.gameObject.SetActive(false);
+            root.gameObject.AddComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+            var owner = Rect("Caption", root);
+            owner.anchorMin = owner.anchorMax = new Vector2(.5f, .5f);
+            owner.anchoredPosition = new Vector2(-150, 0);
+            Size(owner, 0, 0);
+            var preferred = owner.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+            preferred.preferredWidth = 300; preferred.preferredHeight = 40;
+            var fitter = owner.gameObject.AddComponent<UnityEngine.UI.ContentSizeFitter>();
+            fitter.horizontalFit = fitter.verticalFit = UnityEngine.UI.ContentSizeFitter.FitMode.PreferredSize;
+            var relation = owner.gameObject.AddComponent<Relation>();
+            relation.reference = relation.coordinateSpace = root;
+            relation.bindings = new[] { new RelationBinding { target = root, nativeAnchors = true, rules = new[] {
+                new RelationRule { side = RelationSide.CenterCenter },
+                new RelationRule { side = RelationSide.BottomMiddle },
+            } } };
+            // A saved driven Rect omits its derived size; the baked relation keeps its measured geometry.
+            JsonUtility.FromJsonOverwrite("{\"_ownerSize\":{\"x\":300,\"y\":40},\"_referenceSize\":{\"x\":800,\"y\":400}}", relation);
+            root.gameObject.SetActive(true);
+            Canvas.ForceUpdateCanvases();
+            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(owner);
+            CollectionAssert.AreEqual(new float[] { 250, 200, 300, 40 }, Read(owner, root));
+            preferred.preferredWidth = 500; preferred.preferredHeight = 60;
+            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(owner);
+            CollectionAssert.AreEqual(new float[] { 150, 180, 500, 60 }, Read(owner, root));
+            root.gameObject.SetActive(false);
+            preferred.preferredWidth = 600; preferred.preferredHeight = 80;
+            root.gameObject.SetActive(true);
+            Canvas.ForceUpdateCanvases();
+            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(owner);
+            CollectionAssert.AreEqual(new float[] { 100, 160, 600, 80 }, Read(owner, root));
+            yield return null;
+        }
+
         [Test]
         public void Rect_transforms_match_reference_resize_fixtures()
         {

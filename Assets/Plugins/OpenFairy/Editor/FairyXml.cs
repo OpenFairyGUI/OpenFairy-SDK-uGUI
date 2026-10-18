@@ -668,6 +668,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("lineGap")] public float LineGap;
         [XmlAttribute("colGap")] public float ColGap;
         [XmlAttribute("layout")] public ListLayout Layout;
+        [XmlAttribute("autoItemSize")] public bool AutoItemSize = true;
         [XmlAttribute("selectionMode")] public OpenFairy.UGUI.ListSelectionMode SelectionMode = OpenFairy.UGUI.ListSelectionMode.Single; // FairyGUI 列表默认单选
         [XmlAttribute("text")] public string Text = "";
         [XmlAttribute("fontSize")] public int? FontSize;

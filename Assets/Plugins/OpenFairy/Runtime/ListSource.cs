@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
+using UnityEngine.UI;
 
 namespace OpenFairy.UGUI
 {
@@ -14,6 +15,12 @@ namespace OpenFairy.UGUI
         public float colGap;
         public ListLayoutType layout;
         public int lineItemCount;
+        public bool autoItemSize = true;
+        [SerializeField] internal HorizontalLayoutGroup rowLayout;
+        [SerializeField] internal ContentSizeFitter rowSize;
+        [SerializeField] internal LayoutElement rowMinimum;
+        internal bool hasNativeRowLayout => !_virtual && rowLayout != null && rowLayout.enabled;
+        private Vector2[] _nativeRowItemSizes = Array.Empty<Vector2>();
         public TextAnchor alignment;
 
         private ObjectPool<GameObject> _pool;
@@ -49,6 +56,7 @@ namespace OpenFairy.UGUI
             if (loop && layout != ListLayoutType.SingleRow)
                 throw new InvalidOperationException("Loop lists must use SingleRow layout.");
             _virtual = true;
+            if (rowLayout != null) { rowLayout.enabled = false; rowSize.enabled = false; rowMinimum.enabled = false; }
             _loop = loop;
             scrollPane ??= ScrollPane.Attach((RectTransform)transform);
             scrollPane.loopHorizontal = loop;
@@ -125,9 +133,18 @@ namespace OpenFairy.UGUI
                     ListLayoutType.FlowVertical => (i / rows, i % rows),
                     _ => (0, i),
                 };
-                rt.anchoredPosition = new Vector2(col * stepX, -row * stepY);
+                if (!hasNativeRowLayout) rt.anchoredPosition = new Vector2(col * stepX, -row * stepY);
                 _indices[item] = i;
                 setup(item, i);
+            }
+            if (hasNativeRowLayout)
+            {
+                if (_nativeRowItemSizes.Length != _indices.Count) _nativeRowItemSizes = new Vector2[_indices.Count];
+                UpdateNativeRowItemSizes();
+                UpdateNativeRowSize(viewSize);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(container);
+                if (rebindSelection && list.GetComponent<ListSelection>() is { enabled: true } rowSelection) rowSelection.Rebind();
+                return;
             }
             var contentSize = Vector2.zero;
             foreach (var item in _indices.Keys)
@@ -201,12 +218,38 @@ namespace OpenFairy.UGUI
                 : VirtualListLayout.FixedRange(_physicalCount, _lanes, ItemExtent, Gap, Position - MainOffset, ViewExtent, 0).First;
         }
 
-        public int firstVisibleIndex => count == 0 ? -1
+        public int firstVisibleIndex => count == 0 ? -1 : hasNativeRowLayout ? NativeRowIndex(false)
             : VirtualListLayout.LogicalIndex(FirstPhysicalIndex(), count);
 
-        public int centeredIndex => count == 0 ? -1 : _loop
+        public int centeredIndex => count == 0 ? -1 : hasNativeRowLayout ? NativeRowIndex(true) : _loop
             ? VirtualListLayout.LogicalIndex(Mathf.RoundToInt((Position + ViewExtent / 2 - ItemExtent / 2) / (ItemExtent + Gap)), count)
             : firstVisibleIndex;
+
+        private int NativeRowIndex(bool centered)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+            var view = scrollPane != null ? scrollPane.viewportSize : ((RectTransform)transform).rect.size;
+            var left = content.rect.xMin + (scrollPane != null ? scrollPane.position.x : 0);
+            var right = left + view.x;
+            int index = -1;
+            float distance = float.PositiveInfinity;
+            foreach (var item in _indices)
+            {
+                var bounds = NativeRowBounds(item.Key.transform);
+                if (!centered)
+                {
+                    if (bounds.max.x > left && bounds.min.x < right && (index < 0 || item.Value < index)) index = item.Value;
+                    continue;
+                }
+                var delta = Mathf.Abs(bounds.center.x - (left + right) / 2);
+                if (delta >= distance) continue;
+                index = item.Value;
+                distance = delta;
+            }
+            return index;
+        }
+
+        private Bounds NativeRowBounds(Transform item) => RectTransformUtility.CalculateRelativeRectTransformBounds(content, item);
 
         internal bool TryGetItemIndex(GameObject item, out int index) => _indices.TryGetValue(item, out index);
         public int GetItemIndex(GameObject item) => _indices[item];
@@ -317,6 +360,25 @@ namespace OpenFairy.UGUI
         {
             if (index < 0 || index >= count)
                 throw new ArgumentOutOfRangeException(nameof(index));
+            if (hasNativeRowLayout)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+                foreach (var item in _indices)
+                    if (item.Value == index)
+                    {
+                        var rect = (RectTransform)item.Key.transform;
+                        var bounds = NativeRowBounds(rect);
+                        if (center || bounds.size.x > scrollPane.viewportSize.x)
+                        {
+                            var x = center ? bounds.center.x - content.rect.xMin - scrollPane.viewportSize.x / 2
+                                : bounds.min.x - content.rect.xMin;
+                            scrollPane.SetPosition(new Vector2(x, scrollPane.position.y), animated);
+                        }
+                        else scrollPane.ScrollToView(rect, animated);
+                        return;
+                    }
+                return;
+            }
             int slot = index;
             if (_loop)
             {
@@ -336,6 +398,23 @@ namespace OpenFairy.UGUI
         internal Vector2 SnapPosition(Vector2 position)
         {
             if (count == 0) return Vector2.zero;
+            if (hasNativeRowLayout)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+                float closest = position.x;
+                float distance = float.PositiveInfinity;
+                foreach (var item in _indices.Keys)
+                {
+                    var bounds = NativeRowBounds(item.transform);
+                    var start = bounds.min.x - content.rect.xMin;
+                    var delta = Mathf.Abs(position.x - start);
+                    if (delta >= distance) continue;
+                    closest = start;
+                    distance = delta;
+                }
+                position.x = closest;
+                return position;
+            }
             var axis = Horizontal ? 0 : 1;
             if (_measureHeight == null)
                 position[axis] = MainOffset + Mathf.Round((position[axis] - MainOffset) / (ItemExtent + Gap)) * (ItemExtent + Gap);
@@ -353,8 +432,38 @@ namespace OpenFairy.UGUI
             return position;
         }
 
+        private bool UpdateNativeRowItemSizes()
+        {
+            bool changed = false;
+            foreach (var item in _indices)
+            {
+                var size = ((RectTransform)item.Key.transform).rect.size;
+                if (_nativeRowItemSizes[item.Value] == size) continue;
+                _nativeRowItemSizes[item.Value] = size;
+                changed = true;
+            }
+            return changed;
+        }
+
+        private void UpdateNativeRowSize(Vector2 viewport)
+        {
+            rowMinimum.minWidth = viewport.x;
+            rowMinimum.minHeight = viewport.y;
+            if (autoItemSize)
+                foreach (var item in _indices.Keys)
+                    ((RectTransform)item.transform).SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, viewport.y);
+            _viewport = viewport;
+        }
+
         private void LateUpdate()
         {
+            if (hasNativeRowLayout)
+            {
+                var view = scrollPane != null ? scrollPane.viewportSize : ((RectTransform)transform).rect.size;
+                if (_viewport != view) UpdateNativeRowSize(view);
+                if (UpdateNativeRowItemSizes()) LayoutRebuilder.MarkLayoutForRebuild(content);
+                return;
+            }
             if (_virtual && _setup != null && _viewport != scrollPane.viewportSize)
                 Fill(count, _setup, true, _measureHeight);
             else if (_measureHeight != null)

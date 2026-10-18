@@ -121,7 +121,7 @@ Shader "OpenFairy/UI ColorMatrix"
             }
             ENDCG
         }
-        // The captured input and output are both premultiplied; transform straight RGB once.
+        // RGB transforms linearly in PMA space; coverage weights the color offset.
         Pass
         {
             ZTest Always
@@ -138,10 +138,7 @@ Shader "OpenFairy/UI ColorMatrix"
             float4 frag_pma(v2f_img input) : SV_Target
             {
                 float4 color = tex2D(_MainTex, input.uv);
-                color.rgb = color.a > 0 ? color.rgb / color.a : 0;
-                color = mul(_ColorMatrix, color) + _ColorOffset;
-                color.rgb *= color.a;
-                return color;
+                return mul(_ColorMatrix, color) + _ColorOffset * color.a;
             }
             ENDCG
         }

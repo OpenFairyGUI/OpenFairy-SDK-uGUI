@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace OpenFairy.UGUI
 {
@@ -136,7 +137,19 @@ namespace OpenFairy.UGUI
             }
         }
 
-        protected override void OnEnable() => Record();
+        protected override void OnEnable()
+        {
+            if (!_recorded && reference != null && TryGetComponent(out ContentSizeFitter fitter) && fitter.isActiveAndEnabled)
+            {
+                var rect = (RectTransform)transform;
+                // Native layout omits driven sizes from serialization; position still belongs to the baked geometry.
+                if (fitter.horizontalFit is ContentSizeFitter.FitMode.MinSize or ContentSizeFitter.FitMode.PreferredSize)
+                    rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, _ownerSize.x);
+                if (fitter.verticalFit is ContentSizeFitter.FitMode.MinSize or ContentSizeFitter.FitMode.PreferredSize)
+                    rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, _ownerSize.y);
+            }
+            Record();
+        }
 
         protected override void OnDisable()
         {

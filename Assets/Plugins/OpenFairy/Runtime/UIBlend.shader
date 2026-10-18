@@ -15,6 +15,7 @@ Shader "OpenFairy/UI Blend"
         _BlendSrcFactorAlpha ("Blend SrcFactor Alpha", Float) = 5
         _BlendDstFactorAlpha ("Blend DstFactor Alpha", Float) = 10
         _ColorOption ("Premultiply Alpha", Float) = 0
+        _ClipRect ("Clip Rect", Vector) = (-32767,-32767,32767,32767)
         [Toggle(UNITY_UI_ALPHACLIP)] _UseUIAlphaClip ("Use Alpha Clip", Float) = 0
     }
 

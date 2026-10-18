@@ -103,6 +103,22 @@ namespace OpenFairy.UGUI
                 material.SetFloat(ColorOption, premultiplyAlpha ? 1 : 0);
         }
 
+        // Isolated capture stores coverage separately from additive emission.
+        internal static void ApplyCaptureAlpha(Material material, BlendMode blendMode)
+        {
+            var (src, dst) = blendMode switch
+            {
+                BlendMode.None or BlendMode.Add or BlendMode.Multiply => (NativeBlendMode.Zero, NativeBlendMode.One),
+                BlendMode.Erase => (NativeBlendMode.Zero, NativeBlendMode.OneMinusSrcAlpha),
+                BlendMode.Mask => (NativeBlendMode.Zero, NativeBlendMode.SrcAlpha),
+                BlendMode.Below => (NativeBlendMode.OneMinusDstAlpha, NativeBlendMode.DstAlpha),
+                BlendMode.Off => (NativeBlendMode.One, NativeBlendMode.Zero),
+                _ => (NativeBlendMode.One, NativeBlendMode.OneMinusSrcAlpha),
+            };
+            material.SetFloat(BlendSrcFactorAlpha, (float)src);
+            material.SetFloat(BlendDstFactorAlpha, (float)dst);
+        }
+
         protected override void OnEnable()
         {
             base.OnEnable();

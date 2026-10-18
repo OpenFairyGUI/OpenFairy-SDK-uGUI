@@ -26,6 +26,13 @@ namespace OpenFairy.UGUI
             public int Generation;
         }
 
+        private static readonly int[] MaskProperties =
+        {
+            Shader.PropertyToID("_StencilComp"), Shader.PropertyToID("_Stencil"), Shader.PropertyToID("_StencilOp"),
+            Shader.PropertyToID("_StencilReadMask"), Shader.PropertyToID("_StencilWriteMask"),
+            Shader.PropertyToID("_ColorMask"), Shader.PropertyToID("_UseUIAlphaClip"),
+        };
+
         private readonly RectTransform _source;
         private readonly Shader _straightShader;
         private readonly int _layer;
@@ -229,12 +236,14 @@ namespace OpenFairy.UGUI
                 node.Graphic.Bind(mesh, null, null, graphic is MaskableGraphic empty && empty.maskable);
                 return;
             }
-            Material original = BaseMaterial(graphic);
+            var baseMaterial = BaseMaterial(graphic);
+            Material original = baseMaterial;
+            var blendMode = BlendMode.Normal;
             foreach (var modifier in graphic.GetComponents<IMaterialModifier>())
-                if (!(modifier is MaskableGraphic) && !(modifier is Mask) && !(modifier is ObjectFilterSourceVisibility))
+                if (!(modifier is ObjectFilterSourceVisibility))
                 {
-                    if (modifier is BlendModeEffect effect && effect.isActiveAndEnabled && effect.blendMode != BlendMode.Normal)
-                        throw new NotSupportedException("Object capture currently requires normal UI blending.");
+                    if (modifier is BlendModeEffect effect && effect.isActiveAndEnabled)
+                        blendMode = effect.blendMode;
                     original = modifier.GetModifiedMaterial(original);
                 }
             Shader shader = original.shader;
@@ -259,11 +268,14 @@ namespace OpenFairy.UGUI
             if (shader == original.shader) node.Material.CopyPropertiesFromMaterial(original);
             else node.Material.CopyMatchingPropertiesFromMaterial(original);
             node.Material.shaderKeywords = original.shaderKeywords;
+            // Keep modifier inputs native; only the owned snapshot sheds source masking.
+            foreach (int property in MaskProperties)
+                if (baseMaterial.HasProperty(property) && node.Material.HasProperty(property))
+                    node.Material.SetFloat(property, baseMaterial.GetFloat(property));
+            if (baseMaterial.IsKeywordEnabled("UNITY_UI_ALPHACLIP")) node.Material.EnableKeyword("UNITY_UI_ALPHACLIP");
+            else node.Material.DisableKeyword("UNITY_UI_ALPHACLIP");
             if (!sdf && node.Material.HasProperty("_BlendSrcFactorAlpha"))
-            {
-                node.Material.SetFloat("_BlendSrcFactorAlpha", (float)UnityEngine.Rendering.BlendMode.One);
-                node.Material.SetFloat("_BlendDstFactorAlpha", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            }
+                BlendModeEffect.ApplyCaptureAlpha(node.Material, blendMode);
             Texture texture = graphic.mainTexture;
 #if FAIRYGUI_TMPRO
             // TMP's primary label inherits Graphic.mainTexture (white); its atlas is in the material.

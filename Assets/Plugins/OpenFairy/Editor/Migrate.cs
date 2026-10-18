@@ -1565,7 +1565,7 @@ namespace OpenFairy.UGUI.Editor
                 }
                 else
                 {
-                    go.AddComponent<Grayed>().shader = GrayscaleShader;
+                    ConfigureGrayed(go, true);
                     if (button != null)
                         button.grayed = true;
                 }
@@ -1573,10 +1573,12 @@ namespace OpenFairy.UGUI.Editor
         }
 
         private static ColorAdjust ConfigureColorFilter(GameObject go, Schema.DisplayKind kind)
-        {
-            var capture = kind is Schema.DisplayKind.Component or Schema.DisplayKind.List
+            => ConfigureColorFilter(go, kind is Schema.DisplayKind.Component or Schema.DisplayKind.List
                 or Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText
-                or Schema.DisplayKind.Group || go.GetComponent<Graphic>() == null;
+                or Schema.DisplayKind.Group || go.GetComponent<Graphic>() == null);
+
+        private static ColorAdjust ConfigureColorFilter(GameObject go, bool capture)
+        {
             Material presentation = null;
             if (capture)
             {
@@ -1591,6 +1593,15 @@ namespace OpenFairy.UGUI.Editor
             }
             return ColorFilterBuilder.Configure(go, capture, ColorMatrixShader,
                 Shader.Find("OpenFairy/UI Capture"), presentation, Settings().captureLayer);
+        }
+
+        private static Grayed ConfigureGrayed(GameObject go, bool enabled)
+        {
+            var hasColorFilter = go.TryGetComponent(out ColorAdjust _);
+            // Capture the final subtree, including component-loader content and native text materials.
+            var filter = ConfigureColorFilter(go, capture: true);
+            if (!hasColorFilter) filter.enabled = false;
+            return GrayedBuilder.Configure(filter, enabled);
         }
 
         private static void ConfigureGearLook(Type gearType, object gear, Schema.Gear xml, GameObject go)
@@ -1616,14 +1627,9 @@ namespace OpenFairy.UGUI.Editor
             gearType.GetField("defaultTouchable").SetValue(gear, def.Touchable);
             if (!go.TryGetComponent(out CanvasGroup _))
                 go.AddComponent<CanvasGroup>();
-            // 会用到置灰的 target 烘一个 disabled 的 Grayed，初始页的开关由 BuildController 应用 gear 时切换；
-            // element 自带 grayed 时 ApplyElement 已加（enabled）。
+            // The initial controller page enables the pre-baked effect; authored graying is already enabled.
             if ((def.Grayed || values.AsValueEnumerable().Any(value => value.Grayed)) && !go.TryGetComponent(out Grayed _))
-            {
-                var effect = go.AddComponent<Grayed>();
-                effect.shader = GrayscaleShader;
-                effect.enabled = false;
-            }
+                ConfigureGrayed(go, false);
         }
 
         private static void ConfigureGearSize(Type gearType, object gear, Schema.Gear xml, RectTransform rt)
@@ -1815,6 +1821,8 @@ namespace OpenFairy.UGUI.Editor
 
         private static void BuildList(GameObject go, Schema.Display element, Resource owner)
         {
+            if (element.Overflow == Schema.Overflow.Hidden)
+                go.AddComponent<RectMask2D>();
             var size = (Vector2)element.Size;
             var prefab = LoadPrefab(Resolve(element.DefaultItem, owner.PackageId));
             var itemSize = ((RectTransform)prefab.transform).sizeDelta;
@@ -1827,6 +1835,7 @@ namespace OpenFairy.UGUI.Editor
             source.itemPrefab = prefab;
             source.count = element.Items.Length;
             source.itemSize = itemSize;
+            source.autoItemSize = element.AutoItemSize;
             source.lineGap = lineGap;
             source.colGap = colGap;
             source.lineItemCount = element.LineItemCount;
@@ -1894,6 +1903,7 @@ namespace OpenFairy.UGUI.Editor
                 ConfigureInstanceControllers(itemGo.GetComponent<Component>(), Resolve(element.DefaultItem, owner.PackageId).ComponentXml, item.Controllers);
             }
             SetGrips(view, content);
+            ListLayoutBuilder.Configure(source);
             if (element.SelectionMode != ListSelectionMode.None)
                 go.AddComponent<ListSelection>().selectionMode = element.SelectionMode; // 点项选中/发 onClickItem
         }
@@ -2711,7 +2721,6 @@ namespace OpenFairy.UGUI.Editor
             TypeCache.GetTypesDerivedFrom<MonoBehaviour>().AsValueEnumerable().First(type => type.FullName == fullName);
 
         // 编辑器期查找、序列化进 prefab；运行时组件不做 Shader.Find。
-        private static Shader GrayscaleShader => Shader.Find("OpenFairy/UI Grayscale");
         private static Shader ColorMatrixShader => Shader.Find("OpenFairy/UI ColorMatrix");
         private static Shader BlendShader => Shader.Find("OpenFairy/UI Blend");
 
