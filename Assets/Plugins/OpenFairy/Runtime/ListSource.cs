@@ -255,6 +255,18 @@ namespace OpenFairy.UGUI
         internal bool TryGetItemIndex(GameObject item, out int index) => _indices.TryGetValue(item, out index);
         public int GetItemIndex(GameObject item) => _indices[item];
 
+        public GameObject GetItemAt(int index)
+        {
+            if (_pool == null && _indices.Count == 0)
+            {
+                var authored = List.Container((RectTransform)transform);
+                for (var i = 0; i < count; i++) _indices.Add(authored.GetChild(i).gameObject, i);
+            }
+            foreach (var item in _indices)
+                if (item.Value == index) return item.Key;
+            throw new KeyNotFoundException($"No bound list item at index {index}.");
+        }
+
         // Allows real async icon/model binders to reject a recycled row or old Fill.
         public bool IsBound(GameObject item, int index, int fillVersion) => version == fillVersion
             && _indices.TryGetValue(item, out int bound) && bound == index;

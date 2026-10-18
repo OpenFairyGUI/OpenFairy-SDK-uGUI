@@ -31,9 +31,16 @@ namespace OpenFairy.UGUI.Tests
                 variant.GetComponent<LayoutElement>().preferredWidth = 60;
                 source.variantItems = new[] { variant };
                 source.count = 2;
+                Assert.That(source.GetItemAt(0), Is.SameAs(authored));
+                Assert.That(source.GetItemAt(1), Is.SameAs(variant));
                 source.Fill(4, (item, _) => Assert.That(item.GetComponent<LayoutElement>().preferredWidth, Is.EqualTo(40)));
                 source.Fill(2, (item, _) => Assert.That(item.GetComponent<LayoutElement>().preferredWidth, Is.EqualTo(40)));
                 Assert.That(source.count, Is.EqualTo(2));
+                source.Fill(4, (item, index) => item.name = "Bound" + index);
+                for (var i = 0; i < 4; i++) Assert.That(source.GetItemAt(i).name, Is.EqualTo("Bound" + i));
+                source.Fill(2, (item, index) => item.name = "Refill" + index);
+                for (var i = 0; i < 2; i++) Assert.That(source.GetItemAt(i).name, Is.EqualTo("Refill" + i));
+                Assert.Throws<System.Collections.Generic.KeyNotFoundException>(() => source.GetItemAt(3));
                 Assert.That(variant.activeInHierarchy, Is.False);
                 Assert.That(variant.transform.IsChildOf(root.transform), Is.True);
             }

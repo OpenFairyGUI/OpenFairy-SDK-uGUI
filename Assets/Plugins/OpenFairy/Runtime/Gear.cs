@@ -38,6 +38,7 @@ namespace OpenFairy.UGUI
                 _lockedDisplay = displayLock;
             }
             _tweener = tweener;
+            _tweener.SetUpdate(UpdateType.Normal);
             _completeTween ??= CompleteTween;
             _tweener.OnComplete(_completeTween);
         }

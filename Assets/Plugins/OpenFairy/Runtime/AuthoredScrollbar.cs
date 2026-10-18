@@ -11,6 +11,12 @@ namespace OpenFairy.UGUI
         public void StepBackward() => pane.Step(horizontal, false, 1);
         public void StepForward() => pane.Step(horizontal, true, 1);
 
+        private void LateUpdate()
+        {
+            if (handleRect != null)
+                handleRect.gameObject.SetActive(size is > 0 and < 1);
+        }
+
         public override void OnBeginDrag(PointerEventData data)
         {
             base.OnBeginDrag(data);

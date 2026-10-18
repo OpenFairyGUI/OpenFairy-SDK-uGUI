@@ -183,6 +183,26 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [UnityTest]
+        public IEnumerator Every_scrollbar_direction_hides_zero_and_full_grips_and_restores_overflow()
+        {
+            foreach (var direction in new[] { Scrollbar.Direction.LeftToRight, Scrollbar.Direction.RightToLeft, Scrollbar.Direction.BottomToTop, Scrollbar.Direction.TopToBottom })
+            {
+                var root = Rect("Scrollbar", null, new Vector2(200, 200), Vector2.zero);
+                var grip = Rect("Grip", root, new Vector2(20, 20), Vector2.zero);
+                var bar = root.gameObject.AddComponent<AuthoredScrollbar>();
+                bar.handleRect = grip;
+                bar.direction = direction;
+                foreach (var size in new[] { 0f, .5f, 1f, .25f })
+                {
+                    bar.size = size;
+                    yield return null;
+                    Assert.That(grip.gameObject.activeSelf, Is.EqualTo(size is > 0 and < 1), $"{direction}, size={size}");
+                    Assert.That(root.gameObject.activeSelf, Is.True);
+                }
+            }
+        }
+
+        [UnityTest]
         public IEnumerator Page_controller_and_native_position_update_in_both_directions_without_feedback()
         {
             var source = List();
