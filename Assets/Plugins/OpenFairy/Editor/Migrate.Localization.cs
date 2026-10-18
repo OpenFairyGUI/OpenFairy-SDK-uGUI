@@ -231,7 +231,7 @@ namespace OpenFairy.UGUI.Editor
                         if (family.privateText) family.textField = LocalName(view.names, "_localizedText" + view.families.Count);
                         target = family.textField + ".text";
                     }
-                    choices.Add(Choice(view, "Text", id, (string)element.Attribute("text"), variables, target, setterCall, input));
+                    choices.Add(Choice(view, "Text", id, FairyXml.PublishedText(element), variables, target, setterCall, input));
                     if (caption && view.resource.ComponentXml.Extension is Schema.ComponentExtension.Button or Schema.ComponentExtension.ComboBox)
                     {
                         choices.Add(Choice(view, "Selected", null, view.resource.ComponentXml.Button?.SelectedTitle, variables, "selectedTitle"));

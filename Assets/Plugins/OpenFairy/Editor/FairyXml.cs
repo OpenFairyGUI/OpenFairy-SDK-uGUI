@@ -74,6 +74,9 @@ namespace OpenFairy.UGUI.Editor
         public static Schema.Component LoadComponent(string file) =>
             Deserialize<Schema.Component>(file);
 
+        internal static string PublishedText(XElement xml) =>
+            (string)xml.Attribute("autoClearText") == "true" ? "" : (string)xml.Attribute("text");
+
         private static T Deserialize<T>(string file) where T : new() =>
             (T)Read(typeof(T), XDocument.Load(file).Root);
 
@@ -125,6 +128,7 @@ namespace OpenFairy.UGUI.Editor
                     resource.Kind = (Schema.ResourceKind)ParseEnum(typeof(Schema.ResourceKind), xml.Name.LocalName);
                     break;
                 case Schema.Display display:
+                    display.Text = PublishedText(xml);
                     // <jta> 是 movieclip 实例的扩展名标签，归一到 movieclip 类型
                     var tag = xml.Name.LocalName == "jta" ? "movieclip" : xml.Name.LocalName;
                     display.Kind = (Schema.DisplayKind)ParseEnum(typeof(Schema.DisplayKind), tag);

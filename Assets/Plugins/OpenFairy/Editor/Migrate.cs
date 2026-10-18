@@ -781,7 +781,7 @@ namespace OpenFairy.UGUI.Editor
                     if (controllers.TryGetValue("button", out var buttonData))
                         comp.GetType().GetField("controller").SetValue(comp, buttonData.Value); // Controller<T> 泛型字段，仅此保留反射
                     buttonComp.titleText = Child(children, "title")?.GetComponent<TextComponent>();
-                    buttonComp.iconLoader = Child(children, "icon")?.GetComponent<Loader>();
+                    buttonComp.iconLoader = IconLoader(Child(children, "icon"));
                     if (buttonComp.iconLoader != null && buttonComp.iconLoader.content == null)
                         buttonComp.icon = buttonComp.iconLoader.sprite;
                     if (xml.Button is { } buttonEl)
@@ -810,7 +810,7 @@ namespace OpenFairy.UGUI.Editor
                 else if (comp is Label label)
                 {
                     BindLabelTitle(label, Child(children, "title")?.transform);
-                    label.iconLoader = Child(children, "icon")?.GetComponent<Loader>();
+                    label.iconLoader = IconLoader(Child(children, "icon"));
                 }
                 else if (xml.Extension == Schema.ComponentExtension.ScrollBar)
                     SetupScrollBar(root, children);
@@ -1305,6 +1305,14 @@ namespace OpenFairy.UGUI.Editor
             }
         }
 
+        private static Loader IconLoader(GameObject child)
+        {
+            if (child == null) return null;
+            if (child.TryGetComponent<Loader>(out var loader)) return loader;
+            if (child.TryGetComponent<Label>(out var label)) return label.iconLoader;
+            return child.GetComponent<ButtonBase>()?.iconLoader;
+        }
+
         private static void ConfigureButton(GameObject go, Schema.Extension buttonXml, string packageId)
         {
             var button = go.GetComponent<ButtonBase>();
@@ -1370,11 +1378,8 @@ namespace OpenFairy.UGUI.Editor
                 titleText.text = title;
             if (labelXml.TitleColor is { } titleColor && titleText != null)
                 titleText.color = ParseColor(titleColor);
-            if (labelXml.Icon is { } icon && FindChild(go.transform, "icon")?.GetComponent<UnityEngine.UI.Image>() is { } image)
-            {
-                image.sprite = LoadSprite(icon, packageId);
-                image.enabled = true;
-            }
+            if (labelXml.Icon is { } icon)
+                go.GetComponent<Label>().icon = LoadSprite(icon, packageId);
         }
 
         private static void ConfigureShape(Graph shape, Schema.Display element)

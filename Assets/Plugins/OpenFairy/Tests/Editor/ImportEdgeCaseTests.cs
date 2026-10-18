@@ -201,6 +201,32 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(code, Does.Not.Contain("Override0"));
         }
 
+        [TestCase("text", "true", "")]
+        [TestCase("richtext", "true", "")]
+        [TestCase("inputtext", "true", "")]
+        [TestCase("text", "false", "Preview")]
+        [TestCase("richtext", "false", "Preview")]
+        [TestCase("inputtext", "false", "Preview")]
+        [TestCase("text", null, "Preview")]
+        [TestCase("richtext", null, "Preview")]
+        [TestCase("inputtext", null, "Preview")]
+        public void Auto_clear_text_is_shared_by_import_and_generated_localization(string kind, string flag, string expected)
+        {
+            var file = Source + "/assets/BindingFixtures/CollisionBindingFixture.xml";
+            var attribute = flag == null ? "" : $" autoClearText='{flag}'";
+            File.WriteAllText(file, $"<component size='100,100'><displayList><{kind} id='body' name='Body' size='100,40'{attribute} text='Preview'/></displayList></component>");
+            Assert.That(FairyXml.LoadComponent(file).DisplayList[0].Text, Is.EqualTo(expected));
+            var resource = Resource("collision");
+            using var localization = new ImportLocalizationFixture();
+            localization.Prepare(resource);
+            var views = (IDictionary)typeof(Migrate).GetField("LocalViews", Static).GetValue(null);
+            var view = views[resource];
+            var family = ((IList)view.GetType().GetField("families").GetValue(view))[0];
+            var source = family.GetType().GetField("source").GetValue(family);
+            var choice = ((Array)source.GetType().GetField("choices").GetValue(source)).GetValue(0);
+            Assert.That(choice.GetType().GetField("text").GetValue(choice), Is.EqualTo(expected));
+        }
+
         [Test]
         public void Controller_and_child_name_collisions_keep_distinct_saved_bindings()
         {
