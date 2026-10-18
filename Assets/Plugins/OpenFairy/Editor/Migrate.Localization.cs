@@ -208,9 +208,10 @@ namespace OpenFairy.UGUI.Editor
                 var kind = element.Name.LocalName;
                 var text = kind is "text" or "richtext" or "inputtext";
                 var input = (string)element.Attribute("input") == "true" || kind == "inputtext";
-                var caption = text && name == "title" && view.resource.ComponentXml.Extension is Schema.ComponentExtension.Button or Schema.ComponentExtension.ComboBox or Schema.ComponentExtension.Label;
+                var namedCaption = text && name == "title" && view.resource.ComponentXml.Extension is Schema.ComponentExtension.Button or Schema.ComponentExtension.ComboBox or Schema.ComponentExtension.Label;
+                var caption = namedCaption && id == Array.Find(view.resource.ComponentXml.DisplayList, child => child.Name == "title")?.Id;
                 if (!text && element.Element("gearText") == null && element.Attribute("tooltips") == null) continue;
-                var family = AddLocalFamily(view, id, caption ? "Caption" : name);
+                var family = AddLocalFamily(view, id, namedCaption ? "Caption" : name);
                 family.input = input;
                 family.caption = caption;
                 var choices = new List<LocalChoice>();

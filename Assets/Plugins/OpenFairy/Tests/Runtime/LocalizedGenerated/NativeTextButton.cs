@@ -47,6 +47,8 @@ namespace OpenFairyTextFixtures.NativeTextFixture
             m_button.Initialize();
         }
         public OpenFairyTextComponent m_title;
+        public UnityEngine.RectTransform m_FirstGroup;
+        public UnityEngine.RectTransform m_SecondGroup;
 [System.Serializable]
 public sealed class LocalizedCaptionTexts
 {
@@ -74,13 +76,89 @@ public void RefreshLocalizedCaptionText()
     RefreshTitle();
 }
 
+[UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText2 = null;
+[System.Serializable]
+public sealed class LocalizedCaption_2Texts
+{
+    public string Text;
+}
+[UnityEngine.SerializeField] private LocalizedCaption_2Texts _LocalizedCaption_2Texts = null;
+public void ApplyLocalizedCaption_2Texts(LocalizedCaption_2Texts texts)
+{
+    _LocalizedCaption_2Texts = texts;
+    RefreshLocalizedCaption_2Text();
+}
+public void RefreshLocalizedCaption_2Text()
+{
+    _localizedText2.text = _LocalizedCaption_2Texts.Text;
+}
+
+[UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText3 = null;
+[System.Serializable]
+public sealed class LocalizedCaption_3Texts
+{
+    public string Text;
+}
+[UnityEngine.SerializeField] private LocalizedCaption_3Texts _LocalizedCaption_3Texts = null;
+public void ApplyLocalizedCaption_3Texts(LocalizedCaption_3Texts texts)
+{
+    _LocalizedCaption_3Texts = texts;
+    RefreshLocalizedCaption_3Text();
+}
+public void RefreshLocalizedCaption_3Text()
+{
+    _localizedText3.text = _LocalizedCaption_3Texts.Text;
+}
+
+[UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText4 = null;
+[System.Serializable]
+public sealed class LocalizedCaption_4Texts
+{
+    public string Text;
+}
+[UnityEngine.SerializeField] private LocalizedCaption_4Texts _LocalizedCaption_4Texts = null;
+public void ApplyLocalizedCaption_4Texts(LocalizedCaption_4Texts texts)
+{
+    _LocalizedCaption_4Texts = texts;
+    RefreshLocalizedCaption_4Text();
+}
+public void RefreshLocalizedCaption_4Text()
+{
+    _localizedText4.text = _LocalizedCaption_4Texts.Text;
+}
+
+[UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText5 = null;
+[System.Serializable]
+public sealed class LocalizedCaption_5Texts
+{
+    public string Text;
+}
+[UnityEngine.SerializeField] private LocalizedCaption_5Texts _LocalizedCaption_5Texts = null;
+public void ApplyLocalizedCaption_5Texts(LocalizedCaption_5Texts texts)
+{
+    _LocalizedCaption_5Texts = texts;
+    RefreshLocalizedCaption_5Text();
+}
+public void RefreshLocalizedCaption_5Text()
+{
+    _localizedText5.text = _LocalizedCaption_5Texts.Text;
+}
+
 [System.Serializable] public sealed class LocalizedTexts
 {
 public LocalizedCaptionTexts LocalizedCaption;
+public LocalizedCaption_2Texts LocalizedCaption_2;
+public LocalizedCaption_3Texts LocalizedCaption_3;
+public LocalizedCaption_4Texts LocalizedCaption_4;
+public LocalizedCaption_5Texts LocalizedCaption_5;
 }
 public void ApplyLocale(global::OpenFairyTextFixtures.Localization.LocaleTable texts)
 {
 ApplyLocalizedCaptionTexts(texts.NativeTextFixture_NativeTextButton.LocalizedCaption);
+ApplyLocalizedCaption_2Texts(texts.NativeTextFixture_NativeTextButton.LocalizedCaption_2);
+ApplyLocalizedCaption_3Texts(texts.NativeTextFixture_NativeTextButton.LocalizedCaption_3);
+ApplyLocalizedCaption_4Texts(texts.NativeTextFixture_NativeTextButton.LocalizedCaption_4);
+ApplyLocalizedCaption_5Texts(texts.NativeTextFixture_NativeTextButton.LocalizedCaption_5);
 }
 
     }

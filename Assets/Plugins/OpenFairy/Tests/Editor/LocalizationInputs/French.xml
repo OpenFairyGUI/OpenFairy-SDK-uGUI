@@ -11,4 +11,8 @@
  <string name="loctest1panel-choice-1">Deuxième</string>
  <string name="loctest1panel-property-cp-title">Propriété {user=Enfant}</string>
  <string name="loctest1panel-items-0">Ligne {user=Un}</string>
+ <string name="loctest1button-secondary">Deuxième traduit</string>
+ <string name="loctest1button-third">Troisième traduit</string>
+ <string name="loctest1button-fourth">Quatrième traduit</string>
+ <string name="loctest1button-fifth">Cinquième traduit</string>
 </resources>

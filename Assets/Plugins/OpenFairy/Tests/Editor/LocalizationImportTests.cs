@@ -210,6 +210,111 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(AssetDatabase.AssetPathToGUID(LocaleOutput + "/Languages.asset"), Is.EqualTo(setGuid));
         }
 
+
+        private static readonly string[] DuplicateFields = { "_localizedText2", "_localizedText3", "_localizedText4", "_localizedText5" };
+
+        private static TMP_Text[] DuplicateTargets(NativeTextButton button)
+        {
+            var values = new TMP_Text[DuplicateFields.Length];
+            using var serialized = new SerializedObject(button);
+            for (var i = 0; i < values.Length; i++)
+            {
+                var property = serialized.FindProperty(DuplicateFields[i]);
+                Assert.That(property, Is.Not.Null);
+                values[i] = (TMP_Text)property.objectReferenceValue;
+                Assert.That(values[i], Is.Not.Null);
+                Assert.That(values[i], Is.Not.SameAs(button.m_title));
+                for (var j = 0; j < i; j++) Assert.That(values[i], Is.Not.SameAs(values[j]));
+            }
+            return values;
+        }
+
+        [Test]
+        public void Duplicate_caption_names_localize_distinct_targets_without_replacing_the_public_title()
+        {
+            var root = Open();
+            try
+            {
+                var view = root.GetComponent<NativeTextPanel>();
+                var targets = DuplicateTargets(view.m_Main);
+                Assert.That(targets[0].transform.parent, Is.SameAs(targets[1].transform.parent));
+                Assert.That(targets[2].transform.parent, Is.SameAs(targets[3].transform.parent));
+                Assert.That(targets[0].transform.parent, Is.Not.SameAs(targets[2].transform.parent));
+                var first = view.m_Main.m_title;
+                view.ApplyLocale(French);
+                Assert.That(view.m_Main.m_title, Is.SameAs(first));
+                Assert.That(view.m_Main.title, Is.EqualTo("Bonjour Auteur"));
+                Assert.That(Array.ConvertAll(targets, t => t.text), Is.EqualTo(new[] { "Deuxième traduit", "Troisième traduit", "Quatrième traduit", "Cinquième traduit" }));
+                view.m_Main.title = "Runtime primary";
+                view.m_Main.RefreshState();
+                Assert.That(first.text, Is.EqualTo("Runtime primary"));
+                Assert.That(targets[3].text, Is.EqualTo("Cinquième traduit"));
+                view.ApplyLocale(AssetDatabase.LoadAssetAtPath<LocaleTable>(LocaleOutput + "/English.asset"));
+                Assert.That(Array.ConvertAll(targets, t => t.text), Is.EqualTo(new[] { "Second English", "Third English", "Fourth English", "Fifth English" }));
+                view.ApplyLocale(French);
+                Assert.That(view.m_Main.title, Is.EqualTo("Bonjour Auteur"));
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+        }
+
+        [Test]
+        public void Duplicate_text_bindings_survive_prefab_save_unload_and_reload()
+        {
+            var path = Output + "/DuplicateBindings.prefab";
+            var root = Open();
+            try
+            {
+                root.GetComponent<NativeTextPanel>().ApplyLocale(French);
+                Assert.That(PrefabUtility.SaveAsPrefabAsset(root, path, out var success), Is.Not.Null);
+                Assert.That(success, Is.True);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); }
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+            var guid = AssetDatabase.AssetPathToGUID(path);
+            root = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                var view = root.GetComponent<NativeTextPanel>();
+                var targets = DuplicateTargets(view.m_Main);
+                Assert.That(targets[0].text, Is.EqualTo("Deuxième traduit"));
+                view.ApplyLocale(AssetDatabase.LoadAssetAtPath<LocaleTable>(LocaleOutput + "/English.asset"));
+                Assert.That(view.m_Main.title, Is.Not.EqualTo("Fifth English"));
+                Assert.That(targets[3].text, Is.EqualTo("Fifth English"));
+                view.ApplyLocale(French);
+                Assert.That(targets[2].text, Is.EqualTo("Quatrième traduit"));
+                Assert.That(PrefabUtility.SaveAsPrefabAsset(root, path, out var success), Is.Not.Null);
+                Assert.That(success, Is.True);
+                Assert.That(AssetDatabase.AssetPathToGUID(path), Is.EqualTo(guid));
+            }
+            finally { PrefabUtility.UnloadPrefabContents(root); AssetDatabase.DeleteAsset(path); }
+        }
+
+        [TestCase("Button")]
+        [TestCase("Label")]
+        [TestCase("ComboBox")]
+        public void Caption_extensions_only_route_the_first_authored_title_through_the_caption_api(string extension)
+        {
+            var path = Path.Combine(Path.GetTempPath(), "OpenFairyCaption_" + Guid.NewGuid().ToString("N") + ".xml");
+            File.WriteAllText(path, "<component size='100,40' extention='" + extension + "'><displayList><text id='first' name='title' xy='0,0' size='100,20' text='First'/><text id='second' name='title' xy='0,20' size='100,20' text='Second'/></displayList></component>");
+            try
+            {
+                var resource = New("Resource");
+                Set(resource, "File", path); Set(resource, "Id", "caption");
+                Set(resource, "Package", "CaptionFixture"); Set(resource, "PackageId", "captionFixture");
+                var field = resource.GetType().GetField("Type");
+                field.SetValue(resource, Enum.Parse(field.FieldType, "Component"));
+                using var fixture = new ImportLocalizationFixture();
+                fixture.Prepare(resource);
+                var code = (string)Call("ScriptCode", resource);
+                Assert.That(code.Split(new[] { "\n    title = " }, StringSplitOptions.None).Length - 1, Is.EqualTo(1));
+                Assert.That(code, Does.Contain("private OpenFairyTextComponent _localizedText2 = null;"));
+                Assert.That(code, Does.Contain("_localizedText2.text = "));
+                Assert.That(code, Does.Contain("LocalizedCaption_2Texts"), "Existing localization family names remain stable.");
+                Assert.That(code.Split(new[] { "public OpenFairyTextComponent m_title;" }, StringSplitOptions.None).Length - 1, Is.EqualTo(1));
+            }
+            finally { File.Delete(path); }
+        }
+
         [OneTimeTearDown]
         public void Remove_only_the_owned_fixture_and_restore_importer_state()
         {

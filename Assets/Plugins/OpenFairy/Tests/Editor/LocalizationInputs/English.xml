@@ -11,4 +11,8 @@
  <string name="loctest1panel-choice-1">Second</string>
  <string name="loctest1panel-property-cp-title">Property {user=Child}</string>
  <string name="loctest1panel-items-0">Row {user=One}</string>
+ <string name="loctest1button-secondary">Second English</string>
+ <string name="loctest1button-third">Third English</string>
+ <string name="loctest1button-fourth">Fourth English</string>
+ <string name="loctest1button-fifth">Fifth English</string>
 </resources>
