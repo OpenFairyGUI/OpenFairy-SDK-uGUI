@@ -13,13 +13,14 @@ namespace OpenFairy.UGUI.Example
         public string[] demoNames;
         public GameObject[] demoPrefabs;
         public Sprite changeSprite; // Demo_Graph trapezoid 运行时贴图（change.png）
-        public GameObject windowAPrefab;
-        public GameObject windowBPrefab;
+        public DemoWindow1 windowAPrefab;
+        public DemoWindow2 windowBPrefab;
         public GameObject popupMenuPrefab;
         public GameObject popupItemPrefab;
         public GameObject popupComPrefab;
 
-        private OpenFairy.UGUI.Window _winA, _winB;
+        private DemoWindow1 _winA;
+        private DemoWindow2 _winB;
         private OpenFairy.UGUI.PopupMenu _pm;
         private GameObject _popupCom;
 
@@ -172,8 +173,14 @@ namespace OpenFairy.UGUI.Example
         private void PlayWindow(GameObject go)
         {
             var demo = Array.Find(go.GetComponents<OpenFairy.UGUI.Component>(), c => c.GetType().FullName == "Basics.Demo_Window");
-            BindButton(Get(demo, "m_n0"), () => (_winA ??= new DemoWindow1 { prefab = windowAPrefab }).Show());
-            BindButton(Get(demo, "m_n1"), () => (_winB ??= new DemoWindow2 { prefab = windowBPrefab }).Show());
+            BindButton(Get(demo, "m_n0"), () => {
+                if (_winA == null) _winA = Instantiate(windowAPrefab);
+                _winA.Show();
+            });
+            BindButton(Get(demo, "m_n1"), () => {
+                if (_winB == null) _winB = Instantiate(windowBPrefab);
+                _winB.Show();
+            });
         }
 
         // 复刻 FairyGUI PlayPopup：n0 在按钮下方弹菜单；n1 居中弹一个组件。

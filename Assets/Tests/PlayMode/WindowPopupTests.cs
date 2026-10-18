@@ -126,7 +126,7 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Window_shows_centered_and_close_hides()
         {
-            var win = new CenteringWindow { prefab = Load(WindowAPrefab) };
+            var win = Object.Instantiate(Load(WindowAPrefab)).GetComponent<OpenFairy.UGUI.Window>();
             win.Show();
             Canvas.ForceUpdateCanvases();
             yield return null;
@@ -149,7 +149,8 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Modal_window_shows_dim_layer_below_window_and_hides_on_close()
         {
-            var win = new CenteringWindow { prefab = Load(WindowAPrefab), modal = true };
+            var win = Object.Instantiate(Load(WindowAPrefab)).GetComponent<OpenFairy.UGUI.Window>();
+            win.modal = true;
             win.Show();
             Canvas.ForceUpdateCanvases();
             yield return null;
@@ -232,13 +233,5 @@ namespace OpenFairy.UGUI.Tests
             return null;
         }
 
-        private sealed class CenteringWindow : OpenFairy.UGUI.Window
-        {
-            protected override void OnInit()
-            {
-                base.OnInit();
-                Center();
-            }
-        }
     }
 }

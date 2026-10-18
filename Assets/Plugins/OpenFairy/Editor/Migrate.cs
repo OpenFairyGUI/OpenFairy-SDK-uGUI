@@ -764,7 +764,8 @@ namespace OpenFairy.UGUI.Editor
                         comp.GetType().GetField("controller").SetValue(comp, buttonData.Value); // Controller<T> 泛型字段，仅此保留反射
                     buttonComp.titleText = Child(children, "title")?.GetComponent<TextComponent>();
                     buttonComp.iconLoader = Child(children, "icon")?.GetComponent<Loader>();
-                    buttonComp.icon = buttonComp.iconLoader != null ? buttonComp.iconLoader.sprite : null;
+                    if (buttonComp.iconLoader != null && buttonComp.iconLoader.content == null)
+                        buttonComp.icon = buttonComp.iconLoader.sprite;
                     if (xml.Button is { } buttonEl)
                         ConfigureButton(root, buttonEl, component.PackageId);
                     if (xml.ComboBox is { } comboEl) // 组件定义级：烘焙 dropdown 资源
@@ -917,6 +918,15 @@ namespace OpenFairy.UGUI.Editor
                     }
                     else if (url != null && TryResolve(url, owner.PackageId, out content) && content.Type == Schema.ResourceKind.MovieClip)
                         ConfigureMovieClip(loader, content, element);
+                    else if (url != null && TryResolve(url, owner.PackageId, out content) && content.Type == Schema.ResourceKind.Component)
+                    {
+                        var instance = (GameObject)PrefabUtility.InstantiatePrefab(LoadPrefab(content), go.transform);
+                        loader.componentContent = instance.GetComponent<Component>();
+                        var contentRect = (RectTransform)instance.transform;
+                        contentRect.anchorMin = contentRect.anchorMax = contentRect.pivot = new Vector2(0, 1);
+                        loader.componentSize = contentRect.rect.size;
+                        loader.ShowContent();
+                    }
                     else
                         loader.enabled = false;
                     break;
@@ -945,7 +955,7 @@ namespace OpenFairy.UGUI.Editor
             }
 
             SetRect((RectTransform)go.transform, element, size ?? Vector2.zero, parent);
-            if (go.GetComponent<Loader>() is { autoSize: true, sprite: not null } autoLoader)
+            if (go.GetComponent<Loader>() is { autoSize: true } autoLoader)
                 autoLoader.SetNativeSize();
             if (go.GetComponent<TextField>() is { } createdText)
                 createdText.RebuildImages(); // 依赖最终 rect 的排版，须在 SetRect 之后烘焙

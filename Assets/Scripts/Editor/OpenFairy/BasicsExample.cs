@@ -1,4 +1,6 @@
+using System;
 using System.IO;
+using DG.Tweening;
 using OpenFairy.UGUI.Editor;
 using UnityEditor;
 using UnityEngine;
@@ -28,13 +30,49 @@ namespace OpenFairy.UGUI.Example
             demo.demoNames = prefabs.AsValueEnumerable().Select(prefab => prefab.name["Demo_".Length..]).ToArray();
             demo.demoPrefabs = prefabs;
             demo.changeSprite = AssetDatabase.LoadAssetAtPath<Sprite>($"{Root}/images/change.png");
-            demo.windowAPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/WindowA.prefab");
-            demo.windowBPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/WindowB.prefab");
+            demo.windowAPrefab = ConfigureWindow<DemoWindow1>($"{Root}/WindowA.prefab");
+            demo.windowBPrefab = ConfigureWindow<DemoWindow2>($"{Root}/WindowB.prefab");
             demo.popupMenuPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/popupmenu/PopupMenu.prefab");
             demo.popupItemPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/popupmenu/PopupMenuItem.prefab");
             demo.popupComPrefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{Root}/components/Component12.prefab");
             PrefabUtility.SaveAsPrefabAsset(main, MainPath);
             PrefabUtility.UnloadPrefabContents(main);
+        }
+
+        private static T ConfigureWindow<T>(string path) where T : Window
+        {
+            var content = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                if (!content.TryGetComponent(out T window)) window = content.AddComponent<T>();
+                Transition show = null, hide = null;
+                if (window is DemoWindow2 animated)
+                {
+                    animated.contentTransition = Array.Find(content.GetComponents<Transition>(), t => t.transitionName == "t1");
+                    show = Scale(content, "Window.Show", new[] { .1f, .1f }, Vector2.one);
+                    hide = Scale(content, "Window.Hide", new[] { float.NaN, float.NaN }, Vector2.one * .1f);
+                }
+                WindowBuilder.Configure(window, show, hide,
+                    content.transform.Find("frame/closeButton").GetComponent<ButtonBase>(),
+                    (RectTransform)content.transform.Find("frame/dragArea"));
+                content.SetActive(false);
+                PrefabUtility.SaveAsPrefabAsset(content, path);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(content); }
+            return AssetDatabase.LoadAssetAtPath<GameObject>(path).GetComponent<T>();
+        }
+
+        private static Transition Scale(GameObject content, string name, float[] from, Vector2 to)
+        {
+            var transition = Array.Find(content.GetComponents<Transition>(), value => value.transitionName == name);
+            if (transition == null) transition = content.AddComponent<Transition>();
+            transition.transitionName = name;
+            transition.items = new[] { new TransitionItem {
+                type = TransitionItemType.Scale, target = (RectTransform)content.transform,
+                tween = true, duration = .3f, ease = Ease.OutQuad,
+                start = from, end = new[] { to.x, to.y },
+            } };
+            return transition;
         }
     }
 }

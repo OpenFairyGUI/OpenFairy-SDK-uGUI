@@ -24,6 +24,7 @@ namespace OpenFairy.UGUI
     public abstract class ButtonBase : Component
     {
         public UnityEvent onClick = new();
+        public UnityEvent onRightClick = new();
         public UnityEvent onChanged = new(); // 复刻 GButton.onChanged：仅用户点击翻转 Check/Radio 时发
 
         public ButtonMode mode;
@@ -227,6 +228,11 @@ namespace OpenFairy.UGUI
         // 复刻 GButton.__click：Check/Radio 经 Selected setter 翻选并驱动关联控制器；Common 直接换页。
         public virtual void OnPointerClick(PointerEventData eventData)
         {
+            if (eventData.button == PointerEventData.InputButton.Right)
+            {
+                onRightClick.Invoke();
+                return;
+            }
             if (eventData.button != PointerEventData.InputButton.Left)
                 return;
             PlayClickSound();

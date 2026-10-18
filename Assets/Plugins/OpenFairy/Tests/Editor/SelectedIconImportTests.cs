@@ -131,6 +131,54 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(button.iconLoader.sprite, Is.SameAs(_normal));
         }
 
+        [Test]
+        public void Button_import_preserves_an_authored_component_icon_until_an_explicit_sprite_override()
+        {
+            var contentObject = new GameObject("Content", typeof(RectTransform), typeof(LoaderContentTestPanel));
+            ((RectTransform)contentObject.transform).sizeDelta = new Vector2(160, 160);
+            string cacheKey = _output + "/Content.prefab";
+            string resourceKey = _package + "content";
+            try
+            {
+                Directory.CreateDirectory(_output);
+                var content = PrefabUtility.SaveAsPrefabAsset(contentObject, cacheKey);
+                Cache("Prefabs").Add(cacheKey, content);
+                Cache("Resources").Add(resourceKey, Resource("Content.xml", Schema.ResourceKind.Component));
+                File.WriteAllText(_source + "/SelectedIconTestButton.xml",
+                    "<component size='32,32' extention='Button'>"
+                    + "<controller name='button' pages='0,up,1,down,2,over,3,selectedOver,4,disabled,5,selectedDisabled'/>"
+                    + "<displayList><loader id='icon' name='icon' size='32,32' url='ui://" + resourceKey + "'/></displayList>"
+                    + "<Button/></component>");
+                var resource = Resource("SelectedIconTestButton.xml", Schema.ResourceKind.Component);
+                using var localization = new ImportLocalizationFixture();
+                localization.Prepare(resource);
+                localization.AssertGenerated(resource, typeof(SelectedIconTestButton));
+                Call("BuildPrefab", resource);
+                var asset = AssetDatabase.LoadAssetAtPath<GameObject>(_output + "/SelectedIconTestButton.prefab");
+                Assert.That(asset.GetComponent<SelectedIconTestButton>().m_icon.enabled, Is.True);
+                var instance = Object.Instantiate(asset);
+                _objects.Add(instance);
+                var button = instance.GetComponent<SelectedIconTestButton>();
+                Assert.That(button.m_icon.content, Is.TypeOf<LoaderContentTestPanel>());
+                Assert.That(button.m_icon.content.gameObject.activeSelf, Is.True);
+                instance.SetActive(false);
+                instance.SetActive(true);
+                Assert.That(button.m_icon.content, Is.Not.Null);
+                button.icon = _normal;
+                Assert.That(button.m_icon.content, Is.Null);
+                Assert.That(button.m_icon.sprite, Is.SameAs(_normal));
+                button.icon = null;
+                Assert.That(button.m_icon.sprite, Is.Null);
+                Assert.That(button.m_icon.enabled, Is.False);
+            }
+            finally
+            {
+                Cache("Prefabs").Remove(cacheKey);
+                Cache("Resources").Remove(resourceKey);
+                Object.DestroyImmediate(contentObject);
+            }
+        }
+
         [TestCase(false)]
         [TestCase(true)]
         public void Saved_prefab_retains_both_static_images_and_the_authored_initial_selection(bool selected)

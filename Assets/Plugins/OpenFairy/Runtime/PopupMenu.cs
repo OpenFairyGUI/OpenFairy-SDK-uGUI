@@ -108,7 +108,7 @@ namespace OpenFairy.UGUI
         public void Dispose()
         {
             if (Root.inst != null)
-                Root.inst.HidePopup(_contentRt);
+                Root.inst.HidePopupImmediately(_contentRt);
             _itemPool.Clear();
             UnityEngine.Object.Destroy(_content);
         }

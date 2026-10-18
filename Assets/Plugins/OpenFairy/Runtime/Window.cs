@@ -1,138 +1,127 @@
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.UI;
 
 namespace OpenFairy.UGUI
 {
-    // 复刻 FairyGUI Window：包一个 content prefab，经 Root 托管显示/隐藏。默认无动效直接显隐；
-    // 子类可覆盖 OnInit/OnShown/OnHide/DoShowAnimation/DoHideAnimation（缩放进出等）。
-    public class Window
+    [RequireComponent(typeof(RectTransform), typeof(CanvasGroup))]
+    public class Window : UIBehaviour
     {
-        public GameObject prefab;      // content 内容 prefab（如 WindowA/WindowB），由调用方赋值
-        public bool modal;             // true：窗口下方铺半透明模态层，拦截下层点击（复刻 Window.modal）
+        public bool modal;
+        [SerializeField] internal Transition showTransition;
+        [SerializeField] internal Transition hideTransition;
+        [SerializeField] internal ButtonBase closeButton;
+        [SerializeField] internal CanvasGroup canvasGroup;
+        private int _version;
+        private bool _shown;
+        private bool _managedHide;
+        private bool _blocksRaycasts;
+        internal bool hiding { get; private set; }
         public bool inited { get; private set; }
-
-        // 复刻 Window.contentPane：实例化后的窗口内容根（未 init 时为 null）。
-        public RectTransform contentPane { get; private set; }
+        public RectTransform contentPane => (RectTransform)transform;
 
         public void Show() => Root.inst.ShowWindow(this);
-        public void Hide()
-        {
-            if (contentPane != null && contentPane.gameObject.activeSelf)
-                DoHideAnimation();
-        }
-        public void HideImmediately()
-        {
-            Root.inst.HideWindowImmediately(this);
-            OnHide();
-        }
+        public void Hide() => Root.inst.HideWindow(this);
+        public void HideImmediately() => Root.inst.HideWindowImmediately(this);
 
-        internal void EnsureInited(RectTransform parent)
+        internal void Initialize()
         {
-            if (inited)
-                return;
-            contentPane = (RectTransform)Object.Instantiate(prefab, parent, false).transform;
-            contentPane.anchorMin = contentPane.anchorMax = contentPane.pivot = new Vector2(0, 1);
-            contentPane.localScale = Vector3.one;
+            if (inited) return;
+            canvasGroup = GetComponent<CanvasGroup>();
+            _blocksRaycasts = canvasGroup.blocksRaycasts;
+            if (closeButton != null) closeButton.onClick.AddListener(Hide);
             inited = true;
             OnInit();
         }
 
-        internal void DoShow() => DoShowAnimation();
-
-        // 在 Root 内居中（复刻 GObject.Center）。
-        protected void Center()
+        internal void DoShow()
         {
-            var s = contentPane.rect.size;
-            var r = Root.inst.size;
-            contentPane.anchoredPosition = new Vector2(Mathf.Round((r.x - s.x) / 2), -Mathf.Round((r.y - s.y) / 2));
+            var version = ++_version;
+            StopAnimations();
+            hiding = false;
+            _shown = true;
+            gameObject.SetActive(true);
+            canvasGroup.blocksRaycasts = _blocksRaycasts;
+            ShowAnimated(version).Forget();
         }
 
-        // 找到关闭按钮（frame 下名为 closeButton 的 ButtonBase）并接 Hide。
-        protected void BindCloseButton() =>
-            FindDeep(contentPane, "closeButton")?.GetComponent<ButtonBase>()?.onClick.AddListener(Hide);
-
-        // 找到 frame 下的 dragArea 并让拖它移动整个窗口（复刻 Window.dragArea + StartDrag）。dragArea 常是空 graph，补透明射线面。
-        protected void BindDragArea()
+        private async UniTask ShowAnimated(int version)
         {
-            var area = FindDeep(contentPane, "dragArea");
-            if (area == null)
-                return;
-            if (area.GetComponent<Graphic>() == null)
+            await DoShowAnimation();
+            if (this != null && version == _version) OnShown();
+        }
+
+        internal async UniTask<bool> DoHide()
+        {
+            if (!gameObject.activeSelf) return true;
+            var version = ++_version;
+            StopAnimations();
+            hiding = true;
+            canvasGroup.blocksRaycasts = false;
+            await DoHideAnimation();
+            if (this == null || version != _version) return false;
+            DoHideImmediately();
+            return true;
+        }
+
+        internal void DoHideImmediately()
+        {
+            ++_version;
+            StopAnimations();
+            hiding = false;
+            Root.inst?.ForgetWindow(this);
+            _managedHide = true;
+            gameObject.SetActive(false);
+            _managedHide = false;
+            NotifyHidden();
+        }
+
+        protected override void OnDisable()
+        {
+            ++_version;
+            StopAnimations();
+            hiding = false;
+            if (!_managedHide)
             {
-                var image = area.gameObject.AddComponent<UnityEngine.UI.Image>();
-                image.color = new Color(0, 0, 0, 0);
-                image.raycastTarget = true;
+                Root.inst?.WindowDisabled(this);
+                NotifyHidden();
             }
-            area.gameObject.AddComponent<WindowDragArea>().window = this;
+            base.OnDisable();
         }
 
-        private static RectTransform FindDeep(Transform root, string name)
+        private void NotifyHidden()
         {
-            for (var i = 0; i < root.childCount; i++)
-            {
-                var child = root.GetChild(i);
-                if (child.name == name)
-                    return (RectTransform)child;
-                if (FindDeep(child, name) is { } found)
-                    return found;
-            }
-            return null;
+            if (!_shown) return;
+            _shown = false;
+            OnHide();
         }
 
-        // 改 pivot 但保持视觉位置不变（复刻 RectTransform pivot setter 的补偿），用于缩放动效绕中心。
-        protected static void SetPivotKeepPosition(RectTransform rt, Vector2 pivot)
+        protected override void OnDestroy()
         {
-            var size = rt.rect.size;
-            var delta = pivot - rt.pivot;
-            rt.pivot = pivot;
-            rt.anchoredPosition += new Vector2(delta.x * size.x, delta.y * size.y);
+            if (closeButton != null) closeButton.onClick.RemoveListener(Hide);
+            base.OnDestroy();
         }
 
-        protected virtual void OnInit()
+        private void StopAnimations()
         {
-            BindCloseButton();
-            BindDragArea();
+            if (showTransition != null) showTransition.Stop();
+            if (hideTransition != null) hideTransition.Stop();
         }
 
+        protected void Center() => Root.inst.Center(contentPane);
+
+        protected static void SetPivotKeepPosition(RectTransform rect, Vector2 pivot)
+        {
+            var delta = pivot - rect.pivot;
+            rect.pivot = pivot;
+            rect.anchoredPosition += Vector2.Scale(delta, rect.sizeDelta);
+        }
+
+        protected virtual void OnInit() { }
         protected virtual void OnShown() { }
         protected virtual void OnHide() { }
-        protected virtual void DoShowAnimation() => OnShown();
-        protected virtual void DoHideAnimation() => HideImmediately();
+        protected virtual UniTask DoShowAnimation() => showTransition != null ? showTransition.Play() : UniTask.CompletedTask;
+        protected virtual UniTask DoHideAnimation() => hideTransition != null ? hideTransition.Play() : UniTask.CompletedTask;
     }
 
-    // 挂在窗口 frame 的 dragArea 上：拖动移动整个窗口 contentPane，并把窗口提到最前（复刻 Window.__dragStart→StartDrag）。
-    public sealed class WindowDragArea : UIBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
-    {
-        [System.NonSerialized] public Window window;
-
-        private Vector2 _start;
-        private Vector2 _startPointer;
-        private bool _dragging;
-        private RectTransform Content => window.contentPane;
-
-        public void OnBeginDrag(PointerEventData e)
-        {
-            if (e.button != PointerEventData.InputButton.Left)
-                return;
-            _dragging = true;
-            Root.inst.BringToFront(window);
-            _start = Content.anchoredPosition;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)Content.parent, e.position, e.pressEventCamera, out _startPointer);
-        }
-
-        public void OnDrag(PointerEventData e)
-        {
-            if (!_dragging || e.button != PointerEventData.InputButton.Left)
-                return;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle((RectTransform)Content.parent, e.position, e.pressEventCamera, out var p);
-            Content.anchoredPosition = _start + (p - _startPointer);
-        }
-
-        public void OnEndDrag(PointerEventData e)
-        {
-            if (e.button == PointerEventData.InputButton.Left)
-                _dragging = false;
-        }
-    }
 }

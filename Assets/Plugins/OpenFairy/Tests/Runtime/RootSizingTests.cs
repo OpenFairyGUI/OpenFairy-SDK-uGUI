@@ -102,11 +102,14 @@ namespace OpenFairy.UGUI.Tests
         {
             var canvas = CreateCanvas();
             var root = Root.Create(canvas);
+            var window = new GameObject("Modal", typeof(RectTransform)).AddComponent<PopupTestWindow>();
+            window.modal = true;
+            window.Show();
             var popup = (RectTransform)new GameObject("Popup", typeof(RectTransform)).transform;
             popup.sizeDelta = new Vector2(120, 60);
             var closed = root.ShowPopupAt(popup, new Vector2(600, 450));
             Assert.That(-popup.anchoredPosition.y, Is.EqualTo(450), "Explicit Down retains the requested direction, including overflow.");
-            var blocker = (RectTransform)root.transform.Find("PopupBlocker");
+            var blocker = (RectTransform)root.transform.Find("ModalLayer");
             SameCorners(root.rect, blocker);
             root.HidePopup();
             Assert.That(closed.Status, Is.EqualTo(Cysharp.Threading.Tasks.UniTaskStatus.Succeeded));
@@ -117,6 +120,7 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(popup.anchoredPosition.x, Is.LessThanOrEqualTo(400 - popup.rect.width));
             Assert.That(-popup.anchoredPosition.y, Is.LessThanOrEqualTo(300 - popup.rect.height));
             root.HidePopup();
+            window.HideImmediately();
         }
     }
 }

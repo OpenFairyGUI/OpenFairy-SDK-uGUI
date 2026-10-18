@@ -96,9 +96,12 @@ namespace OpenFairy.UGUI
         public override void OnPointerClick(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left)
+            {
+                base.OnPointerClick(eventData);
                 return;
+            }
             PlayClickSound();
-            // 展开时点按钮外区域由 Root 的透明 blocker 收起（blocker 在按钮之上截获点击），故这里只管展开。
+            // Toggle honors popups closed by the pointer-down phase of this same click.
             RefreshState();
             ShowDropdown().Forget();
         }
@@ -111,6 +114,7 @@ namespace OpenFairy.UGUI
                 Root.Create((RectTransform)GetComponentInParent<Canvas>().rootCanvas.transform);
             if (_itemsChanged && _dropdown != null) // items/values 变过：销毁重建（复刻 _itemsUpdated → RenderDropdownList）
             {
+                Root.inst.HidePopupImmediately(_dropdownRt);
                 Destroy(_dropdown);
                 _dropdown = null;
                 _dropdownRt = null;
@@ -119,12 +123,21 @@ namespace OpenFairy.UGUI
                 Build();
             if (_dropdownRt != null)
             {
-                var closed = Root.inst.ShowPopup(_dropdownRt, (RectTransform)transform, popupDirection);
+                var closed = Root.inst.TogglePopup(_dropdownRt, (RectTransform)transform, popupDirection);
                 SetState(VisualState.Down); // 打开时按钮进 down 态（复刻 GComboBox）
-                await closed;
-                if (this != null)
-                    RefreshState(); // 关闭（含外点）恢复态
+                if (await closed.SuppressCancellationThrow() || this == null) return;
+                RefreshState(); // 关闭（含外点）恢复态
             }
+        }
+
+        protected override void OnDestroy()
+        {
+            if (_dropdown != null)
+            {
+                if (Root.inst != null) Root.inst.HidePopupImmediately(_dropdownRt);
+                Destroy(_dropdown);
+            }
+            base.OnDestroy();
         }
 
         private void Build()
