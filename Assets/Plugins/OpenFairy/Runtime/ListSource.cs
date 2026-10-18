@@ -140,7 +140,6 @@ namespace OpenFairy.UGUI
             }
             if (hasNativeRowLayout)
             {
-                if (_nativeRowItemSizes.Length != _indices.Count) _nativeRowItemSizes = new Vector2[_indices.Count];
                 UpdateNativeRowItemSizes();
                 UpdateNativeRowSize(viewSize);
                 LayoutRebuilder.ForceRebuildLayoutImmediate(container);
@@ -447,6 +446,7 @@ namespace OpenFairy.UGUI
 
         private bool UpdateNativeRowItemSizes()
         {
+            if (_nativeRowItemSizes.Length != _indices.Count) _nativeRowItemSizes = new Vector2[_indices.Count];
             bool changed = false;
             foreach (var item in _indices)
             {
@@ -473,7 +473,7 @@ namespace OpenFairy.UGUI
             if (hasNativeRowLayout)
             {
                 var view = scrollPane != null ? scrollPane.viewportSize : ((RectTransform)transform).rect.size;
-                if (_viewport != view) UpdateNativeRowSize(view);
+                if (_viewport != view || _nativeRowItemSizes.Length != _indices.Count) UpdateNativeRowSize(view);
                 if (UpdateNativeRowItemSizes()) LayoutRebuilder.MarkLayoutForRebuild(content);
                 return;
             }
