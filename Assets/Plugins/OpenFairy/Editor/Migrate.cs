@@ -672,9 +672,12 @@ namespace OpenFairy.UGUI.Editor
 
                 foreach (var (element, go) in children)
                     if (element.Kind == Schema.DisplayKind.Group)
+                    {
                         foreach (var (member, memberGo) in children)
                             if (member.Group == element.Id)
                                 ReparentPreservingRect((RectTransform)memberGo.transform, (RectTransform)go.transform);
+                        GroupLayoutBuilder.Configure(go, element);
+                    }
 
                 if (xml.Mask is { } mask)
                 {
@@ -722,6 +725,11 @@ namespace OpenFairy.UGUI.Editor
                         type.GetField("pages").SetValue(gear, pages);
                         data.Gears.Add(gear);
                     }
+
+                foreach (var (element, go) in children)
+                    if (element.SelectionController is { } name && controllers.TryGetValue(name, out var data)
+                        && go.TryGetComponent<ListSelection>(out var selection))
+                        BuildSelectionController(comp, data, selection);
 
                 // 按钮关联控制器（<Button controller=.. page=..>）：点击换 owner 上该控制器的页，实现 tab/radio 组
                 //（复刻 relatedController）；并给该控制器烘 GearButton，使换页（含程序化）反向同步按钮选中态
@@ -824,7 +832,10 @@ namespace OpenFairy.UGUI.Editor
                     LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)fitter.transform);
                 LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
                 SyncRelations(root);
-                Prefabs[prefabPath] = PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath, out var saved);
+                if (!saved || prefab == null)
+                    throw new InvalidOperationException($"OpenFairy failed to save prefab '{prefabPath}'.");
+                Prefabs[prefabPath] = prefab;
             }
             finally
             {
@@ -1097,6 +1108,21 @@ namespace OpenFairy.UGUI.Editor
             return go;
         }
 
+        private static void BuildSelectionController(Component owner, ControllerData data, ListSelection selection)
+        {
+            selection.selectionOwner = owner;
+            selection.selectionController = data.Index;
+            selection.selectionPageCount = data.PageValues.Length;
+            var gearType = typeof(GearListSelection<>).MakeGenericType(data.PageType);
+            var gear = Activator.CreateInstance(gearType);
+            gearType.GetField("target").SetValue(gear, selection.gameObject);
+            gearType.GetField("selection").SetValue(gear, selection);
+            var pages = Array.CreateInstance(data.PageType, data.PageValues.Length);
+            for (var i = 0; i < pages.Length; i++) pages.SetValue(data.PageValues[i], i);
+            gearType.GetField("pages").SetValue(gear, pages);
+            data.Gears.Add(gear);
+        }
+
         private static void BuildController(ControllerData data)
         {
             var gearType = typeof(Gear<>).MakeGenericType(data.PageType);
@@ -1353,8 +1379,10 @@ namespace OpenFairy.UGUI.Editor
                 case Schema.ShapeType.Ellipse:
                     shape.kind = Graph.Kind.Ellipse;
                     break;
+                case Schema.ShapeType.Polyline:
                 case Schema.ShapeType.Polygon:
-                    shape.kind = Graph.Kind.Polygon;
+                    shape.kind = element.Type == Schema.ShapeType.Polyline ? Graph.Kind.Polyline : Graph.Kind.Polygon;
+                    shape.roundEdge = element.RoundEdge;
                     var values = element.Points.Split(',').AsValueEnumerable().Select(part => float.Parse(part, CultureInfo.InvariantCulture)).ToArray();
                     shape.points = ValueEnumerable.Range(0, values.Length / 2).Select(i => new Vector2(values[i * 2], values[i * 2 + 1])).ToArray();
                     break;
@@ -2170,6 +2198,8 @@ namespace OpenFairy.UGUI.Editor
             child.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
             if (worldPositionStays) child.position = position;
             else child.localPosition = position;
+            if (child.TryGetComponent<ObjectFilter>(out var filter))
+                ObjectFilterBuilder.ReparentPresentation(filter, worldPositionStays);
         }
 
         private static void BuildRelations(RectTransform reference, RectTransform coordinateSpace, Schema.Display element, GameObject go,
@@ -2445,6 +2475,11 @@ namespace OpenFairy.UGUI.Editor
                 _ => TextAlignmentOptions.TopLeft,
             };
             text.raycastTarget = false;
+            if (element.ShadowColor is { } shadow)
+            {
+                var path = Path.ChangeExtension(AssetPath(owner.File), null) + "_" + Identifier(element.Id) + "_TextMaterial.mat";
+                TmpTextMaterialBuilder.ConfigureShadow(text, path, ParseColor(shadow), element.ShadowOffset ?? new Vector2(1, 1));
+            }
         }
 
         private static TMP_FontAsset LoadTmpFont(Schema.Display element, Resource owner)

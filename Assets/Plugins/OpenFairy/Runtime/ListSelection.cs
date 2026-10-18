@@ -26,6 +26,12 @@ namespace OpenFairy.UGUI
         private readonly List<(Transform Item, ButtonBase Button, ListSelectionItem Relay, int Index)> _items = new();
         private readonly HashSet<int> _selectedIndices = new();
         private ListSource _source;
+        private bool _bound;
+        private bool _updatingController;
+        [SerializeField] internal Component selectionOwner;
+        [SerializeField] internal int selectionController = -1;
+        [SerializeField] internal int selectionPageCount;
+
 
         private bool Virtual => _source != null && _source.isVirtual;
 
@@ -65,6 +71,27 @@ namespace OpenFairy.UGUI
                     button.selected = _selectedIndices.Contains(index);
                 _items.Add((child, button, relay, index));
             }
+            _bound = true;
+            if (selectionOwner != null && !_updatingController)
+                SetSelection(ControllerBinding.GetPage(selectionOwner, selectionController));
+        }
+
+        internal void SelectFromController(int index)
+        {
+            if (_updatingController) return;
+            if (!_bound) Rebind();
+            SetSelection(index);
+        }
+
+        private void UpdateSelectionController(int index)
+        {
+            if (selectionOwner != null && index >= 0 && index < selectionPageCount
+                && !selectionOwner.IsControllerChanging(selectionController))
+            {
+                _updatingController = true;
+                try { ControllerBinding.SetPage(selectionOwner, selectionController, index); }
+                finally { _updatingController = false; }
+            }
         }
 
         // 非按钮项自身无点击 handler，点击冒泡到列表根：解析落点所属项，同样发 onClickItem（复刻 GList 对任意项派发）。
@@ -103,12 +130,21 @@ namespace OpenFairy.UGUI
             }
             set
             {
-                _selectedIndices.Clear();
-                int count = Virtual ? _source.count : _items.Count;
-                if (value >= 0 && value < count)
-                    _selectedIndices.Add(value);
-                ApplySelection();
+                if (!_bound) Rebind();
+                var previous = selectedIndex;
+                SetSelection(value);
+                if (selectedIndex != previous && selectedIndex >= 0)
+                    UpdateSelectionController(selectedIndex);
             }
+        }
+
+        private void SetSelection(int value)
+        {
+            _selectedIndices.Clear();
+            int count = Virtual ? _source.count : _items.Count;
+            if (value >= 0 && value < count)
+                _selectedIndices.Add(value);
+            ApplySelection();
         }
 
         public void ClearSelection() => selectedIndex = -1;
@@ -157,36 +193,8 @@ namespace OpenFairy.UGUI
                     break;
             }
             ApplySelection();
+            if (_selectedIndices.Contains(index)) UpdateSelectionController(index);
             onClickItem.Invoke(index);
         }
-    }
-
-    // 运行时列表项点击中继：每个池化 item 只创建一次 UnityAction，Rebind 只更新 owner/index，不再逐项分配闭包。
-    internal sealed class ListSelectionItem : MonoBehaviour
-    {
-        private ListSelection _owner;
-        private ButtonBase _button;
-        private int _index;
-        private UnityAction _action;
-
-        internal void Bind(ListSelection owner, ButtonBase button, int index)
-        {
-            Unbind();
-            _owner = owner;
-            _button = button;
-            _index = index;
-            _action ??= Click;
-            _button.onClick.AddListener(_action);
-        }
-
-        internal void Unbind()
-        {
-            if (_button != null && _action != null)
-                _button.onClick.RemoveListener(_action);
-            _owner = null;
-            _button = null;
-        }
-
-        private void Click() => _owner.Click(_index);
     }
 }

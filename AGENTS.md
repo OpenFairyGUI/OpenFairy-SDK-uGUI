@@ -8,7 +8,7 @@
 
 对象捕获/模糊/容器颜色滤镜保留显式同步刷新，Play 自动刷新使用 `Application.onBeforeRender`，晚于关系的 `PostLateUpdate` 同步，不能改回普通 `LateUpdate` 或 `willRenderCanvases` 捕获。最外层滤镜负责内层逆序刷新。重复无域/场景重载 Play 的测试按当前原生组件重新取得托管支持对象，不能把旧托管包装器里的观察列表当成当前组件；这一测试已通过，无需为夹具引用问题改生产生命周期。
 
-当前包内测试在 Unity Editor/Mono 的实际结果为 Editor **115/115**、PlayMode **143/143**，对应同一正式源码的完整两套运行，均无跳过或失败。TMP/Builtin 两后端各四个程序集另有离线零错误编译；Builtin 不据此视为原生行为通过。灰显、原生 SingleRow 布局/滚动查询、Hidden 列表裁剪、fitter 关系初态、共享 Transition 声音及十三种混合捕获均有回归。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
+当前包内测试在 Unity Editor/Mono 的实际结果为 Editor **136/136**、PlayMode **171/171**，对应同一正式源码的完整两套运行，均无跳过或失败。TMP/Builtin 两后端各四个程序集另有离线零错误编译；Builtin 不据此视为原生行为通过。灰显、原生 SingleRow 布局/滚动查询、Hidden 列表裁剪、fitter 关系初态、共享 Transition 声音及十三种混合捕获均有回归。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
 
 静态文本与本地化由普通导出器生成 typed 方法、直接原生引用和语言资产；按钮 selected icon、声音和实例控制器覆盖在导入期烘焙。位图字体同域重导会失效查找缓存。Canvas overlay 使用 native anchors；非 Canvas 的兄弟 overlay 复制 anchors/pivot/rect/pose，并在 `LateUpdate` 检查矩形和变换矩阵变化，公开坐标仍从左上起算。
 
@@ -16,9 +16,9 @@
 
 原生 Window/popup 已采用组件与预烘焙 WindowBuilder，关闭等待 Transition、重开取消旧 session，外点由显式选择的 PopupInputModule 在原生派发前检查，不用透明拦截层重发事件。Root 必须继承设计根的 layer；两种相机模式的真实 GPU 对照已确认差异，永久回归通过。十项 popup 首轮失败来自夹具向不接受 null 的 EventSystem.current 赋空；清理仅恢复已有宿主，未给生产逻辑加兜底。
 
-Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事件整体缩放，不运行时解析 URL。image/movie/empty/content 切换与 mask/alpha GPU 检查通过。六项几何测试首轮把 height=60、pivot.y=.7 的顶边写成42，实际应为18；仅修独立测试数值。当前115/143包含所有新增包内回归，不与历史总数累加，消费端和完整Demo/golden仍须单独验证。
+Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事件整体缩放，不运行时解析 URL。image/movie/empty/content 切换与 mask/alpha GPU 检查通过。六项几何测试首轮把 height=60、pivot.y=.7 的顶边写成42，实际应为18；仅修独立测试数值。当前136/171包含所有新增包内回归，不与历史总数累加，消费端和完整Demo/golden仍须单独验证。
 
-ContentSizeFitter 的 driven 尺寸不会完整序列化；Relation 首次启用时先恢复已有烘焙基线，再 Record 和接受真实重排，不能拿刚反序列化的零尺寸当原始几何。动态修改 MaskableGraphic.maskable 的测试正控还须调用公开 RecalculateClipping，不能将未更新的 clip parent 当渲染结论。声音夹具在首次启用前配置 AudioSource，并为自身提供 AudioListener；不要因宿主无 listener 或不确定的构造时序给生产声音代码加兼容分支。
+ContentSizeFitter 的 driven 尺寸不会完整序列化；Relation 首次启用时先恢复已有烘焙基线，再 Record 和接受真实重排，不能拿刚反序列化的零尺寸当原始几何。首次活动实例化时，父组件 OnEnable 可能早于子 fitter 原生启用；恢复已保存基线按 enabled 配置判断。self 坐标关系只叠加变化量，不能把自身 pivot 原点当绝对位移。动态修改 MaskableGraphic.maskable 的测试正控还须调用公开 RecalculateClipping，不能将未更新的 clip parent 当渲染结论。声音夹具在首次启用前配置 AudioSource，并为自身提供 AudioListener；不要因宿主无 listener 或不确定的构造时序给生产声音代码加兼容分支。
 
 捕获必须按原生顺序运行完整材质 modifier 链，只跳过源隐藏 modifier。不能向 ColorAdjust/BlendModeEffect 的同一缓存传入去掉原生 Stencil 的不同输入，否则会释放源 CanvasRenderer 仍在使用的材质。源蒙版参数只在 owned 副本上恢复到 base 值，再由代理树重算本地遮罩；新增两项跨帧 GPU 回归及增强 TMP 图文混排覆盖源材质、pop、图集、外罩排除与内部蒙版。
 
@@ -229,3 +229,13 @@ Unity 无法把"定义在别的 .cs 文件里的次要 MonoBehaviour 类"序列�
 - ComboBox 下拉已按 `visibleItemCount` 裁剪滚动。**无 button 控制器的 Dropdown 变体现也接下拉**（2026-07-09 修）：codegen 无 "button" 控制器时补占位 `enum button` 让其仍是 `ComboBox<button>`（占位 enum 与 "button" 子节点的 `m_button` 字段不同名不冲突），不再退化成 Component；且给每个 ComboBox 烘一张盖满全 rect 的透明 `comboHit` 射线面作最后子物体——否则内部独立 button 子组件（Dropdown 的面）会按 uGUI"点击只到最深 handler、不冒泡"抢走点击、下拉打不开。
 - Grid demo 主要填可见文本，star/cb/mc 细节从简。
 - 其余未做项见「发布范围与取舍」末尾"本轮明确不做 / 记为边界"。
+
+Advanced 横纵组使用预烘焙原生 LayoutGroup 派生，保留交叉轴偏移和隐藏/零尺寸成员语义。列表 selectionController 双向同步使用直接 owner/索引和 typed gear，不运行时查名称。Graph.Kind.Polyline 复用既有 points/lineSize/lineColor，坐标从矩形左上开始，新增 roundEdge 仅控制开放路径端点。完整包内测试数以本文件顶部当前结果为准。
+
+TMP 阴影使用导入期原生 SDF underlay 材质资产，不使用 Builtin 的 BaseMeshEffect。已发布字段可通过 Migrate.RefreshTextShadows 窄刷新，先烘材质再更新持久 prefab，保留层级/身份与嵌套继承；不得为修字体阴影重建文字对象系统。原生 SDF padding/字号缩放与 fallback preset 匹配设置仍是明确边界。
+
+列表项点击中继在编辑期控制器初始化时也会预挂，必须使用独立同名 ListSelectionItem.cs 保持 MonoScript 序列化身份。导入检查包括强制重导、卸载/重载及嵌套再次保存；SaveAsPrefabAsset 的失败/null 结果直接抛异常，不缓存或报告迁移完成。已有丢失脚本的产物应按源重建。
+
+阴影窄刷新保留生成字段的首个同名项规则；未公开的重复文本仅在Editor按原group/mask与同名兄弟顺序精确对应。公开引用或作者层级不符仍失败。新增跨组/同组同名、独立材质、保存重载、父继承与重复幂等回归；不为窄刷新增加运行时标记或重新生成整套界面。
+
+导入器将预挂捕获 presentation 与源一同移入作者 group、mask 或 scroll 层级。已有发布定义可经同一依赖顺序窄修，只搬已验证的既有 companion，保留 GUID/local ID 与引用；直通图像颜色滤镜不变，Runtime 严格父层校验保留。新增三种真实导入/损坏保存/重载与幂等检查、两个失效绑定正控和一项三模式 GPU 回归。

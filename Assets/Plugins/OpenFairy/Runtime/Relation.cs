@@ -60,13 +60,18 @@ namespace OpenFairy.UGUI
             _applying = true;
             try
             {
-                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, geometry.size.x);
-                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, geometry.size.y);
+                // A component can follow its own child. Capture its coordinate origin before resizing it.
                 var point = new Vector3(coordinateSpace.rect.xMin + geometry.position.x + geometry.pivot.x * geometry.size.x,
                     coordinateSpace.rect.yMax - geometry.position.y - geometry.pivot.y * geometry.size.y, 0);
                 var position = coordinateSpace.TransformPoint(point);
                 position.z = rt.position.z;
-                rt.position = position;
+                var movement = coordinateSpace == rt
+                    ? rt.TransformVector(new Vector3(geometry.position.x, -geometry.position.y, 0))
+                    : position - rt.position;
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, geometry.size.x);
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, geometry.size.y);
+                // Other relations on this component may preserve an outer alignment during the size callback.
+                rt.position = coordinateSpace == rt ? rt.position + movement : position;
                 _ownerSize = geometry.size;
             }
             finally { _applying = false; }
@@ -139,16 +144,24 @@ namespace OpenFairy.UGUI
 
         protected override void OnEnable()
         {
-            if (!_recorded && reference != null && TryGetComponent(out ContentSizeFitter fitter) && fitter.isActiveAndEnabled)
+            if (!_recorded && reference != null)
             {
-                var rect = (RectTransform)transform;
-                // Native layout omits driven sizes from serialization; position still belongs to the baked geometry.
-                if (fitter.horizontalFit is ContentSizeFitter.FitMode.MinSize or ContentSizeFitter.FitMode.PreferredSize)
-                    rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, _ownerSize.x);
-                if (fitter.verticalFit is ContentSizeFitter.FitMode.MinSize or ContentSizeFitter.FitMode.PreferredSize)
-                    rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, _ownerSize.y);
+                // Native layout omits driven sizes from serialization. Targets without relations need their baseline too.
+                RestoreFittedSize((RectTransform)transform, _ownerSize);
+                foreach (var binding in bindings)
+                    RestoreFittedSize(binding.target, binding.previous.size);
             }
             Record();
+        }
+
+        private static void RestoreFittedSize(RectTransform rect, Vector2 size)
+        {
+            if (!rect.TryGetComponent(out ContentSizeFitter fitter) || !fitter.enabled)
+                return;
+            if (fitter.horizontalFit is ContentSizeFitter.FitMode.MinSize or ContentSizeFitter.FitMode.PreferredSize)
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
+            if (fitter.verticalFit is ContentSizeFitter.FitMode.MinSize or ContentSizeFitter.FitMode.PreferredSize)
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
         }
 
         protected override void OnDisable()

@@ -51,6 +51,59 @@ namespace OpenFairy.UGUI.Tests
             _markup = go.AddComponent<TmpTextMarkup>();
         }
 
+        private Color32[] Colors(int character)
+        {
+            var item = _text.textInfo.characterInfo[character];
+            var source = _text.textInfo.meshInfo[item.materialReferenceIndex].colors32;
+            return new[] { source[item.vertexIndex], source[item.vertexIndex + 1], source[item.vertexIndex + 2], source[item.vertexIndex + 3] };
+        }
+
+        [UnityTest]
+        public IEnumerator Two_color_runs_restore_outer_gradients_after_nested_solid_colors()
+        {
+            SetUpText(); _markup.ubb = true; _text.color = Color.white;
+            _text.text = "A[color=#FF0000,#0000FF]B[color=#00FF00]C[/color]D[/color]E";
+            _text.ForceMeshUpdate();
+            Assert.AreEqual("ABCDE", _text.GetParsedText());
+            foreach (int character in new[] { 1, 3 })
+                CollectionAssert.AreEqual(new Color32[] { Color.blue, Color.red, Color.red, Color.blue }, Colors(character));
+            CollectionAssert.AreEqual(new Color32[] { Color.green, Color.green, Color.green, Color.green }, Colors(2));
+            CollectionAssert.AreEqual(new Color32[] { Color.white, Color.white, Color.white, Color.white }, Colors(4));
+            _text.text = "ABCDE"; _text.ForceMeshUpdate();
+            CollectionAssert.AreEqual(new Color32[] { Color.white, Color.white, Color.white, Color.white }, Colors(1));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator Four_corner_argb_gradients_keep_alpha_and_autosize_source_indices()
+        {
+            SetUpText(); _markup.ubb = true;
+            _text.color = new Color(1, 1, 1, .5f); _text.enableAutoSizing = true; _text.fontSizeMax = 24;
+            _text.text = "[size=200%]A[/size][color=#80FF0000,#400000FF,#8000FF00,#40FFFFFF]B[/color]C";
+            _text.ForceMeshUpdate();
+            Assert.AreEqual("ABC", _text.GetParsedText());
+            CollectionAssert.AreEqual(new[] { new Color32(0, 0, 255, 32), new Color32(255, 0, 0, 64),
+                new Color32(0, 255, 0, 64), new Color32(255, 255, 255, 32) }, Colors(1));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator Gradient_conversion_keeps_noparse_literal_and_rebinds_once()
+        {
+            SetUpText(); _markup.ubb = true;
+            _text.text = "<noparse>[color=#FF0000,#0000FF]A[/color]</noparse>[color=#80FF0000,#400000FF]B[/color]";
+            _text.ForceMeshUpdate();
+            Assert.IsTrue(_text.GetParsedText().StartsWith("[color=#FF0000,#0000FF]A[/color]"));
+            int last = _text.textInfo.characterCount - 1;
+            for (int i = 0; i < 2; i++)
+            {
+                _markup.enabled = false; _markup.enabled = true; _text.ForceMeshUpdate();
+                CollectionAssert.AreEqual(new[] { new Color32(0, 0, 255, 64), new Color32(255, 0, 0, 128),
+                    new Color32(255, 0, 0, 128), new Color32(0, 0, 255, 64) }, Colors(last));
+            }
+            yield return null;
+        }
+
         private TMP_SpriteAsset SpriteAsset(string name, Color color, float aspect = 1)
         {
             var texture = Own(new Texture2D(8, 8));

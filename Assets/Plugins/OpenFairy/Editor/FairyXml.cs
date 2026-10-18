@@ -128,6 +128,7 @@ namespace OpenFairy.UGUI.Editor
                     // <jta> 是 movieclip 实例的扩展名标签，归一到 movieclip 类型
                     var tag = xml.Name.LocalName == "jta" ? "movieclip" : xml.Name.LocalName;
                     display.Kind = (Schema.DisplayKind)ParseEnum(typeof(Schema.DisplayKind), tag);
+                    display.LayoutSpecified = xml.Attribute("layout") != null;
                     display.Source = display.Src != null && !string.IsNullOrEmpty(display.Package)
                         ? "ui://" + display.Package + display.Src : display.Src ?? display.Url;
                     if (xml.Attribute("autoSize") is { } autoSize)
@@ -412,6 +413,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlEnum("eclipse")] Ellipse,
         [XmlEnum("polygon")] Polygon,
         [XmlEnum("regular_polygon")] RegularPolygon,
+        [XmlEnum("polyline")] Polyline,
     }
 
     // package.xml 图片资源的缩放方式（缺省/空 = 整图）。
@@ -617,6 +619,9 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("apex")] public int Apex;
         [XmlAttribute("url")] public string Url;
         [XmlAttribute("group")] public string Group;
+        [XmlAttribute("advanced")] public bool Advanced;
+        [XmlAttribute("excludeInvisibles")] public bool ExcludeInvisibles;
+        public bool LayoutSpecified;
         [XmlAttribute("defaultItem")] public string DefaultItem;
         [XmlAttribute("xy")] public Vector2? Position;
         [XmlAttribute("size")] public Vector2? Size;
@@ -646,6 +651,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("align")] public Align Align;
         [XmlAttribute("vAlign")] public VAlign VAlign;
         [XmlAttribute("lineSize")] public float LineSize = 1;
+        [XmlAttribute("roundEdge")] public bool RoundEdge;
         [XmlAttribute("lineColor")] public string LineColor = "#ff000000";
         [XmlAttribute("fillColor")] public string FillColor = "#ffffffff";
         [XmlAttribute("skew")] public Vector2? Skew;
@@ -661,6 +667,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("scrollBar")] public ScrollBarDisplay ScrollBar;
         [XmlAttribute("scrollBarRes")] public string[] ScrollBarRes;
         [XmlAttribute("pageController")] public string PageController;
+        [XmlAttribute("selectionController")] public string SelectionController;
         [XmlAttribute("scrollBarFlags")] public ScrollFlags ScrollBarFlags;
         [XmlAttribute("margin")] public string Margin;
         [XmlAttribute("scrollBarMargin")] public string ScrollBarMargin;

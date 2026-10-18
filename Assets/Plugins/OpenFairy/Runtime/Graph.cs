@@ -5,6 +5,7 @@ namespace OpenFairy.UGUI
 {
     // 顶点生成复刻 FairyGUI 的 RectMesh/RoundedRectMesh/EllipseMesh/PolygonMesh/RegularPolygonMesh。
     // FairyGUI 网格坐标系 y 向下，这里在 AddVert 时翻转到 uGUI 局部坐标。
+    [RequireComponent(typeof(CanvasRenderer))]
     public class Graph : MaskableGraphic
     {
         public enum Kind
@@ -14,10 +15,12 @@ namespace OpenFairy.UGUI
             Ellipse,
             Polygon,
             RegularPolygon,
+            Polyline,
         }
 
         public Kind kind;
         public float lineSize;
+        public bool roundEdge;
         public Color lineColor = Color.black;
         public float[] corners;
         public Vector2[] points;
@@ -60,6 +63,9 @@ namespace OpenFairy.UGUI
                     break;
                 case Kind.RegularPolygon:
                     FillRegularPolygon();
+                    break;
+                case Kind.Polyline:
+                    FillPolyline();
                     break;
             }
 
@@ -276,6 +282,67 @@ namespace OpenFairy.UGUI
         }
 
         private static readonly System.Collections.Generic.List<int> RestIndices = new();
+
+        private Vector2 LinePoint(int index) => usePercentPositions
+            ? Vector2.Scale(points[index], _rect.size) : points[index];
+
+        private void FillPolyline()
+        {
+            if (points == null || points.Length < 2 || lineSize <= 0) return;
+            var previousEnd = -1;
+            var first = Vector2.zero;
+            var firstDirection = Vector2.zero;
+            var last = Vector2.zero;
+            var lastDirection = Vector2.zero;
+            for (var i = 1; i < points.Length; i++)
+            {
+                var start = LinePoint(i - 1);
+                var end = LinePoint(i);
+                var delta = end - start;
+                if (delta == Vector2.zero) continue;
+                var direction = delta.normalized;
+                var normal = new Vector2(direction.y, -direction.x) * (lineSize * .5f);
+                var index = _vh.currentVertCount;
+                AddVert(start.x - normal.x, start.y - normal.y, lineColor);
+                AddVert(start.x + normal.x, start.y + normal.y, lineColor);
+                AddVert(end.x - normal.x, end.y - normal.y, lineColor);
+                AddVert(end.x + normal.x, end.y + normal.y, lineColor);
+                if (previousEnd >= 0)
+                {
+                    _vh.AddTriangle(previousEnd, previousEnd + 1, index + 1);
+                    _vh.AddTriangle(previousEnd, index + 1, index);
+                }
+                else { first = start; firstDirection = direction; }
+                _vh.AddTriangle(index, index + 1, index + 3);
+                _vh.AddTriangle(index, index + 3, index + 2);
+                previousEnd = index + 2;
+                last = end;
+                lastDirection = direction;
+            }
+            if (roundEdge && previousEnd >= 0)
+            {
+                AddRoundEdge(first, -firstDirection);
+                AddRoundEdge(last, lastDirection);
+            }
+        }
+
+        private void AddRoundEdge(Vector2 center, Vector2 outward)
+        {
+            var radius = lineSize * .5f;
+            var side = new Vector2(outward.y, -outward.x) * radius;
+            var forward = outward * radius;
+            var segments = Mathf.Max(6, Mathf.CeilToInt(Mathf.PI * radius)) - 1;
+            var index = _vh.currentVertCount;
+            AddVert(center.x, center.y, lineColor);
+            AddVert(center.x + side.x, center.y + side.y, lineColor);
+            for (var i = 1; i <= segments; i++)
+            {
+                var angle = Mathf.PI * i / segments;
+                var point = center + Mathf.Cos(angle) * side + Mathf.Sin(angle) * forward;
+                AddVert(point.x, point.y, lineColor);
+                _vh.AddTriangle(index, index + i, index + i + 1);
+            }
+        }
 
         private void FillPolygon()
         {

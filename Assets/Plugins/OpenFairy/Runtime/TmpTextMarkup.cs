@@ -1,7 +1,9 @@
 #if FAIRYGUI_TMPRO
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using TMPro;
 using UnityEngine;
@@ -19,6 +21,14 @@ namespace OpenFairy.UGUI
         private TMP_Text _text;
         private Action<string> _onClickLink;
         private bool _ownsRaycast;
+        private readonly List<GradientSpan> _gradients = new();
+        private readonly struct GradientSpan
+        {
+            public readonly int start, end;
+            public readonly VertexGradient colors;
+            public GradientSpan(int start, int end, VertexGradient colors)
+            { this.start = start; this.end = end; this.colors = colors; }
+        }
 
         private const string Literal = @"(?<literal><noparse>.*?(?:</noparse>|$))|";
         private static readonly Regex Tags = new(Literal +
@@ -29,6 +39,8 @@ namespace OpenFairy.UGUI
         private static readonly Regex Attributes = new(
             @"(?<name>[\w-]+)\s*=\s*(?:""(?<value>[^""]*)""|'(?<value>[^']*)'|(?<value>[^\s>]+))",
             RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex ColorTags = new(Literal + @"<(?<closing>/)?color(?:=(?<value>[^>]+))?>",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline);
 
         public Action<string> onClickLink
         {
@@ -47,12 +59,16 @@ namespace OpenFairy.UGUI
         {
             _text = GetComponent<TMP_Text>();
             _text.textPreprocessor = this;
+            _text.OnPreRenderText -= ApplyGradients;
+            _text.OnPreRenderText += ApplyGradients;
             UpdateLinkRaycast();
         }
 
         private void OnDisable()
         {
             ReleaseLinkRaycast();
+            if (_text != null)
+                _text.OnPreRenderText -= ApplyGradients;
             if (_text != null && ReferenceEquals(_text.textPreprocessor, this))
                 _text.textPreprocessor = null;
         }
@@ -91,6 +107,7 @@ namespace OpenFairy.UGUI
 
         public string PreprocessText(string source)
         {
+            _gradients.Clear();
             if (string.IsNullOrEmpty(source))
                 return source;
             string text = source.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\t", "    ");
@@ -118,8 +135,82 @@ namespace OpenFairy.UGUI
                         ? SizedSpriteTag(_text.spriteAsset, _text.font, name, width, height, Dimension(attributes, "baseline") ?? 0.8f)
                         : SpriteTag(name);
                 });
-            return _text.enableAutoSizing && _text.richText
-                ? TextAutoSize.NormalizeSizeTags(text, _text.fontSizeMax) : text;
+            if (_text.enableAutoSizing)
+                text = TextAutoSize.NormalizeSizeTags(text, _text.fontSizeMax);
+            return ConvertGradients(text);
+        }
+
+        private string ConvertGradients(string source)
+        {
+            if (source.IndexOf(',') < 0)
+                return source;
+            var result = new StringBuilder(source.Length);
+            var stack = new Stack<VertexGradient?>();
+            VertexGradient? current = null;
+            void Append(string value)
+            {
+                int start = result.Length;
+                result.Append(value);
+                if (current.HasValue && value.Length != 0)
+                    _gradients.Add(new GradientSpan(start, result.Length, current.Value));
+            }
+            int position = 0;
+            foreach (Match match in ColorTags.Matches(source))
+            {
+                Append(source.Substring(position, match.Index - position));
+                if (match.Groups["literal"].Success)
+                    Append(match.Value);
+                else if (match.Groups["closing"].Success)
+                {
+                    current = stack.Count == 0 ? null : stack.Pop();
+                    result.Append(match.Value);
+                }
+                else
+                {
+                    stack.Push(current);
+                    current = null;
+                    var parts = match.Groups["value"].Value.Trim('\'', '"').Split(',');
+                    if (parts.Length >= 2 && parts.Length <= 4)
+                    {
+                        var colors = new Color[parts.Length];
+                        bool valid = true;
+                        for (int i = 0; i < parts.Length; i++)
+                            valid &= ColorUtility.TryParseHtmlString(ConvertColor(parts[i].Trim()), out colors[i]);
+                        if (valid)
+                            current = new VertexGradient(colors[0], parts.Length > 2 ? colors[2] : colors[0],
+                                colors[1], parts.Length > 3 ? colors[3] : parts.Length > 2 ? colors[2] : colors[1]);
+                    }
+                    // Keep TMP's native color stack for nested solid colors and inherited alpha.
+                    result.Append(current.HasValue ? "<color=#FFFFFFFF>" : match.Value);
+                }
+                position = match.Index + match.Length;
+            }
+            Append(source.Substring(position));
+            return result.ToString();
+        }
+
+        private void ApplyGradients(TMP_TextInfo info)
+        {
+            int span = 0;
+            static Color32 Alpha(Color32 color, byte alpha)
+            { color.a = (byte)(color.a * alpha / 255); return color; }
+            for (int i = 0; i < info.characterCount && span < _gradients.Count; i++)
+            {
+                var character = info.characterInfo[i];
+                while (span < _gradients.Count && character.index >= _gradients[span].end)
+                    span++;
+                if (span == _gradients.Count)
+                    break;
+                if (!character.isVisible || character.index < _gradients[span].start)
+                    continue;
+                var gradient = _gradients[span].colors;
+                var colors = info.meshInfo[character.materialReferenceIndex].colors32;
+                int vertex = character.vertexIndex;
+                colors[vertex] = Alpha(gradient.bottomLeft, colors[vertex].a);
+                colors[vertex + 1] = Alpha(gradient.topLeft, colors[vertex + 1].a);
+                colors[vertex + 2] = Alpha(gradient.topRight, colors[vertex + 2].a);
+                colors[vertex + 3] = Alpha(gradient.bottomRight, colors[vertex + 3].a);
+            }
         }
 
         private string ConvertUbb(string source) => Tags.Replace(source, match =>

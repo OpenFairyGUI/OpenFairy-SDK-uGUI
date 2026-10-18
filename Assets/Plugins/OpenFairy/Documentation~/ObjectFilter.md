@@ -34,3 +34,15 @@ An enclosing filter refreshes nested filters first, then captures their presenta
 The filter boundary isolates its contents as a group. Descendant `ignoreParentGroups` is evaluated within that capture and cannot independently bypass opacity on the final composite. Use separate sibling filter groups where independent final opacity is required. Normal capture shader/blend support rules still apply.
 
 For a color filter, preserve native TMP SDF rendering by using the capture path for TMP text and its sprite/font submeshes. A direct-material fast path must be limited to image renderers that the effect shader actually supports; replacing a TMP font shader with an image shader does not implement text color filtering.
+
+## Import hierarchy and existing prefabs
+
+When the importer moves a source into an authored group, mask or scroll content, it also moves its existing capture presentation next to that source. Runtime parent validation remains strict. A direct image color modifier does not need a capture presentation and is left unchanged.
+
+For previously published prefabs with the older hierarchy, call `Migrate.RepairFilterPresentations(dryRun: true)` in the Editor to preview the affected pairs. Call it without the argument to save the repairs. It indexes the source packages and visits existing published component definitions in the normal dependency order, including non-exported definitions. It does not run code generation, rebuild the UI hierarchy, import source images, or run project postprocessors. Scene-only objects outside those published definitions are not included.
+
+The repair validates the existing presentation, CanvasGroup, optional Canvas and capture resources before changing a loaded prefab. Missing, external or shared presentation bindings fail instead of being recreated. Valid direct image modifiers are excluded. Only an existing companion's parent, local pose and sibling position change; source and presentation identities, component references, materials and prefab GUIDs are retained. If a base definition repairs inherited instances, an otherwise unchanged parent needs no save.
+
+The return value is the number of pairs found or repaired; individual affected prefab paths are logged. A dry run writes no prefabs, and a second repair is a no-op. Dry-run counts may include the same inherited problem in a parent before its base definition is repaired, so its count need not equal the subsequent repair count.
+
+Native package tests cover real group, mask and scroll import, damaged-prefab save/reload, GUID/local ID retention, inherited parent assets, repeated repair and GPU rendering. The current full-suite checkpoint and backend limitations are recorded in `AGENTS.md` and `Docs/BasicsImplementationStatus.md`.

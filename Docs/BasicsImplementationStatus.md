@@ -11,10 +11,14 @@
 - 提示框使用作者配置的 Label prefab 直接引用。普通文本自动尺寸交给原生 `ContentSizeFitter`；根关系与尺寸 gear 尊重内容拥有的自动轴。立即显示提示框时刷新实际文字布局节点，避免非布局容器阻断子树遍历。
 - 输入框通过 Input System 支持焦点期五步撤销/重做、选区恢复和单行 Tab 导航，程序赋值清除历史。灰显保留视觉语义，命中与点击由独立触摸/交互通道决定。
 - 生成器支持发布命名空间前缀，避开 Unity 原生序列化保留字段。未绘图的 Graph 节点生成 `RectTransform` 引用。Transition 使用各自动画的帧率，缺省仍为 24。
-- 当前同一正式源码在 Unity Editor/Mono 的完整 Test Runner 结果为 **115/115 Editor**、**143/143 PlayMode**，失败、跳过及不确定项均为零。TMP 与 Builtin 两种文字后端各四个程序集离线编译零错误，Builtin 不据此视为原生行为通过。此前104/119及更早结果为历史检查点，不与当前总数相加；传统 Basics/Transition 历史 golden 套件没有重新运行。
+- 当前同一正式源码在 Unity Editor/Mono 的完整 Test Runner 结果为 **136/136 Editor**、**171/171 PlayMode**，失败、跳过及不确定项均为零。TMP 与 Builtin 两种文字后端各四个程序集离线编译零错误，Builtin 不据此视为原生行为通过。此前104/119及更早结果为历史检查点，不与当前总数相加；传统 Basics/Transition 历史 golden 套件没有重新运行。
 - 灰显与已有颜色滤镜共用子树捕获，保留原生 TMP 字体材质以及独立的触摸/交互通道。十三种内置混合方式已有覆盖率和预乘透明度捕获回归，alpha 为零的发光 RGB 不被提前丢弃；离屏组对外部背景的 Multiply/Screen 等依赖不承诺等同直接画屏。
 - 捕获保留原生 MaskableGraphic/Mask 的完整材质链，只在 owned 副本上还原 base 遮罩参数，再由代理重算内部遮罩。此前不同输入会使颜色或混合缓存释放源图仍在使用的材质，下一帧源图消失；两项跨帧 GPU 回归及增强的 TMP 图文混排现已验证源图、材质、原生 pop 和图集保持。
 - 非虚拟 SingleRow 使用原生布局与实际子物体矩形，公开滚动、吸附和可见项查询不再假设固定宽度；虚拟列表保留既有窗口和固定行路径。Hidden 列表在导入期增加原生 RectMask2D，新增六项导入和一项 GPU 裁剪回归；不是消费端运行时补挂蒙版。
+- Advanced 横纵组预挂原生 LayoutGroup 派生与 ContentSizeFitter：只推进布局轴，保留交叉轴偏移；零尺寸、隐藏成员与负间距按作者语义处理。真实 TMP 长短变化、成员零宽转非零、父尺寸传播及保存后实例化已 Native；撤去导入配置调用的负控确实失败。
+- 列表 selectionController 在导入期烘焙直接 owner/索引与 typed GearListSelection，保留程序换页、点击/合法 selectedIndex 双向同步、清除/越界和多选重入语义；虚拟回收/refill与真实 prefab 保存重载已 Native。 独立点击中继脚本修复编辑期保存后缺失 MonoScript；新增损坏资产保存失败回归，失败不会再被当成完整导入。
+- Graph 开放折线使用原生 MaskableGraphic 网格，保留左上坐标、宽度/颜色、百分比点及可选圆端点；不闭合或填充内部。Schema/实际配置与 GPU 裁剪、透明度正控均已通过。
+- TMP shadowColor/shadowOffset 烘焙为直接引用的原生 SDF underlay 材质；白字白底、alpha、fallback 原生释放与捕获均已 GPU。已发布字段窄刷新经真实嵌套 prefab、GUID/local ID、重载与重复字节检查；不重建层级或运行完整发布。
 - 首次启用的 Relation 先恢复已烘焙的 ContentSizeFitter driven 尺寸，再记录关系基线，随后仍接受正常内容重排。新增真实 prefab 往返用例，不以未序列化的零尺寸重写作者位置。
 - Transition 声音优先复用 Root 的音源/路由，无 Root 才使用预烘焙的独立音源；停用的对象或音源不发声，其余 timeline 动作仍照常推进。声音夹具在首次启用前配置音源、提供自己的 listener，八项专项及最终整套均通过；未把一次不确定构造时序认定为生产故障原因。
 - 本轮夹具明确处理两种引擎时序：popup 关闭按实际结束条件等待并保留超时，不能靠短固定秒数；动态改变 maskable 的 GPU 正控调用 RecalculateClipping，确保未裁剪 lane 实际更新原生 clip parent。已有输入测试仍使用官方 InputTestFixture 隔离后台设备状态。
@@ -158,3 +162,7 @@
 - 通用工程交互（无 demo 胶水）：`BakedInteractionTests` 直接实例化转换 prefab，真射线驱动，覆盖 tab 换页、单选组互斥、`overflow=scroll` 自挂滚动、输入框结构、Slider 连续拖动。
 
 上次完整 PlayMode 测试结果为 `134/134` 通过；2026-07-19 新增的无 icon Loader 按钮及 BlendMode 回归用例计入下一次完整测试。
+
+阴影窄刷新保留生成字段的首个同名项规则；未公开的重复文本仅在Editor按原group/mask与同名兄弟顺序精确对应。公开引用或作者层级不符仍失败。新增跨组/同组同名、独立材质、保存重载、父继承与重复幂等回归；不为窄刷新增加运行时标记或重新生成整套界面。
+
+导入器将预挂捕获 presentation 与源一同移入作者 group、mask 或 scroll 层级。已有发布定义可经同一依赖顺序窄修，只搬已验证的既有 companion，保留 GUID/local ID 与引用；直通图像颜色滤镜不变，Runtime 严格父层校验保留。新增三种真实导入/损坏保存/重载与幂等检查、两个失效绑定正控和一项三模式 GPU 回归。
