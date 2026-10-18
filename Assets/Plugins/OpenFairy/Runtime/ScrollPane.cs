@@ -119,8 +119,9 @@ namespace OpenFairy.UGUI
             if (source != null && source.hasNativeRowLayout) size = content.rect.size;
             else if (_explicitSize is { } explicitSize) size = explicitSize;
             else
-                foreach (RectTransform child in content)
+                for (var i = 0; i < content.childCount; i++)
                 {
+                    var child = (RectTransform)content.GetChild(i);
                     var corner = Relation.TopLeft(child);
                     size = Vector2.Max(size, new(corner.x + child.rect.width, child.rect.height - corner.y));
                 }
@@ -147,7 +148,7 @@ namespace OpenFairy.UGUI
                 _scrollTween = DOTween.To(() => progress, t => {
                     progress = t;
                     MoveTo(Vector2.LerpUnclamped(_scrollStart, _scrollTarget, t));
-                }, 1, .3f).SetEase(Ease.OutCubic).SetUpdate(true).OnComplete(() => _scrollTween = null);
+                }, 1, .3f).SetEase(Ease.OutCubic).SetUpdate(UpdateType.Normal, true).OnComplete(() => _scrollTween = null);
             }
             else
             {
@@ -277,6 +278,7 @@ namespace OpenFairy.UGUI
         protected override void LateUpdate()
         {
             if (content == null) return;
+            if (source == null && _explicitSize == null) RefreshContent();
             _updating = true;
             try { base.LateUpdate(); }
             finally { _updating = false; }
