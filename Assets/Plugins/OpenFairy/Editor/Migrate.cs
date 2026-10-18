@@ -2381,6 +2381,7 @@ namespace OpenFairy.UGUI.Editor
 
             var submit = go.AddComponent<InputSubmit>(); // Enter 提交中继（仅回车、仅单行），复刻 GTextInput onSubmit
             submit.field = field;
+            UnityEditor.Events.UnityEventTools.AddPersistentListener(field.onSubmit, submit.Submit);
             var input = go.AddComponent<TextInput>();
             input.field = field;
             input.submit = submit;

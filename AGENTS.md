@@ -24,6 +24,8 @@ ContentSizeFitter 的 driven 尺寸不会完整序列化；Relation 首次启用
 
 导入的普通 Image/MovieClip 是装饰面，不参与原生射线检测；Loader 保留自己的命中面，按钮使用根节点的命中 Graphic。ListSource 回收不能清除业务 Awake 注册的 UnityEvent；消费端 Fill 回调自行替换其每次绑定的业务监听。SDK 的选择中继只移除自己拥有的监听，并用绑定版本取消点击派发期间重填留下的在途回调。
 
+Builtin InputField 在聚焦时会消费 EventSystem 的 updateSelected 导航事件；InputSubmit 必须在导入期持久绑定原生 onSubmit，不能把 ISubmitHandler 或 onEndEdit 当回车文字提交。测试保存并重新实例化 Prefab，再分别检查聚焦、失焦和提交的行为。
+
 捕获必须按原生顺序运行完整材质 modifier 链，只跳过源隐藏 modifier。不能向 ColorAdjust/BlendModeEffect 的同一缓存传入去掉原生 Stencil 的不同输入，否则会释放源 CanvasRenderer 仍在使用的材质。源蒙版参数只在 owned 副本上恢复到 base 值，再由代理树重算本地遮罩；新增两项跨帧 GPU 回归及增强 TMP 图文混排覆盖源材质、pop、图集、外罩排除与内部蒙版。
 
 ## 环境
