@@ -867,6 +867,7 @@ namespace OpenFairy.UGUI.Editor
                 {
                     go = NewChild(name, parent, typeof(Image));
                     var image = go.GetComponent<Image>();
+                    image.raycastTarget = false;
                     var resource = Resolve(element.Source, owner.PackageId);
                     image.sprite = LoadSprite(element.Source, owner.PackageId);
                     ConfigureImage(image, resource, element);
@@ -966,6 +967,7 @@ namespace OpenFairy.UGUI.Editor
                     {
                         go = NewChild(name, parent, typeof(MovieClip));
                         var movieClip = go.GetComponent<MovieClip>();
+                        movieClip.raycastTarget = false;
                         ConfigureMovieClip(movieClip, Resolve(element.Source, owner.PackageId), element);
                         size ??= MovieClips[Resolve(element.Source, owner.PackageId)].Size;
                     }

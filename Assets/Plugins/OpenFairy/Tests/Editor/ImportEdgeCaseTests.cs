@@ -7,6 +7,7 @@ using NUnit.Framework;
 using OpenFairy.UGUI.Editor;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 using Schema = OpenFairy.UGUI.Editor.Schema;
 using Object = UnityEngine.Object;
 
@@ -22,6 +23,8 @@ namespace OpenFairy.UGUI.Tests
         private string _source;
         private string _output;
         private string[] _dependencies;
+        private bool _optionsEnabled;
+        private EnterPlayModeOptions _options;
 
         private static object Invoke(string name, params object[] arguments) =>
             typeof(Migrate).GetMethod(name, Static).Invoke(null, arguments);
@@ -29,6 +32,10 @@ namespace OpenFairy.UGUI.Tests
         [SetUp]
         public void Setup()
         {
+            _optionsEnabled = EditorSettings.enterPlayModeOptionsEnabled;
+            _options = EditorSettings.enterPlayModeOptions;
+            EditorSettings.enterPlayModeOptionsEnabled = true;
+            EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload | EnterPlayModeOptions.DisableSceneReload;
             var settings = MigrationSettings.instance;
             _source = settings.sourceDirectory;
             _output = settings.outputDirectory;
@@ -42,7 +49,7 @@ namespace OpenFairy.UGUI.Tests
                 _settings.Add(name, field.GetValue(null));
                 field.SetValue(null, null);
             }
-            foreach (var name in new[] { "Resources", "Prefabs" })
+            foreach (var name in new[] { "Resources", "Prefabs", "MovieClips" })
             {
                 var table = (IDictionary)typeof(Migrate).GetField(name, Static).GetValue(null);
                 var copy = new Dictionary<object, object>();
@@ -69,6 +76,8 @@ namespace OpenFairy.UGUI.Tests
         [TearDown]
         public void Cleanup()
         {
+            EditorSettings.enterPlayModeOptionsEnabled = _optionsEnabled;
+            EditorSettings.enterPlayModeOptions = _options;
             foreach (var entry in _settings) typeof(Migrate).GetField(entry.Key, Static).SetValue(null, entry.Value);
             foreach (var entry in _tables)
             {
@@ -84,6 +93,12 @@ namespace OpenFairy.UGUI.Tests
             settings.dependencyDirectories = _dependencies;
             AssetDatabase.DeleteAsset(Output);
             Directory.Delete(Source, true);
+        }
+
+        [UnityTearDown]
+        public IEnumerator ExitPlay()
+        {
+            if (Application.isPlaying) yield return new ExitPlayMode();
         }
 
         private static object Resource(string id) =>
@@ -127,6 +142,80 @@ namespace OpenFairy.UGUI.Tests
             finally
             {
                 Object.DestroyImmediate(root);
+                if (clone != null) Object.DestroyImmediate(clone);
+            }
+        }
+
+        [UnityTest] public IEnumerator Image_decoration_keeps_the_saved_button_reachable() => SavedHitSurface(Schema.DisplayKind.Image);
+        [UnityTest] public IEnumerator Movie_decoration_keeps_the_saved_button_reachable() => SavedHitSurface(Schema.DisplayKind.MovieClip);
+        [UnityTest] public IEnumerator Loader_keeps_its_saved_hit_surface() => SavedHitSurface(Schema.DisplayKind.Loader);
+
+        private static IEnumerator SavedHitSurface(Schema.DisplayKind kind)
+        {
+            var type = typeof(Migrate).GetNestedType("Resource", BindingFlags.NonPublic);
+            var resource = Activator.CreateInstance(type, true);
+            type.GetField("File").SetValue(resource, Source + "/assets/BindingFixtures/Overlay.png");
+            type.GetField("Type").SetValue(resource, kind == Schema.DisplayKind.MovieClip ? Schema.ResourceKind.MovieClip : Schema.ResourceKind.Image);
+            type.GetField("PackageId").SetValue(resource, "edgesrc1");
+            type.GetField("Id").SetValue(resource, "overlay");
+            ((IDictionary)typeof(Migrate).GetField("Resources", Static).GetValue(null)).Add("edgesrc1overlay", resource);
+            var path = (string)Invoke("SpritePath", resource);
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            var texture = new Texture2D(2, 2);
+            File.WriteAllBytes(path, texture.EncodeToPNG());
+            Object.DestroyImmediate(texture);
+            AssetDatabase.ImportAsset(path);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.SaveAndReimport();
+            if (kind == Schema.DisplayKind.MovieClip)
+            {
+                var dataType = typeof(Migrate).GetNestedType("MovieClipData", BindingFlags.NonPublic);
+                var data = Activator.CreateInstance(dataType, true);
+                dataType.GetField("Size").SetValue(data, new Vector2(100, 100));
+                dataType.GetField("FrameCount").SetValue(data, 1);
+                dataType.GetField("AddDelays").SetValue(data, new[] { 0f });
+                ((IDictionary)typeof(Migrate).GetField("MovieClips", Static).GetValue(null)).Add(resource, data);
+            }
+            var root = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas), typeof(UnityEngine.UI.GraphicRaycaster));
+            root.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+            var button = new GameObject("Button", typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(UnityEngine.UI.Button));
+            button.transform.SetParent(root.transform, false);
+            ((RectTransform)button.transform).sizeDelta = new Vector2(100, 100);
+            GameObject clone = null;
+            try
+            {
+                var create = typeof(Migrate).GetMethod("CreateChild", Static);
+                var overlay = (GameObject)create.Invoke(null, new[] { new Schema.Display {
+                    Kind = kind, Name = "Overlay", Source = "overlay", Size = new Vector2(100, 100), Playing = false,
+                }, root.transform, resource, Activator.CreateInstance(create.GetParameters()[3].ParameterType) });
+                var rect = (RectTransform)overlay.transform;
+                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f, .5f);
+                rect.anchoredPosition = Vector2.zero;
+                clone = SaveReload(root);
+                Object.DestroyImmediate(root);
+                root = null;
+                yield return new EnterPlayMode(false);
+                yield return null;
+                Canvas.ForceUpdateCanvases();
+                var saved = clone.transform.Find("Overlay").GetComponent<UnityEngine.UI.Graphic>();
+                Assert.That(saved.raycastTarget, Is.EqualTo(kind == Schema.DisplayKind.Loader));
+                var events = new GameObject("Events", typeof(UnityEngine.EventSystems.EventSystem));
+                try
+                {
+                    var point = RectTransformUtility.WorldToScreenPoint(null, clone.transform.Find("Button").position);
+                    var pointer = new UnityEngine.EventSystems.PointerEventData(events.GetComponent<UnityEngine.EventSystems.EventSystem>()) { position = point };
+                    var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+                    clone.GetComponent<UnityEngine.UI.GraphicRaycaster>().Raycast(pointer, hits);
+                    Assert.That(hits, Is.Not.Empty);
+                    Assert.That(hits[0].gameObject.name, Is.EqualTo(kind == Schema.DisplayKind.Loader ? "Overlay" : "Button"));
+                }
+                finally { Object.DestroyImmediate(events); }
+            }
+            finally
+            {
+                if (root != null) Object.DestroyImmediate(root);
                 if (clone != null) Object.DestroyImmediate(clone);
             }
         }

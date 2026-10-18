@@ -579,7 +579,6 @@ namespace OpenFairy.UGUI
             item.GetComponentsInChildren(true, _buttons);
             foreach (var button in _buttons)
             {
-                button.onClick.RemoveAllListeners();
                 button.grayed = false;
                 button.selected = false;
                 button.changeStateOnClick = true;

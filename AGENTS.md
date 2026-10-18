@@ -20,7 +20,9 @@ Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事�
 
 整根 Overlay Canvas 停启保留已有 Relation 基线，避免 CanvasScaler 恢复期间的临时尺寸被重复累计；隐藏期间真实父尺寸和内容变化仍在恢复后同步。原生锚点只消化 anchor span 对应的尺寸差，fitter 自身改宽仍保持对齐。新增三项真实 prefab/Canvas 回归覆盖原生父缩放、同帧和隔帧内容变化及三种水平 pivot。
 
-ContentSizeFitter 的 driven 尺寸不会完整序列化；Relation 首次启用时先恢复已有烘焙基线，再 Record 和接受真实重排，不能拿刚反序列化的零尺寸当原始几何。首次活动实例化时，父组件 OnEnable 可能早于子 fitter 原生启用；恢复已保存基线按 enabled 配置判断。self 坐标关系只叠加变化量，不能把自身 pivot 原点当绝对位移。动态修改 MaskableGraphic.maskable 的测试正控还须调用公开 RecalculateClipping，不能将未更新的 clip parent 当渲染结论。声音夹具在首次启用前配置 AudioSource，并为自身提供 AudioListener；不要因宿主无 listener 或不确定的构造时序给生产声音代码加兼容分支。
+ContentSizeFitter 的 driven 尺寸不会完整序列化；Relation 首次启用时恢复并保留已烘焙的关系基准，随后接受真实重排；没有烘焙基准才 Record。不能用反序列化的零尺寸或 CanvasScaler 的临时尺寸覆盖作者基准。首次活动实例化时，父组件 OnEnable 可能早于子 fitter 原生启用；恢复已保存基线按 enabled 配置判断。self 坐标关系只叠加变化量，不能把自身 pivot 原点当绝对位移。动态修改 MaskableGraphic.maskable 的测试正控还须调用公开 RecalculateClipping，不能将未更新的 clip parent 当渲染结论。声音夹具在首次启用前配置 AudioSource，并为自身提供 AudioListener；不要因宿主无 listener 或不确定的构造时序给生产声音代码加兼容分支。
+
+导入的普通 Image/MovieClip 是装饰面，不参与原生射线检测；Loader 保留自己的命中面，按钮使用根节点的命中 Graphic。ListSource 回收不能清除业务 Awake 注册的 UnityEvent；消费端 Fill 回调自行替换其每次绑定的业务监听。SDK 的选择中继只移除自己拥有的监听，并用绑定版本取消点击派发期间重填留下的在途回调。
 
 捕获必须按原生顺序运行完整材质 modifier 链，只跳过源隐藏 modifier。不能向 ColorAdjust/BlendModeEffect 的同一缓存传入去掉原生 Stencil 的不同输入，否则会释放源 CanvasRenderer 仍在使用的材质。源蒙版参数只在 owned 副本上恢复到 base 值，再由代理树重算本地遮罩；新增两项跨帧 GPU 回归及增强 TMP 图文混排覆盖源材质、pop、图集、外罩排除与内部蒙版。
 
