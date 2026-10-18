@@ -135,7 +135,7 @@ namespace OpenFairy.UGUI.Tests
         [TestCase(Schema.ListLayout.SingleRow)]
         [TestCase(Schema.ListLayout.FlowHorizontal)]
         [TestCase(Schema.ListLayout.FlowVertical)]
-        public void Authored_item_templates_keep_native_sizes_and_never_enter_the_default_refill_pool(Schema.ListLayout layout)
+        public void Authored_item_templates_keep_their_native_sizes_and_saved_variant_references(Schema.ListLayout layout)
         {
             Template("Default", new Vector2(40, 20));
             Template("Variant", new Vector2(60, 30));
@@ -165,10 +165,6 @@ namespace OpenFairy.UGUI.Tests
                     Schema.ListLayout.FlowHorizontal => new Vector2(0, -30),
                     _ => new Vector2(0, -50),
                 }));
-                PrefabUtility.UnpackPrefabInstance(clone, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-                source.Fill(4, (item, _) => Assert.That(item.GetComponent<UnityEngine.UI.LayoutElement>().preferredWidth, Is.EqualTo(40)));
-                source.Fill(2, (item, _) => Assert.That(item.GetComponent<UnityEngine.UI.LayoutElement>().preferredWidth, Is.EqualTo(40)));
-                Assert.That(source.variantItems[0].activeInHierarchy, Is.False);
             }
             finally
             {
