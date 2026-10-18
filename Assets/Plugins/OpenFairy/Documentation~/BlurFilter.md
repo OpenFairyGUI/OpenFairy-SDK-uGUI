@@ -12,7 +12,7 @@ Do not insert the presentation into a list's managed item collection. For an ite
 
 ## Refresh
 
-Call `filter.Refresh(render)` after UI changes and before the UI camera renders. `render` has the same synchronous `(Camera, RenderTexture)` contract as `UiObjectCapture.Capture`. The SDK has no render-pipeline dependency. Use the configured camera renderer's synchronous render request in a scriptable render pipeline.
+Play Mode refreshes active filters automatically; see [Automatic object filters](AutomaticFilters.md). Edit Mode and offscreen tools can call `filter.Refresh(render)` after UI changes and before the UI camera renders. `render` has the same synchronous `(Camera, RenderTexture)` contract as `UiObjectCapture.Capture`. The SDK has no pipeline-specific assembly dependency. Explicit scriptable-pipeline callbacks must use a supported synchronous render request.
 
 An outer filter refreshes active child filters in reverse native hierarchy order before capturing itself. The capture skips their hidden source subtrees and captures their presentation instead. Do not separately refresh every nested filter as well unless another refresh is wanted.
 

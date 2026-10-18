@@ -30,6 +30,19 @@ namespace OpenFairy.UGUI
         public string selectedTitle;
         public bool changeStateOnClick = true; // 复刻 GButton：列表项交给 ListSelection 管选择时置 false，禁本体自翻 selected
 
+        [SerializeField] internal AudioClip clickSound;
+        [SerializeField] internal float clickSoundVolume = 1;
+        public AudioClip sound { get => clickSound; set => clickSound = value; }
+        public float soundVolumeScale { get => clickSoundVolume; set => clickSoundVolume = value; }
+
+        protected void PlayClickSound()
+        {
+            if (clickSound == null) return;
+            var root = Root.inst;
+            if (root == null) root = Root.Create((RectTransform)GetComponentInParent<Canvas>().rootCanvas.transform);
+            root.soundSource.PlayOneShot(clickSound, clickSoundVolume);
+        }
+
         // 烘焙接线（Migrate 写入），不属用户 API 面。
         [SerializeField] internal TextComponent titleText;
         [SerializeField] internal Loader iconLoader;
@@ -52,16 +65,41 @@ namespace OpenFairy.UGUI
             }
         }
 
+        [SerializeField] private Sprite _icon;
+        [SerializeField] private Sprite _selectedIcon;
+        [SerializeField] private bool _useSelectedIcon;
+
         public Sprite icon
         {
-            get => iconLoader != null ? iconLoader.sprite : null;
+            get => _icon;
+            set { _icon = value; RefreshIcon(); }
+        }
+
+        public Sprite selectedIcon
+        {
+            get => _selectedIcon;
             set
             {
-                if (iconLoader == null)
-                    return;
-                iconLoader.sprite = value;
-                iconLoader.enabled = value != null;
+                _selectedIcon = value;
+                _useSelectedIcon = value != null;
+                RefreshIcon();
             }
+        }
+
+        // A selected override can intentionally contain no sprite.
+        public bool useSelectedIcon
+        {
+            get => _useSelectedIcon;
+            set { _useSelectedIcon = value; RefreshIcon(); }
+        }
+
+        internal void RefreshIcon()
+        {
+            if (iconLoader == null)
+                return;
+            var sprite = selected && _useSelectedIcon ? _selectedIcon : _icon;
+            iconLoader.sprite = sprite;
+            iconLoader.enabled = sprite != null;
         }
 
         // 复刻 GButton.selected 的 setter：Common 忽略选中态、同值早返回；
@@ -75,6 +113,7 @@ namespace OpenFairy.UGUI
                     return;
                 _selected = value;
                 RefreshState();
+                if (_useSelectedIcon) RefreshIcon();
                 if (HasRelatedController && Application.isPlaying) // 烘焙期选中态由控制器初始页经 GearButton 驱动，不反向写页
                 {
                     if (_selected)
@@ -190,6 +229,7 @@ namespace OpenFairy.UGUI
         {
             if (eventData.button != PointerEventData.InputButton.Left)
                 return;
+            PlayClickSound();
             if (mode == ButtonMode.Check)
             {
                 if (changeStateOnClick)

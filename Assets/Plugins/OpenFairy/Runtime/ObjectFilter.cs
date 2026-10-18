@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Rendering;
 using UnityEngine.UI;
 
 namespace OpenFairy.UGUI
@@ -132,14 +133,41 @@ namespace OpenFairy.UGUI
             rect.SetSiblingIndex(source.GetSiblingIndex() + 1);
         }
 
+        private void RefreshAutomatically()
+        {
+            if (!Application.isPlaying || !isActiveAndEnabled)
+                return;
+            for (var parent = transform.parent; parent != null; parent = parent.parent)
+                if (parent.TryGetComponent(out ObjectFilter filter) && filter.isActiveAndEnabled)
+                    return;
+            Canvas.ForceUpdateCanvases();
+            Refresh(Render);
+            Canvas.ForceUpdateCanvases();
+        }
+
+        private static void Render(Camera camera, RenderTexture destination)
+        {
+            if (GraphicsSettings.currentRenderPipeline == null)
+                camera.Render();
+            else
+            {
+                var request = new RenderPipeline.StandardRequest { destination = destination };
+                if (!RenderPipeline.SupportsRenderRequest(camera, request))
+                    throw new NotSupportedException("The active render pipeline must support synchronous StandardRequest capture.");
+                RenderPipeline.SubmitRenderRequest(camera, request);
+            }
+        }
+
         protected override void OnEnable()
         {
             base.OnEnable();
+            Application.onBeforeRender += RefreshAutomatically;
             if (presentation != null) presentation.gameObject.SetActive(false);
         }
 
         protected override void OnDisable()
         {
+            Application.onBeforeRender -= RefreshAutomatically;
             Release();
             base.OnDisable();
         }

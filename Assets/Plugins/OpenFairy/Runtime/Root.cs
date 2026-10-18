@@ -21,6 +21,9 @@ namespace OpenFairy.UGUI
     {
         private static Root _inst;
         public static Root inst => _inst;
+        private AudioSource _soundSource;
+        private RootSizeBinding _sizeBinding;
+        public AudioSource soundSource => _soundSource;
 
         public RectTransform rect;
         private readonly List<RectTransform> _popups = new();
@@ -48,20 +51,33 @@ namespace OpenFairy.UGUI
         {
             if (_inst != null)
                 return _inst;
-            var go = new GameObject("Root", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
+            var go = new GameObject("Root", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster), typeof(AudioSource), typeof(LayoutElement));
             var rt = (RectTransform)go.transform;
             var isCanvas = designRoot.GetComponent<Canvas>() != null;
             rt.SetParent(isCanvas ? designRoot : designRoot.parent, false);
-            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
-            rt.sizeDelta = designRoot.rect.size;
-            // canvas 根的 anchoredPosition 是屏幕派生值，覆盖层须归零贴其左上；设计根则与其同位。
-            rt.anchoredPosition = isCanvas ? Vector2.zero : designRoot.anchoredPosition;
+            rt.pivot = new Vector2(0, 1);
             rt.localScale = Vector3.one;
+            go.GetComponent<LayoutElement>().ignoreLayout = true;
             var canvas = go.GetComponent<Canvas>();
             canvas.overrideSorting = true;
             canvas.sortingOrder = 10000;
             _inst = go.AddComponent<Root>();
             _inst.rect = rt;
+            _inst._soundSource = go.GetComponent<AudioSource>();
+            _inst._soundSource.playOnAwake = false;
+            if (isCanvas)
+            {
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.offsetMin = rt.offsetMax = Vector2.zero;
+            }
+            else
+            {
+                if (!designRoot.TryGetComponent(out RootSizeBinding binding))
+                    binding = designRoot.gameObject.AddComponent<RootSizeBinding>();
+                _inst._sizeBinding = binding;
+                binding.Bind(_inst);
+            }
             return _inst;
         }
 
@@ -114,7 +130,7 @@ namespace OpenFairy.UGUI
         public Vector2 ScreenToDesign(Vector2 screen, Camera camera)
         {
             RectTransformUtility.ScreenPointToLocalPointInRectangle(rect, screen, camera, out var local);
-            return new Vector2(local.x, -local.y);
+            return new Vector2(local.x - rect.rect.xMin, rect.rect.yMax - local.y);
         }
 
         // Positions use the same top-left design coordinates as popups.
@@ -153,6 +169,14 @@ namespace OpenFairy.UGUI
 
         private Vector2 TooltipPosition(PointerEventData pointer) =>
             ScreenToDesign(pointer.position + new Vector2(10, -20), pointer.enterEventCamera);
+
+        internal void RefreshTooltip(Tooltip owner)
+        {
+            if (_tooltipOwner != owner) return;
+            if (string.IsNullOrEmpty(owner.text)) { HideTooltip(); return; }
+            _tooltipText = owner.text;
+            if (!_tooltipPending) PresentTooltip();
+        }
 
         internal void HideTooltip(Tooltip owner)
         {
@@ -205,6 +229,7 @@ namespace OpenFairy.UGUI
         private void OnDisable() => HideTooltip();
         private void OnDestroy()
         {
+            if (_sizeBinding != null) _sizeBinding.Unbind(this);
             if (_inst == this) _inst = null;
         }
 
@@ -290,8 +315,8 @@ namespace OpenFairy.UGUI
         public Vector2 RootTopLeft(RectTransform node)
         {
             node.GetWorldCorners(_corners); // [1] = top-left（world）
-            var local = rect.InverseTransformPoint(_corners[1]); // Root 局部（pivot 0,1 → 原点在左上、y 向上）
-            return new Vector2(local.x, -local.y);
+            var local = rect.InverseTransformPoint(_corners[1]); // Root local coordinates; convert from its native pivot to the top-left origin
+            return new Vector2(local.x - rect.rect.xMin, rect.rect.yMax - local.y);
         }
 
         // ---- Window 托管（复刻 Root.ShowWindow/HideWindowImmediately/BringToFront）----

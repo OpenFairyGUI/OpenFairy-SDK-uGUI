@@ -674,6 +674,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("leading")] public int Leading = 3;
         [XmlAttribute("letterSpacing")] public int LetterSpacing;
         [XmlAttribute("ubb")] public bool Ubb;
+        [XmlAttribute("vars")] public bool Vars;
         [XmlAttribute("input")] public bool Input;
         [XmlAttribute("password")] public bool Password;
         [XmlAttribute("maxLength")] public int MaxLength;
@@ -741,6 +742,9 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("password")] public bool? Password;
         [XmlAttribute("maxLength")] public int? MaxLength;
         [XmlAttribute("selectedTitle")] public string SelectedTitle;
+        [XmlAttribute("selectedIcon")] public string SelectedIcon;
+        [XmlAttribute("sound")] public string Sound;
+        [XmlAttribute("volume")] public float? SoundVolume;
         [XmlAttribute("icon")] public string Icon;
         [XmlAttribute("mode")] public OpenFairy.UGUI.ButtonMode? Mode; // 实例级缺省时不覆盖定义级
         [XmlAttribute("checked")] public bool Checked;

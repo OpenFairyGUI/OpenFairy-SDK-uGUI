@@ -1,0 +1,14 @@
+<resources>
+ <string name="loctest1panel-notice">Count {count=5}</string>
+ <string name="loctest1panel-notice-texts_0">Short {count=1}</string>
+ <string name="loctest1panel-notice-texts_2">Long {count=2}</string>
+ <string name="loctest1panel-notice-texts_def">Other {count=3}</string>
+ <string name="loctest1panel-main">Welcome {user=Author}</string>
+ <string name="loctest1panel-geared-texts_0">Build</string>
+ <string name="loctest1panel-geared-texts_1">Move</string>
+ <string name="loctest1panel-edit-prompt">Enter value</string>
+ <string name="loctest1panel-choice-0">First</string>
+ <string name="loctest1panel-choice-1">Second</string>
+ <string name="loctest1panel-property-cp-title">Property {user=Child}</string>
+ <string name="loctest1panel-items-0">Row {user=One}</string>
+</resources>

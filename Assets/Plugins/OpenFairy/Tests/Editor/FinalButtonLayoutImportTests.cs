@@ -22,6 +22,7 @@ namespace OpenFairy.UGUI.Tests
         {
             var key = "__ButtonLayout_" + Guid.NewGuid().ToString("N");
             var output = "Assets/UIProject/Assets/" + key;
+            var sourceDirectory = "UIProject/assets/" + key;
             AssetDatabase.CreateFolder("Assets/UIProject/Assets", key);
             var settingsField = typeof(Migrate).GetField("_codeGenerationSettings", PrivateStatic);
             var previousSettings = settingsField.GetValue(null);
@@ -40,28 +41,30 @@ namespace OpenFairy.UGUI.Tests
                     if (texture != null) AssetDatabase.AddObjectToAsset(texture, font);
                 AssetDatabase.SaveAssets();
 
-                var source = new Schema.Component {
-                    Size = new Vector2(200, 40), Extension = Schema.ComponentExtension.Button,
-                    Controllers = new[] { new Schema.Controller { Name = "button", Pages = new[] { ("0", "up"), ("1", "down") }, Selected = 1 } },
-                    Button = new Schema.Extension { Mode = ButtonMode.Common },
-                    Relations = new[] { new Schema.Relation { Target = "caption", Rules = new[] { new RelationRule { side = RelationSide.Width } } } },
-                    DisplayList = new[] { new Schema.Display { Id = "caption", Name = "title", Kind = Schema.DisplayKind.Text,
-                        Size = new Vector2(180, 40), FontSize = 20, TmpFont = fontPath, AutoSize = Schema.TextAutoSize.Both,
-                        Text = "i", Gears = new[] { new Schema.Gear { Kind = Schema.GearKind.Text, Controller = "button", Pages = "1",
-                            Values = "WWWWWWWWWWWW", Default = "i" } } } },
-                };
+                Directory.CreateDirectory(sourceDirectory);
+                var sourceFile = sourceDirectory + "/ContentSizeTestButton.xml";
+                File.WriteAllText(sourceFile, "<component size='200,40' extention='Button'>"
+                    + "<controller name='button' pages='0,up,1,down' selected='1'/>"
+                    + "<relation target='caption' sidePair='width-width'/>"
+                    + "<displayList><text id='caption' name='title' size='180,40' fontSize='20' tmpFont='" + fontPath
+                    + "' autoSize='both' text='i'><gearText controller='button' pages='1' values='WWWWWWWWWWWW' default='i'/></text></displayList>"
+                    + "<Button mode='Common'/></component>");
+                var source = Schema.Component.Load(sourceFile);
                 var settings = Activator.CreateInstance(settingsField.FieldType);
                 settingsField.FieldType.GetField("packageName").SetValue(settings, "OpenFairy.UGUI");
                 settingsField.SetValue(null, settings);
                 var resourceType = typeof(Migrate).GetNestedType("Resource", BindingFlags.NonPublic);
                 var resource = Activator.CreateInstance(resourceType);
                 resourceType.GetField("Id").SetValue(resource, key);
-                resourceType.GetField("File").SetValue(resource, "UIProject/assets/" + key + "/ContentSizeTestButton.xml");
+                resourceType.GetField("File").SetValue(resource, sourceFile);
                 resourceType.GetField("Type").SetValue(resource, Schema.ResourceKind.Component);
                 resourceType.GetField("Package").SetValue(resource, "Tests");
                 resourceType.GetField("PackageId").SetValue(resource, key);
                 resourceType.GetField("_componentXml", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(resource, source);
                 resources.Add(key, resource);
+                using var localization = new ImportLocalizationFixture();
+                localization.Prepare(resource);
+                localization.AssertGenerated(resource, typeof(ContentSizeTestButton));
                 typeof(Migrate).GetMethod("BuildPrefab", PrivateStatic).Invoke(null, new[] { resource });
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
                 var button = prefab.GetComponent<ContentSizeTestButton>();
@@ -97,6 +100,7 @@ namespace OpenFairy.UGUI.Tests
                 prefabs.Remove(prefabPath);
                 resources.Remove(key);
                 AssetDatabase.DeleteAsset(output);
+                if (Directory.Exists(sourceDirectory)) Directory.Delete(sourceDirectory, true);
             }
         }
     }

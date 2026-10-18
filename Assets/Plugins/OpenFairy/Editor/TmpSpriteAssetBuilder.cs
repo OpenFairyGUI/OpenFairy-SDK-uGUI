@@ -108,9 +108,14 @@ namespace OpenFairy.UGUI.Editor
         // Resource resolution exists only in the importer-supplied callback.
         public static string BakeInlineImages(string assetPath, string text, bool ubb, bool html,
             Func<string, Sprite> resolve, out TMP_SpriteAsset spriteAsset)
+            => BakeInlineImageVariants(assetPath, new[] { text }, ubb, html, resolve, out spriteAsset)[0];
+
+        public static string[] BakeInlineImageVariants(string assetPath, IReadOnlyList<string> texts, bool ubb, bool html,
+            Func<string, Sprite> resolve, out TMP_SpriteAsset spriteAsset)
         {
             var entries = new List<Entry>();
             var names = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var text in texts)
             foreach (Match match in Images.Matches(text ?? ""))
             {
                 string source = Source(match, ubb, html);
@@ -123,14 +128,18 @@ namespace OpenFairy.UGUI.Editor
                 entries.Add(new Entry(name, sprite));
                 names.Add(source, name);
             }
+            var result = new string[texts.Count];
             if (entries.Count == 0)
             {
                 spriteAsset = null;
-                return text;
+                for (var i = 0; i < result.Length; i++) result[i] = texts[i];
+                return result;
             }
+            Directory.CreateDirectory(Path.GetDirectoryName(assetPath));
             spriteAsset = Bake(assetPath, entries);
             var baked = spriteAsset;
-            return Images.Replace(text, match =>
+            for (var i = 0; i < result.Length; i++)
+            result[i] = Images.Replace(texts[i], match =>
             {
                 string source = Source(match, ubb, html);
                 if (source == null)
@@ -142,6 +151,7 @@ namespace OpenFairy.UGUI.Editor
                 float height = Dimension(attributes, "height") ?? sprite.rect.height;
                 return TmpTextMarkup.SpriteTag(baked, name, width, height, Dimension(attributes, "baseline") ?? 0.8f);
             });
+            return result;
         }
 
         private static string Source(Match match, bool ubb, bool html)

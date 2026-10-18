@@ -26,6 +26,8 @@ namespace OpenFairy.UGUI
 
         [NonSerialized] private Dictionary<int, Glyph> _lookup;
 
+        internal void InvalidateLookup() => _lookup = null;
+
         public bool TryGetGlyph(char ch, out Glyph glyph)
         {
             if (_lookup == null)

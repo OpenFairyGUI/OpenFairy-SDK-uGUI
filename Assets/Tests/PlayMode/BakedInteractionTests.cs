@@ -130,15 +130,19 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [UnityTest]
-        public IEnumerator Baked_scroll_component_auto_attaches_scrollpane_without_glue()
+        public IEnumerator Baked_scroll_component_has_native_scrollpane_without_glue()
         {
             var go = Load("Demo_Clip&Scroll");
             Assert.IsNotNull(go, "Demo_Clip&Scroll prefab 应存在");
-            // 转换器为 overflow=scroll 的组件烘焙了 ScrollPaneHost（无需 demo 胶水调用 Attach）。
-            Assert.Greater(go.GetComponentsInChildren<ScrollPaneHost>(true).Length, 0, "滚动组件应烘焙 ScrollPaneHost");
-            for (var i = 0; i < 5; i++)
-                yield return null; // 等 ScrollPaneHost.Start 自挂 ScrollPane
-            Assert.Greater(go.GetComponentsInChildren<ScrollPane>(true).Length, 0, "运行几帧后应自动挂上 ScrollPane");
+            Assert.Greater(go.GetComponentsInChildren<ScrollRect>(true).Length, 0, "Scroll components bake native ScrollRect behavior.");
+            yield return null;
+            var panes = go.GetComponentsInChildren<ScrollPane>(true);
+            Assert.Greater(panes.Length, 0, "ScrollPane is baked without runtime glue.");
+            foreach (var pane in panes)
+            {
+                Assert.IsNotNull(pane.viewport);
+                Assert.IsNotNull(pane.content);
+            }
         }
 
         [UnityTest]

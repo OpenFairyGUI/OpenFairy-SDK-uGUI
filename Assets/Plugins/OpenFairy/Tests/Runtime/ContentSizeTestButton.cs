@@ -1,15 +1,83 @@
+using OpenFairy.UGUI;
+using UnityEngine;
+using UnityEngine.UI;
 #if FAIRYGUI_TMPRO
-using TMPro;
+using OpenFairyTextComponent = TMPro.TextMeshProUGUI;
+using OpenFairyInputComponent = TMPro.TMP_InputField;
+#else
+using OpenFairyTextComponent = OpenFairy.UGUI.TextField;
+using OpenFairyInputComponent = OpenFairy.UGUI.TextInput;
+#endif
 
 namespace OpenFairy.UGUI.Tests
 {
-    public sealed class ContentSizeTestButton : Button<ContentSizeTestButton.button>
+    public partial class ContentSizeTestButton : OpenFairy.UGUI.Button<ContentSizeTestButton.button>
     {
-        public enum button { up, down }
+        public enum button
+        {
+            up,
+            down,
+        }
         public ref Controller<button> m_button => ref controller;
-        public TextMeshProUGUI m_title;
 
-        protected override void InitializeControllers() => controller.Initialize();
+        protected internal override int GetControllerPage(int controller) => controller switch
+        {
+            0 => (int)m_button.page,
+            _ => -1,
+        };
+
+        protected internal override bool IsControllerChanging(int controller) => controller switch
+        {
+            0 => m_button.changing,
+            _ => false,
+        };
+
+        protected internal override void SetControllerPage(int controller, int page)
+        {
+            switch (controller)
+            {
+                case 0: m_button.page = (button)page; break;
+            }
+        }
+
+        protected override void InitializeControllers()
+        {
+            m_button.Initialize();
+        }
+        public OpenFairyTextComponent m_title;
+[UnityEngine.SerializeReference] private OpenFairy.UGUI.GearText<button> _localizedGear1_0 = null;
+[System.Serializable]
+public sealed class LocalizedCaptionTexts
+{
+    public string Text;
+    public string Selected;
+    public string GearDefault1;
+    public string Gear1_0;
+}
+[UnityEngine.SerializeField] private LocalizedCaptionTexts _LocalizedCaptionTexts = null;
+public void ApplyLocalizedCaptionTexts(LocalizedCaptionTexts texts)
+{
+    _LocalizedCaptionTexts = texts;
+    RefreshLocalizedCaptionText();
+}
+public void RefreshLocalizedCaptionText()
+{
+    title = _LocalizedCaptionTexts.Text;
+    selectedTitle = _LocalizedCaptionTexts.Selected;
+    _localizedGear1_0.defaultValue = _LocalizedCaptionTexts.GearDefault1;
+    _localizedGear1_0.values[0] = _LocalizedCaptionTexts.Gear1_0;
+    RefreshTitle();
+    _localizedGear1_0.Apply(m_button.page);
+}
+
+[System.Serializable] public sealed class LocalizedTexts
+{
+public LocalizedCaptionTexts LocalizedCaption;
+}
+public void ApplyLocale(global::OpenFairy.UGUI.Localization.LocaleTable texts)
+{
+ApplyLocalizedCaptionTexts(texts.Tests_ContentSizeTestButton.LocalizedCaption);
+}
+
     }
 }
-#endif

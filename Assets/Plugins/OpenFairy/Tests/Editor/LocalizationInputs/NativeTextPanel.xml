@@ -1,0 +1,16 @@
+<component size="600,400">
+ <controller name="State" pages="10,Short,20,Long"/>
+ <displayList>
+  <text id="notice" name="Notice" xy="0,0" size="200,40" autoSize="none" vars="true" text="Count {count=5}" tooltips="Tip">
+   <gearText controller="State" pages="10,removed,20" values="Short {count=1}|STALE|Long {count=2}" default="Other {count=3}"/>
+  </text>
+  <component id="main" name="Main" src="button" xy="0,50"><Button title="Welcome {user=Author}" selectedTitle="Selected {name=Guest}"/></component>
+  <component id="geared" name="Geared" src="button" xy="0,100"><Button title="Action"/><gearText controller="State" pages="10,20" values="Build|Move" default="Rest"/></component>
+  <component id="edit" name="Edit" src="input" xy="0,150"><Label prompt="Enter value"/></component>
+  <component id="choice" name="Choice" src="combo" xy="0,200"><ComboBox title="Second"><item title="First" value="one"/><item title="Second" value="two"/></ComboBox></component>
+  <component id="property" name="Property" src="button" xy="220,50"><property target="title" name="text" value="Property {user=Child}"/></component>
+  <list id="items" name="Items" xy="220,100" size="200,100" defaultItem="ui://loctest1button">
+   <item title="Row {user=One}"/><item title="Row {user=Two}" selectedTitle="Picked {name=Guest}"/>
+  </list>
+ </displayList>
+</component>

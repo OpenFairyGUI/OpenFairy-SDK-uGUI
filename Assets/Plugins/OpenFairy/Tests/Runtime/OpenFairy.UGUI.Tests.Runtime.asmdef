@@ -3,6 +3,7 @@
     "rootNamespace": "OpenFairy.UGUI.Tests",
     "references": [
         "Unity.InputSystem",
+        "Unity.InputSystem.TestFramework",
         "OpenFairy.UGUI",
         "UnityEngine.UI",
         "UnityEngine.TestRunner",

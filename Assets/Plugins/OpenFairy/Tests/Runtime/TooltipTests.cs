@@ -28,8 +28,8 @@ namespace OpenFairy.UGUI.Tests
             _canvas = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
             _canvas.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
             var canvasRect = (RectTransform)_canvas.transform;
-            _root = Root.Create(canvasRect);
-            _root.rect.sizeDelta = new Vector2(640, 480);
+            var designRoot = Rect("Design", canvasRect, new Vector2(640, 480));
+            _root = Root.Create(designRoot);
             _eventSystem = new GameObject("Events", typeof(EventSystem));
             var templateRect = Rect("Template", canvasRect, new Vector2(220, 50));
             _template = templateRect.gameObject.AddComponent<Label>();

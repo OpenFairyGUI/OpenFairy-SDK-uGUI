@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using DG.Tweening;
 using UnityEditor;
 using UnityEditor.Callbacks;
@@ -29,7 +30,7 @@ namespace OpenFairy.UGUI.Editor
     {
     }
 
-    public static class Migrate
+    public static partial class Migrate
     {
         private const string UiRoot = "UIProject";
         private static readonly string OutputRoot = $"Assets/{Path.GetFileName(UiRoot)}";
@@ -86,6 +87,7 @@ namespace OpenFairy.UGUI.Editor
         [MenuItem("Tools/OpenFairy/Migrate %e")]
         public static void Execute()
         {
+            EditorApplication.delayCall -= Execute;
             Resources.Clear();
             MovieClips.Clear();
             FontAssets.Clear();
@@ -116,7 +118,7 @@ namespace OpenFairy.UGUI.Editor
                 ImportImage(image);
             // 字体/声音也提前导入：构建 prefab 中途导入资产会触发批量重载，把已赋值的引用打成 null
             foreach (var component in components)
-                foreach (Match match in Regex.Matches(File.ReadAllText(component.File), @"ui://\w+"))
+                foreach (Match match in RuntimeResourceReferences(component.File))
                     if (TryResolve(match.Value, component.PackageId, out var dep))
                     {
                         if (dep.Type == Schema.ResourceKind.Font)
@@ -124,7 +126,11 @@ namespace OpenFairy.UGUI.Editor
                         else if (dep.Type == Schema.ResourceKind.Sound)
                             ImportSound(dep);
                     }
+            if (!string.IsNullOrEmpty(Settings().buttonClickSound))
+                LoadButtonSound(Settings().buttonClickSound, null);
             _scriptsChanged = false;
+            PrepareLocalization(components);
+            GenerateLocaleScripts();
             foreach (var component in components)
                 GenerateScript(component);
 
@@ -138,6 +144,7 @@ namespace OpenFairy.UGUI.Editor
 
             foreach (var component in components)
                 BuildPrefab(component);
+            SaveLocaleAssets($"{OutputRoot}/Locales");
             AssetDatabase.SaveAssets();
             // 通用导出器不认识任何具体工程；工程特有的收尾（如示例脚本挂载）通过此扩展点自行注册。
             foreach (var method in TypeCache.GetMethodsWithAttribute<MigratePostProcessAttribute>())
@@ -151,6 +158,7 @@ namespace OpenFairy.UGUI.Editor
             if (!SessionState.GetBool(Pending, false))
                 return;
             SessionState.SetBool(Pending, false);
+            EditorApplication.delayCall -= Execute;
             EditorApplication.delayCall += Execute;
         }
 
@@ -172,6 +180,13 @@ namespace OpenFairy.UGUI.Editor
                     Texture = resource.Texture,
                     Exported = resource.Exported,
                 };
+        }
+
+        private static MatchCollection RuntimeResourceReferences(string file)
+        {
+            var xml = XDocument.Load(file, LoadOptions.PreserveWhitespace);
+            xml.Root.Attribute("designImage")?.Remove();
+            return Regex.Matches(xml.ToString(SaveOptions.DisableFormatting), @"ui://[\w/]+");
         }
 
         private static void Collect(Resource component, List<Resource> components, HashSet<Resource> images)
@@ -204,7 +219,7 @@ namespace OpenFairy.UGUI.Editor
             // 覆盖 icon 属性、富文本内嵌图、动效 Sound 之外的一切 ui:// 引用。
             // 编辑器源 XML 里的引用一律是 hex id（ui://<pkgId><itemId>）；命名引用（ui://Pkg/Name）只出现在运行时代码、这里读不到。
             // token 用 [\w/] 兜住命名形式的完整串（TryResolve 解析不到就跳过），避免在 '/' 处截断成错误的部分匹配。
-            foreach (Match match in Regex.Matches(File.ReadAllText(component.File), @"ui://[\w/]+"))
+            foreach (Match match in RuntimeResourceReferences(component.File))
                 if (TryResolve(match.Value, component.PackageId, out var embedded) && embedded.Type is Schema.ResourceKind.Image or Schema.ResourceKind.MovieClip)
                     images.Add(embedded);
             components.Add(component);
@@ -377,10 +392,17 @@ namespace OpenFairy.UGUI.Editor
 
         private static void GenerateScript(Resource component)
         {
-            var xml = component.ComponentXml;
-            var name = ClassName(component);
             var path = ScriptPath(component);
             PreserveScriptGuid(component, path);
+            foreach (var controller in component.ComponentXml.Controllers)
+                DeleteScript($"{Path.GetDirectoryName(path)}/{ClassName(component)}_{ControllerEnumName(controller.Name)}.cs".Replace('\\', '/'));
+            WriteScript(path, ScriptCode(component));
+        }
+
+        private static string ScriptCode(Resource component)
+        {
+            var xml = component.ComponentXml;
+            var name = ClassName(component);
             var used = new HashSet<string>();
             var fields = new List<string>();
             var controllerBindings = new List<(int Index, string Type, string Field)>();
@@ -390,7 +412,6 @@ namespace OpenFairy.UGUI.Editor
                 var controller = xml.Controllers[controllerIndex];
                 var cname = ControllerEnumName(controller.Name);
                 var field = Field(controller.Name);
-                DeleteScript($"{Path.GetDirectoryName(path)}/{name}_{cname}.cs".Replace('\\', '/'));
                 if (used.Add(field))
                 {
                     fields.Add(EnumDeclaration(cname, xml.Extension));
@@ -525,10 +546,11 @@ namespace OpenFairy.UGUI.Editor
             code.AppendLine("    {");
             foreach (var line in fields)
                 code.AppendLine(line);
+            code.AppendLine(LocalizationCode(component));
             code.AppendLine("    }");
             code.AppendLine("}");
 
-            WriteScript(path, code.ToString());
+            return code.ToString();
         }
 
         private static string EnumDeclaration(string name, Schema.ComponentExtension extension) =>
@@ -728,6 +750,7 @@ namespace OpenFairy.UGUI.Editor
 
                 if (comp is ButtonBase buttonComp)
                 {
+                    buttonComp.sound = LoadButtonSound(Settings().buttonClickSound, null);
                     // FairyGUI 按钮整块可点，与内部图形无关。uGUI 需要一个覆盖全 rect 的 raycast 面：
                     // 加一张透明(alpha=0，不改渲染)、raycastTarget 的 Image 到按钮根，保证点按钮任意位置都命中
                     // （否则内部图形（如只描边的 Shape）没盖住中心时，点击会穿过按钮打到背景）。
@@ -741,6 +764,7 @@ namespace OpenFairy.UGUI.Editor
                         comp.GetType().GetField("controller").SetValue(comp, buttonData.Value); // Controller<T> 泛型字段，仅此保留反射
                     buttonComp.titleText = Child(children, "title")?.GetComponent<TextComponent>();
                     buttonComp.iconLoader = Child(children, "icon")?.GetComponent<Loader>();
+                    buttonComp.icon = buttonComp.iconLoader != null ? buttonComp.iconLoader.sprite : null;
                     if (xml.Button is { } buttonEl)
                         ConfigureButton(root, buttonEl, component.PackageId);
                     if (xml.ComboBox is { } comboEl) // 组件定义级：烘焙 dropdown 资源
@@ -790,6 +814,7 @@ namespace OpenFairy.UGUI.Editor
                 comp.controllerChildren = children.AsValueEnumerable().Select(child => child.Go.GetComponent<Component>())
                     .Where(child => child != null).ToArray();
                 comp.Initialize();
+                BindLocalization(component, comp, byId, controllers);
 
                 var prefabPath = Path.ChangeExtension(AssetPath(component.File), ".prefab");
                 Directory.CreateDirectory(Path.GetDirectoryName(prefabPath));
@@ -1035,6 +1060,10 @@ namespace OpenFairy.UGUI.Editor
                 }
                 else if (kind == Schema.GearKind.Icon)
                 {
+                    const System.Reflection.BindingFlags Any = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                    gearType.GetField("button", Any).SetValue(gear, go.GetComponent<ButtonBase>());
+                    gearType.GetField("label", Any).SetValue(gear, go.GetComponent<Label>());
+                    gearType.GetField("loader", Any).SetValue(gear, go.GetComponent<Loader>());
                     var def = gearXml.Default is { } value ? LoadSprite(value, owner.PackageId) : null;
                     gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').AsValueEnumerable().Select(value => value == "-" ? def : LoadSprite(value, owner.PackageId)).ToArray());
                     gearType.GetField("defaultValue").SetValue(gear, def);
@@ -1241,10 +1270,18 @@ namespace OpenFairy.UGUI.Editor
                 button.selectedTitle = selectedTitle;
             if (buttonXml.Icon is { } icon)
                 button.icon = LoadSprite(icon, packageId);
+            if (buttonXml.SelectedIcon is { } selectedIcon)
+            {
+                button.selectedIcon = LoadSprite(selectedIcon, packageId);
+                button.useSelectedIcon = true;
+            }
             if (buttonXml.Mode is { } mode)
                 button.mode = mode;
+            if (buttonXml.Sound is { } sound) button.sound = LoadButtonSound(sound, packageId);
+            if (buttonXml.SoundVolume is { } volume) button.soundVolumeScale = volume;
             button._selected = buttonXml.Checked && button.mode != ButtonMode.Common; // 烘焙直写（复刻 GButton.selected：Common 忽略选中态），不触发关联控制器
             button.RefreshState();
+            if (button.useSelectedIcon) button.RefreshIcon();
         }
 
         private static void BindLabelTitle(Label label, Transform title)
@@ -2055,6 +2092,16 @@ namespace OpenFairy.UGUI.Editor
             return (Ease)Enum.Parse(typeof(Ease), parts[1] + parts[0]);
         }
 
+        private static AudioClip LoadButtonSound(string value, string packageId)
+        {
+            if (string.IsNullOrEmpty(value)) return null;
+            var resource = Resolve(value, packageId);
+            if (resource.Type != Schema.ResourceKind.Sound)
+                throw new InvalidDataException($"Button sound '{value}' is not a sound resource.");
+            return ImportSound(resource)
+                ?? throw new InvalidDataException($"Unable to import button sound '{value}'.");
+        }
+
         private static AudioClip ImportSound(Resource resource)
         {
             if (Sounds.TryGetValue(resource, out var clip))
@@ -2596,6 +2643,7 @@ namespace OpenFairy.UGUI.Editor
                 asset.canTint = canTint;
                 asset.texture = textureAsset;
                 asset.glyphs = glyphArray;
+                asset.InvalidateLookup();
                 EditorUtility.SetDirty(asset);
             }
             return FontAssets[fontResource] = asset;
@@ -2767,6 +2815,7 @@ namespace OpenFairy.UGUI.Editor
         private class CommonSettings
         {
             public string tipsRes = "";
+            public string buttonClickSound = "";
             public int captureLayer = 31;
             public int fontSize = 12;
             public string textColor = "#000000";

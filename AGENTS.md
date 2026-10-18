@@ -2,11 +2,17 @@
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
-当前能力以状态文档的最新日期为准，下文开发经验保留其历史背景。原 `ScrollPaneHost` 已删除，滚动交互由原生 `ScrollRect`/`Scrollbar` 承担；虚拟列表、循环索引与变高行已实现。输入框已补 Input System 撤销/重做与单行 Tab。按钮 `grayed` 只决定视觉，触摸/交互是独立通道，不再以灰显一律拦截点击。
+当前能力以状态文档的最新日期为准，下文开发经验保留其历史背景。原 `ScrollPaneHost` 已删除，滚动交互由原生 `ScrollRect`/`Scrollbar` 承担；虚拟列表、循环索引与变高行已实现。输入框已有 Input System 撤销/重做与单行 Tab 实现；虚拟输入测试使用官方 `InputTestFixture` 隔离设备并恢复宿主状态，不能依赖 Editor 窗口焦点。按钮 `grayed` 只决定视觉，触摸/交互是独立通道，不再以灰显一律拦截点击。
 
 导入器的组件实例 `controller`、列表项 `controllers` 使用页ID而非序号，按原顺序应用后再结算最终布局。测试中需要挂在 GameObject/prefab 上的支持组件放运行时测试程序集，不能放 Editor 程序集；EditMode 测试经引用复用这些支持组件。
 
-对象捕获/模糊/容器颜色滤镜已有显式同步刷新入口，自动运行接入尚待验证；关系布局在 `PostLateUpdate` 同步，不能在普通 `LateUpdate` 或 `willRenderCanvases` 直接捕获。导出续建的 `delayCall` 依赖 Editor 活动状态，`Pending=false` 不等于 prefab 已完成；观察真正的完成日志，不清空其他系统回调。
+对象捕获/模糊/容器颜色滤镜保留显式同步刷新，Play 自动刷新使用 `Application.onBeforeRender`，晚于关系的 `PostLateUpdate` 同步，不能改回普通 `LateUpdate` 或 `willRenderCanvases` 捕获。最外层滤镜负责内层逆序刷新。重复无域/场景重载 Play 的测试按当前原生组件重新取得托管支持对象，不能把旧托管包装器里的观察列表当成当前组件；这一测试已通过，无需为夹具引用问题改生产生命周期。
+
+当前新增包内测试实际结果为 Editor **100/100**、PlayMode **91/91**。自动滤镜运行时 8 项、Root 尺寸 3 项和 selected icon 6 项均已通过。单行 Tab 的旧失败来自后台禁用的虚拟设备；改为官方测试隔离后整套通过，输入设置、设备、当前键盘及泄漏检测模式均恢复。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
+
+静态文本与本地化由普通导出器生成 typed 方法、直接原生引用和语言资产；按钮 selected icon、声音和实例控制器覆盖在导入期烘焙。位图字体同域重导会失效查找缓存。Canvas overlay 使用 native anchors；非 Canvas 的兄弟 overlay 复制 anchors/pivot/rect/pose，并在 `LateUpdate` 检查矩形和变换矩阵变化，公开坐标仍从左上起算。
+
+导出续建的 `delayCall` 依赖 Editor 活动状态，`Pending=false` 不等于 prefab 已完成；观察真正的完成日志，不清空其他系统回调。
 
 ## 环境
 

@@ -1,0 +1,6 @@
+<packageDescription id="loctest1"><resources>
+ <component id="button" name="NativeTextButton.xml" path="/" exported="true"/>
+ <component id="input" name="NativeTextInput.xml" path="/" exported="true"/>
+ <component id="combo" name="NativeTextCombo.xml" path="/" exported="true"/>
+ <component id="panel" name="NativeTextPanel.xml" path="/" exported="true"/>
+</resources></packageDescription>

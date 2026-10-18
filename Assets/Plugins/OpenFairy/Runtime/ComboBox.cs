@@ -97,6 +97,7 @@ namespace OpenFairy.UGUI
         {
             if (eventData.button != PointerEventData.InputButton.Left)
                 return;
+            PlayClickSound();
             // 展开时点按钮外区域由 Root 的透明 blocker 收起（blocker 在按钮之上截获点击），故这里只管展开。
             RefreshState();
             ShowDropdown().Forget();

@@ -1,0 +1,14 @@
+<resources>
+ <string name="loctest1panel-notice">Compte {count=5}</string>
+ <string name="loctest1panel-notice-texts_0">Court {count=1}</string>
+ <string name="loctest1panel-notice-texts_2">Longue {count=2}</string>
+ <string name="loctest1panel-notice-texts_def">Autre {count=3}</string>
+ <string name="loctest1panel-main">Bonjour {user=Auteur}</string>
+ <string name="loctest1panel-geared-texts_0">Construire</string>
+ <string name="loctest1panel-geared-texts_1">Bouger</string>
+ <string name="loctest1panel-edit-prompt">Entrez valeur</string>
+ <string name="loctest1panel-choice-0">Premier</string>
+ <string name="loctest1panel-choice-1">Deuxième</string>
+ <string name="loctest1panel-property-cp-title">Propriété {user=Enfant}</string>
+ <string name="loctest1panel-items-0">Ligne {user=Un}</string>
+</resources>

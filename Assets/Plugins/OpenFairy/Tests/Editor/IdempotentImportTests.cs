@@ -179,6 +179,58 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [Test]
+        public void Bitmap_font_reimport_in_the_same_domain_invalidates_cached_glyphs()
+        {
+            var name = "__ImportTest_" + Guid.NewGuid().ToString("N");
+            var source = "UIProject/assets/" + name;
+            var output = "Assets/UIProject/Assets/" + name;
+            var texture = new Texture2D(32, 24, TextureFormat.RGBA32, false);
+            var font = Resource(source + "/Font.fnt");
+            var atlas = Resource(source + "/Atlas.png");
+            var resources = (IDictionary)typeof(Migrate).GetField("Resources", Static).GetValue(null);
+            font.GetType().GetField("PackageId").SetValue(font, name);
+            font.GetType().GetField("Texture").SetValue(font, "atlas");
+            resources.Add(name + "atlas", atlas);
+            try
+            {
+                Directory.CreateDirectory(source);
+                File.WriteAllBytes(source + "/Atlas.png", texture.EncodeToPNG());
+                const string header = "info size=16\ncommon scaleW=32 scaleH=24\n";
+                File.WriteAllText(source + "/Font.fnt", header
+                    + "char id=65 x=0 y=0 width=8 height=12 xoffset=1 yoffset=2 xadvance=9\n"
+                    + "char id=67 x=8 y=0 width=8 height=12 xoffset=0 yoffset=2 xadvance=8\n");
+                var asset = (BitmapFont)Call("ImportFont", font);
+                Assert.That(asset.TryGetGlyph('A', out var before), Is.True);
+                Assert.That(before.advance, Is.EqualTo(9));
+                Assert.That(asset.TryGetGlyph('C', out _), Is.True);
+                Assert.That(asset.TryGetGlyph('B', out _), Is.False);
+                var guid = AssetDatabase.AssetPathToGUID(output + "/Font.asset");
+                var textureGuid = AssetDatabase.AssetPathToGUID(output + "/Atlas.png");
+                File.WriteAllText(source + "/Font.fnt", header
+                    + "char id=65 x=0 y=0 width=12 height=12 xoffset=1 yoffset=2 xadvance=15\n"
+                    + "char id=66 x=12 y=0 width=8 height=12 xoffset=0 yoffset=2 xadvance=8\n");
+                Forget("FontAssets", font);
+                var updated = (BitmapFont)Call("ImportFont", font);
+                Assert.That(updated, Is.SameAs(asset));
+                Assert.That(updated.TryGetGlyph('A', out var after), Is.True);
+                Assert.That(after.width, Is.EqualTo(12));
+                Assert.That(after.advance, Is.EqualTo(15));
+                Assert.That(updated.TryGetGlyph('B', out _), Is.True);
+                Assert.That(updated.TryGetGlyph('C', out _), Is.False);
+                Assert.That(AssetDatabase.AssetPathToGUID(output + "/Font.asset"), Is.EqualTo(guid));
+                Assert.That(AssetDatabase.AssetPathToGUID(output + "/Atlas.png"), Is.EqualTo(textureGuid));
+            }
+            finally
+            {
+                resources.Remove(name + "atlas");
+                Forget("FontAssets", font);
+                Object.DestroyImmediate(texture);
+                AssetDatabase.DeleteAsset(output);
+                Directory.Delete(source, true);
+            }
+        }
+
+        [Test]
         public void Bitmap_font_rerun_keeps_texture_guid_and_does_not_dirty_identical_glyphs()
         {
             var name = "__ImportTest_" + Guid.NewGuid().ToString("N");

@@ -23,9 +23,11 @@ Use a common prefab container for a root-level source. In an item prefab, keep t
 
 `ObjectFilterSourceVisibility` suppresses framebuffer color writes through native `IMaterialModifier`; it does not replace the source's authored material reference or disable its `Graphic`. Native stencil operations remain intact. The helper places this modifier after existing native masks and other material modifiers. Reconfigure after changing that component order. New runtime graphics receive it on refresh. Enable and hierarchy callbacks invalidate their materials so an already rendered graphic can join or leave a filter without keeping a stale hidden material.
 
-## Explicit refresh and grouped semantics
+## Refresh and grouped semantics
 
-Call `Refresh(Action<Camera, RenderTexture>)` after UI changes and before the UI camera renders. The callback synchronously renders the supplied camera into the supplied texture; it owns render-pipeline-specific camera setup. Do not call this from `Canvas.willRenderCanvases`: capture itself forces a native canvas update.
+Play Mode refreshes active filters automatically in `Application.onBeforeRender`; see [Automatic object filters](AutomaticFilters.md). Ordinary screen code does not need another refresh after each UI change.
+
+`Refresh(Action<Camera, RenderTexture>)` remains available for Edit Mode, offscreen tools and explicit same-frame captures. Call it after UI changes and before the UI camera renders. Its callback synchronously renders the supplied camera into the supplied texture and owns render-pipeline-specific camera setup. Do not call it from `Canvas.willRenderCanvases`: capture itself forces a native canvas update.
 
 An enclosing filter refreshes nested filters first, then captures their presentations while excluding their suppressed source subtrees. This preserves compositing order without a separate filter scheduler. Capture dimensions come from the explicit source rectangle and effect padding, at `resolutionScale` pixels per local unit. Parent/root opacity and external clipping apply once to the final presentation; descendant opacity and internal masks belong to the local capture.
 

@@ -28,6 +28,11 @@ namespace OpenFairy.UGUI
             base.OnDisable();
         }
 
+        public void RefreshText()
+        {
+            if (_root != null) _root.RefreshTooltip(this);
+        }
+
         private void Hide()
         {
             if (_root != null)

@@ -62,6 +62,19 @@ namespace OpenFairy.UGUI.Tests
             return rt;
         }
 
+        private static Relation BindRelation(RectTransform owner, RectTransform space, RectTransform target,
+            params RelationSide[] sides)
+        {
+            var relation = owner.gameObject.AddComponent<Relation>();
+            relation.reference = relation.coordinateSpace = space;
+            relation.bindings = new[] { new RelationBinding {
+                target = target,
+                rules = System.Array.ConvertAll(sides, side => new RelationRule { side = side }),
+            } };
+            relation.Record();
+            return relation;
+        }
+
         [UnityTest]
         public IEnumerator Slider_click_sets_value_and_fires_onChanged()
         {
@@ -207,57 +220,51 @@ namespace OpenFairy.UGUI.Tests
             var target = Child(container, "target", new Vector2(0, 0), new Vector2(200, 100), true);
             var follower = Child(container, "follower", new Vector2(210, 0), new Vector2(50, 50), true);
 
-            var relation = follower.gameObject.AddComponent<Relation>();
-            relation.target = target;
-            relation.sidePairs = new[] { RelationSide.RightRight }; // follower 的 x 跟随 target 右边缘变化
-            relation.Record();
+            BindRelation(follower, container, target, RelationSide.RightRight);
             yield return null;
 
             var startX = follower.anchoredPosition.x;
             target.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, 260); // target 变宽 +60
-            yield return null; // LateUpdate 里 Relation.Sync 传播
+            yield return new WaitForEndOfFrame(); // Relations synchronize in PostLateUpdate.
 
             Assert.AreEqual(startX + 60, follower.anchoredPosition.x, 1.0f, "right-right：target 右移 60，follower 应同步右移 60");
             Object.Destroy(container.gameObject);
         }
 
-        [TestCase(RelationSide.LeftLeft, 10, 0, 0, 0)]
-        [TestCase(RelationSide.LeftCenter, 20, 0, 0, 0)]
-        [TestCase(RelationSide.LeftRight, 30, 0, 0, 0)]
-        [TestCase(RelationSide.CenterCenter, 20, 0, 0, 0)]
-        [TestCase(RelationSide.RightLeft, 10, 0, 0, 0)]
-        [TestCase(RelationSide.RightCenter, 20, 0, 0, 0)]
-        [TestCase(RelationSide.RightRight, 30, 0, 0, 0)]
-        [TestCase(RelationSide.TopTop, 0, -15, 0, 0)]
-        [TestCase(RelationSide.TopMiddle, 0, -30, 0, 0)]
-        [TestCase(RelationSide.TopBottom, 0, -45, 0, 0)]
-        [TestCase(RelationSide.MiddleMiddle, 0, -30, 0, 0)]
-        [TestCase(RelationSide.BottomTop, 0, -15, 0, 0)]
-        [TestCase(RelationSide.BottomMiddle, 0, -30, 0, 0)]
-        [TestCase(RelationSide.BottomBottom, 0, -45, 0, 0)]
-        [TestCase(RelationSide.Width, 0, 0, 20, 0)]
-        [TestCase(RelationSide.WidthWidth, 0, 0, 20, 0)]
-        [TestCase(RelationSide.Height, 0, 0, 0, 30)]
-        [TestCase(RelationSide.HeightHeight, 0, 0, 0, 30)]
-        [TestCase(RelationSide.Size, 0, 0, 20, 30)]
-        [TestCase(RelationSide.LeftExtLeft, 10, 0, -10, 0)]
-        [TestCase(RelationSide.LeftExtRight, 30, 0, -30, 0)]
-        [TestCase(RelationSide.RightExtLeft, 0, 0, 10, 0)]
-        [TestCase(RelationSide.RightExtRight, 0, 0, 30, 0)]
-        [TestCase(RelationSide.TopExtTop, 0, -15, 0, -15)]
-        [TestCase(RelationSide.TopExtBottom, 0, -45, 0, -45)]
-        [TestCase(RelationSide.BottomExtTop, 0, 0, 0, 15)]
-        [TestCase(RelationSide.BottomExtBottom, 0, 0, 0, 45)]
-        public void Every_relation_side_applies_the_expected_delta(RelationSide side, float dx, float dy, float dw, float dh)
+        [TestCase(new[] { RelationSide.LeftLeft }, 10, 0, 0, 0)]
+        [TestCase(new[] { RelationSide.LeftCenter }, 20, 0, 0, 0)]
+        [TestCase(new[] { RelationSide.LeftRight }, 30, 0, 0, 0)]
+        [TestCase(new[] { RelationSide.CenterCenter }, 20, 0, 0, 0)]
+        [TestCase(new[] { RelationSide.RightLeft }, 10, 0, 0, 0)]
+        [TestCase(new[] { RelationSide.RightCenter }, 20, 0, 0, 0)]
+        [TestCase(new[] { RelationSide.RightRight }, 30, 0, 0, 0)]
+        [TestCase(new[] { RelationSide.TopTop }, 0, -15, 0, 0)]
+        [TestCase(new[] { RelationSide.TopMiddle }, 0, -30, 0, 0)]
+        [TestCase(new[] { RelationSide.TopBottom }, 0, -45, 0, 0)]
+        [TestCase(new[] { RelationSide.MiddleMiddle }, 0, -30, 0, 0)]
+        [TestCase(new[] { RelationSide.BottomTop }, 0, -15, 0, 0)]
+        [TestCase(new[] { RelationSide.BottomMiddle }, 0, -30, 0, 0)]
+        [TestCase(new[] { RelationSide.BottomBottom }, 0, -45, 0, 0)]
+        [TestCase(new[] { RelationSide.Width }, 0, 0, 20, 0)]
+        [TestCase(new[] { RelationSide.Width }, 0, 0, 20, 0, TestName = "Width_width_case_uses_canonical_width_rule")]
+        [TestCase(new[] { RelationSide.Height }, 0, 0, 0, 30)]
+        [TestCase(new[] { RelationSide.Height }, 0, 0, 0, 30, TestName = "Height_height_case_uses_canonical_height_rule")]
+        [TestCase(new[] { RelationSide.Width, RelationSide.Height }, 0, 0, 20, 30)]
+        [TestCase(new[] { RelationSide.LeftExtLeft }, 10, 0, -10, 0)]
+        [TestCase(new[] { RelationSide.LeftExtRight }, 30, 0, -30, 0)]
+        [TestCase(new[] { RelationSide.RightExtLeft }, 0, 0, 10, 0)]
+        [TestCase(new[] { RelationSide.RightExtRight }, 0, 0, 30, 0)]
+        [TestCase(new[] { RelationSide.TopExtTop }, 0, -15, 0, -15)]
+        [TestCase(new[] { RelationSide.TopExtBottom }, 0, -45, 0, -45)]
+        [TestCase(new[] { RelationSide.BottomExtTop }, 0, 0, 0, 15)]
+        [TestCase(new[] { RelationSide.BottomExtBottom }, 0, 0, 0, 45)]
+        public void Every_relation_side_applies_the_expected_delta(RelationSide[] sides, float dx, float dy, float dw, float dh)
         {
             var root = new GameObject("relation", typeof(RectTransform)).GetComponent<RectTransform>();
             root.sizeDelta = new Vector2(400, 300);
             var target = Child(root, "target", new Vector2(20, 30), new Vector2(100, 80), false);
             var follower = Child(root, "follower", new Vector2(200, 100), new Vector2(100, 80), false);
-            var relation = follower.gameObject.AddComponent<Relation>();
-            relation.target = target;
-            relation.sidePairs = new[] { side };
-            relation.Record();
+            var relation = BindRelation(follower, root, target, sides);
             var startPosition = follower.anchoredPosition;
             var startSize = follower.rect.size;
 
@@ -265,10 +272,10 @@ namespace OpenFairy.UGUI.Tests
             target.sizeDelta += new Vector2(20, 30);
             relation.Sync();
 
-            Assert.AreEqual(startPosition.x + dx, follower.anchoredPosition.x, 0.01f, side.ToString());
-            Assert.AreEqual(startPosition.y + dy, follower.anchoredPosition.y, 0.01f, side.ToString());
-            Assert.AreEqual(startSize.x + dw, follower.rect.width, 0.01f, side.ToString());
-            Assert.AreEqual(startSize.y + dh, follower.rect.height, 0.01f, side.ToString());
+            Assert.AreEqual(startPosition.x + dx, follower.anchoredPosition.x, 0.01f, string.Join(",", sides));
+            Assert.AreEqual(startPosition.y + dy, follower.anchoredPosition.y, 0.01f, string.Join(",", sides));
+            Assert.AreEqual(startSize.x + dw, follower.rect.width, 0.01f, string.Join(",", sides));
+            Assert.AreEqual(startSize.y + dh, follower.rect.height, 0.01f, string.Join(",", sides));
             Object.DestroyImmediate(root.gameObject);
         }
 
@@ -279,17 +286,16 @@ namespace OpenFairy.UGUI.Tests
             root.sizeDelta = new Vector2(400, 300);
             var target = Child(root, "target", new Vector2(20, 30), new Vector2(100, 80), false);
             var follower = Child(root, "follower", new Vector2(200, 100), new Vector2(100, 80), false);
-            var relation = follower.gameObject.AddComponent<Relation>();
-            relation.target = target;
-            relation.sidePairs = new[] { RelationSide.RightRight, RelationSide.BottomBottom, RelationSide.Width, RelationSide.Height };
-            relation.Record();
+            var relation = BindRelation(follower, root, target, RelationSide.RightRight,
+                RelationSide.BottomBottom, RelationSide.Width, RelationSide.Height);
             var startPosition = follower.anchoredPosition;
 
             target.anchoredPosition += new Vector2(10, -15);
             target.sizeDelta += new Vector2(20, 30);
             relation.Sync();
 
-            Assert.AreEqual(startPosition + new Vector2(30, -45), follower.anchoredPosition);
+            // Right/bottom relations compensate the owner's own width/height increase.
+            Assert.AreEqual(startPosition + new Vector2(10, -15), follower.anchoredPosition);
             Assert.AreEqual(new Vector2(120, 110), follower.rect.size);
             Object.DestroyImmediate(root.gameObject);
         }
@@ -483,7 +489,11 @@ namespace OpenFairy.UGUI.Tests
             combo.values = new[] { "va", "vb", "vc" };
             var titleGo = new GameObject("title", typeof(RectTransform), typeof(CanvasRenderer));
             ((RectTransform)titleGo.transform).SetParent(comboRt, false);
+#if FAIRYGUI_TMPRO
+            combo.titleText = titleGo.AddComponent<TMPro.TextMeshProUGUI>();
+#else
             combo.titleText = titleGo.AddComponent<TextField>();
+#endif
             var fired = 0;
             combo.onChanged.AddListener(() => fired++);
             yield return null;
@@ -562,7 +572,7 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [UnityTest]
-        public IEnumerator ScrollPaneHost_attaches_and_real_drag_scrolls()
+        public IEnumerator Programmatic_scrollpane_attaches_and_real_drag_scrolls()
         {
             var root = Child(_rig.CanvasRt, "scroll", Vector2.zero, new Vector2(100, 100), false);
             var viewport = new GameObject("viewport", typeof(RectTransform), typeof(RectMask2D)).GetComponent<RectTransform>();
@@ -571,11 +581,10 @@ namespace OpenFairy.UGUI.Tests
             viewport.sizeDelta = new Vector2(100, 100);
             viewport.anchoredPosition = Vector2.zero;
             Child(viewport, "big", Vector2.zero, new Vector2(100, 400), true);
-            root.gameObject.AddComponent<ScrollPaneHost>(); // 复刻 Migrate 烘焙：运行时自挂 ScrollPane
-            yield return null; // ScrollPaneHost.Start
-
-            var pane = root.GetComponent<ScrollPane>();
-            Assert.IsNotNull(pane, "ScrollPaneHost 应在 Start 自挂 ScrollPane");
+            var pane = ScrollPane.Attach(root);
+            yield return null;
+            Assert.IsNotNull(pane, "Programmatically assembled views can attach a native ScrollPane.");
+            Assert.IsInstanceOf<ScrollRect>(pane);
             var content = viewport.Find("content") as RectTransform;
             Assert.IsNotNull(content, "应把 viewport 子节点包进 content");
 

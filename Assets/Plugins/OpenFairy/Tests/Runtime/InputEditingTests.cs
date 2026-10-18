@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -19,7 +20,9 @@ namespace OpenFairy.UGUI.Tests
     public class InputEditingTests
     {
         private readonly List<GameObject> _objects = new();
+        private readonly InputTestFixture _input = new();
         private Keyboard _keyboard, _previousKeyboard;
+        private NativeLeakDetectionMode _leakMode;
         private EventSystem _events;
         private GameObject _previousSelection;
         private Transform _canvas;
@@ -40,6 +43,8 @@ namespace OpenFairy.UGUI.Tests
         {
             Assert.That(Application.isPlaying, Is.True);
             _previousKeyboard = Keyboard.current;
+            _leakMode = NativeLeakDetection.Mode;
+            _input.Setup();
             _keyboard = InputSystem.AddDevice<Keyboard>();
             _events = EventSystem.current;
             if (_events == null) _events = Make("Events").AddComponent<EventSystem>();
@@ -135,6 +140,8 @@ namespace OpenFairy.UGUI.Tests
 
         private IEnumerator Tap(params Key[] keys)
         {
+            Assert.That(_keyboard.enabled, Is.True);
+            Assert.That(Keyboard.current, Is.SameAs(_keyboard));
             InputSystem.QueueStateEvent(_keyboard, new KeyboardState(keys));
             yield return null;
             yield return null;
@@ -145,23 +152,31 @@ namespace OpenFairy.UGUI.Tests
         [UnityTearDown]
         public IEnumerator Cleanup()
         {
-            _events.SetSelectedGameObject(_previousSelection);
-            foreach (var go in _objects)
-                if (go != null) Object.Destroy(go);
-            _objects.Clear();
-            yield return null;
-            InputSystem.RemoveDevice(_keyboard);
-            if (_previousKeyboard != null && _previousKeyboard.added) _previousKeyboard.MakeCurrent();
-#if FAIRYGUI_TMPRO
-            if (_font != null)
+            try
             {
-                for (int i = 0; i < _font.atlasTextureCount; i++)
-                    if (_font.atlasTextures[i] != null) Object.Destroy(_font.atlasTextures[i]);
-                Object.Destroy(_font.material);
-                Object.Destroy(_font);
-            }
+                _events.SetSelectedGameObject(_previousSelection);
+                foreach (var go in _objects)
+                    if (go != null) Object.Destroy(go);
+                _objects.Clear();
+                yield return null;
+                InputSystem.RemoveDevice(_keyboard);
+#if FAIRYGUI_TMPRO
+                if (_font != null)
+                {
+                    for (int i = 0; i < _font.atlasTextureCount; i++)
+                        if (_font.atlasTextures[i] != null) Object.Destroy(_font.atlasTextures[i]);
+                    Object.Destroy(_font.material);
+                    Object.Destroy(_font);
+                }
 #endif
-            yield return null;
+                yield return null;
+            }
+            finally
+            {
+                _input.TearDown();
+                NativeLeakDetection.Mode = _leakMode;
+                if (_previousKeyboard != null && _previousKeyboard.added) _previousKeyboard.MakeCurrent();
+            }
         }
 
         [UnityTest]

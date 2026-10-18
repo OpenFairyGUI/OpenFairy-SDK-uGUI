@@ -17,9 +17,10 @@ The captured input and filtered output are premultiplied; the matrix operates on
 straight RGB exactly once. Presentation, opacity, input and capture disposal
 share the same implementation as object blur.
 
-Captured filters require the platform's synchronous render callback through
-`ObjectFilter.Refresh`. Refresh after UI changes and before the UI camera renders,
-using the same entry point as blur. The importer pre-bakes source, sibling
+Play Mode refreshes captured filters automatically through the same path as
+blur; see [Automatic object filters](AutomaticFilters.md). Edit Mode and offscreen
+tools use the synchronous `ObjectFilter.Refresh` callback after UI changes and
+before rendering. The importer pre-bakes source, sibling
 presentation, materials and references. Its default capture layer is 31; that
 layer must be reserved for capture. `ColorFilterBuilder.Configure` accepts an
 explicit layer for integrations that reserve another one. Presentation and source
