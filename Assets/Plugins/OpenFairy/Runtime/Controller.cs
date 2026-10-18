@@ -98,12 +98,26 @@ namespace OpenFairy.UGUI
                             gear.displayLock = FindDisplay(list, gear.target);
                     _displayLocksBound = true;
                 }
+                // Replacing a tween releases its old display lock before acquiring the new one.
+                // Commit visibility after the complete page state, without transient lifecycle callbacks.
                 foreach (var gear in list)
-                    if (gear is not GearDisplay<T>)
-                        gear.Apply(value, animate);
-                foreach (var gear in list)
-                    if (gear is GearDisplay<T>)
-                        gear.Apply(value, animate);
+                    if (gear is GearDisplay<T> display)
+                        display.BeginUpdate();
+                try
+                {
+                    foreach (var gear in list)
+                        if (gear is not GearDisplay<T>)
+                            gear.Apply(value, animate);
+                    foreach (var gear in list)
+                        if (gear is GearDisplay<T>)
+                            gear.Apply(value, animate);
+                }
+                finally
+                {
+                    foreach (var gear in list)
+                        if (gear is GearDisplay<T> display)
+                            display.EndUpdate();
+                }
         }
 
         private static IDisplayGear FindDisplay(Gear<T>[] gears, GameObject target)

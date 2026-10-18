@@ -15,6 +15,32 @@ namespace OpenFairy.UGUI.Tests
     {
         private readonly List<GameObject> _objects = new();
 
+        [UnityTest]
+        public IEnumerator Reopening_a_fading_target_does_not_deactivate_it_between_display_locks()
+        {
+            var go = new GameObject("Animated visibility", typeof(RectTransform), typeof(CanvasGroup), typeof(CaptureLifecycleWitness));
+            _objects.Add(go);
+            var display = new GearDisplay<Page> { target = go, pages = new[] { Page.First } };
+            var look = new GearLook<Page> {
+                target = go, pages = new[] { Page.First, Page.Second }, alphas = new[] { 1f, 0f },
+                rotations = new[] { 0f, 0f }, grayed = new[] { false, false }, touchables = new[] { true, false },
+                tween = true, duration = .1f,
+            };
+            var controller = new Controller<Page> { gears = new Gear<Page>[] { display, look } };
+            controller.page = Page.First;
+            var enables = CaptureLifecycleWitness.enables;
+            controller.page = Page.Second;
+            Assert.IsTrue(go.activeSelf, "The outgoing tween holds its display lock.");
+            controller.page = Page.First;
+            Assert.IsTrue(go.activeSelf);
+            Assert.AreEqual(enables, CaptureLifecycleWitness.enables, "Replacing the outgoing tween must not disable and re-enable the target.");
+            controller.page = Page.Second;
+            var deadline = Time.realtimeSinceStartup + 5;
+            while (go.activeSelf && Time.realtimeSinceStartup < deadline)
+                yield return null;
+            Assert.IsFalse(go.activeSelf, "The final outgoing tween still releases visibility normally.");
+        }
+
         [Serializable]
         private sealed class RecordGear : Gear<Page>
         {
