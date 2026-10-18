@@ -744,6 +744,7 @@ namespace OpenFairy.UGUI.Editor.Schema
 
     public class Extension
     {
+        [XmlAttribute("url")] public string Url;
         [XmlAttribute("controllers")] public string Controllers;
         [XmlAttribute("title")] public string Title;
         [XmlAttribute("prompt")] public string Prompt;

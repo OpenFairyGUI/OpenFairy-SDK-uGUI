@@ -131,14 +131,11 @@ namespace OpenFairy.UGUI.Editor
                     view.names.Add(Field(controller.Name));
                     view.names.Add(ControllerEnumName(controller.Name));
                 }
-                var published = new HashSet<string>();
-                foreach (var controller in resource.ComponentXml.Controllers) published.Add(Field(controller.Name));
-                foreach (var element in resource.ComponentXml.DisplayList)
+                foreach (var (element, field) in PublishedChildFields(resource.ComponentXml))
                 {
-                    view.names.Add(Field(element.Name));
-                    if (CodeSettings().ignoreNoname && System.Text.RegularExpressions.Regex.IsMatch(element.Name ?? "", @"\An[0-9]+\z")) continue;
-                    if (FieldType(element, resource.PackageId) != null && published.Add(Field(element.Name)))
-                        view.published.Add(element.Id, Field(element.Name));
+                    view.names.Add(field);
+                    if (FieldType(element, resource.PackageId) != null)
+                        view.published.Add(element.Id, field);
                 }
                 foreach (var transition in resource.ComponentXml.Transitions) view.names.Add(TransitionField(transition.Name));
                 LocalViews.Add(resource, view);
@@ -396,6 +393,7 @@ namespace OpenFairy.UGUI.Editor
         {
             if (attribute == null) return;
             var family = path[path.Length - 1].target.families.Find(value => value.caption);
+            if (family == null) return;
             var row = OverrideRow(owner, path, family);
             var source = Array.Find(row.choices, choice => choice.member == member);
             // An input may have no authored prompt; the override still owns the native placeholder.
@@ -630,6 +628,7 @@ namespace OpenFairy.UGUI.Editor
                             var placeholder = NewChild("placeholder", (RectTransform)go.transform, typeof(TextField));
                             StretchFull((RectTransform)placeholder.transform);
                             var text = placeholder.GetComponent<TextField>();
+                            text.font = input.textComponent.font;
                             text.fontSize = input.textComponent.fontSize;
                             text.alignment = input.textComponent.alignment;
                             text.ubb = true;

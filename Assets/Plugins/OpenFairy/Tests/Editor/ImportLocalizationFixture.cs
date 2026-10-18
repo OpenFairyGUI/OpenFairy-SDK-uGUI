@@ -25,10 +25,10 @@ namespace OpenFairy.UGUI.Tests
             _translations.SetValue(null, Array.Empty<FairyTranslations>());
         }
 
-        internal void Prepare(object resource)
+        internal void Prepare(params object[] entries)
         {
-            var resources = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(resource.GetType()));
-            resources.Add(resource);
+            var resources = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(entries[0].GetType()));
+            foreach (var resource in entries) resources.Add(resource);
             Migrator.GetMethod("BuildLocalizationPlans", PrivateStatic).Invoke(null, new object[] { resources });
         }
 

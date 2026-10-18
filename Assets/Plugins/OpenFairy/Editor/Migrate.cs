@@ -32,8 +32,8 @@ namespace OpenFairy.UGUI.Editor
 
     public static partial class Migrate
     {
-        private const string UiRoot = "UIProject";
-        private static readonly string OutputRoot = $"Assets/{Path.GetFileName(UiRoot)}";
+        private static string UiRoot => MigrationSettings.instance.sourceDirectory;
+        private static string OutputRoot => MigrationSettings.instance.outputDirectory;
         private const string Pending = "OpenFairy.Migrate.Pending";
 
         private class Resource
@@ -79,6 +79,7 @@ namespace OpenFairy.UGUI.Editor
         private static readonly Dictionary<string, Resource> Resources = new();
         private static readonly Dictionary<Resource, MovieClipData> MovieClips = new();
         private static readonly Dictionary<Resource, BitmapFont> FontAssets = new();
+        private static readonly Dictionary<Resource, Font> DynamicFonts = new();
         private static readonly Dictionary<Resource, AudioClip> Sounds = new();
         private static readonly Dictionary<string, GameObject> Prefabs = new();
         private static CommonSettings _settings;
@@ -91,10 +92,10 @@ namespace OpenFairy.UGUI.Editor
             Resources.Clear();
             MovieClips.Clear();
             FontAssets.Clear();
+            DynamicFonts.Clear();
             Sounds.Clear();
             Prefabs.Clear();
-            foreach (var package in Directory.EnumerateFiles($"{UiRoot}/assets", "package.xml", SearchOption.AllDirectories))
-                IndexPackage(package.Replace('\\', '/'));
+            IndexSources();
 
             _settings = null;
             _codeGenerationSettings = null;
@@ -107,22 +108,32 @@ namespace OpenFairy.UGUI.Editor
                 Collect(Resolve(Settings().tipsRes, null), components, images);
             // 默认滚动条是运行时 UIConfig 注入，任何 displayList 都不引用它，必须显式补建。
             foreach (var bar in new[] { Settings().scrollBars?.vertical, Settings().scrollBars?.horizontal })
-                if (!string.IsNullOrEmpty(bar) && TryResolve(bar, null, out var barRes))
+                if (TryResolveScrollBar(bar, out var barRes))
                     Collect(barRes, components, images);
             // 导出所有 exported 组件；
             // Collect 会按依赖顺序把它们引用到的（可能未导出、可能跨包的）组件一并带出。
-            foreach (var entry in Resources.Values.AsValueEnumerable().Where(r => r.Type == Schema.ResourceKind.Component && r.Exported).ToArray())
+            foreach (var entry in Resources.Values.AsValueEnumerable().Where(r => r.Type == Schema.ResourceKind.Component
+                && r.Exported && WithinAssets(UiRoot, r.File, out _)).ToArray())
                 Collect(entry, components, images);
 
             foreach (var image in images)
                 ImportImage(image);
+            if (!string.IsNullOrEmpty(Settings().font) && TryResolve(Settings().font, null, out var defaultFont)
+                && defaultFont.Type == Schema.ResourceKind.Font)
+            {
+                if (defaultFont.File.EndsWith(".fnt", StringComparison.OrdinalIgnoreCase)) ImportFont(defaultFont);
+                else ImportDynamicFont(defaultFont);
+            }
             // 字体/声音也提前导入：构建 prefab 中途导入资产会触发批量重载，把已赋值的引用打成 null
             foreach (var component in components)
                 foreach (Match match in RuntimeResourceReferences(component.File))
                     if (TryResolve(match.Value, component.PackageId, out var dep))
                     {
                         if (dep.Type == Schema.ResourceKind.Font)
-                            ImportFont(dep);
+                        {
+                            if (dep.File.EndsWith(".fnt", StringComparison.OrdinalIgnoreCase)) ImportFont(dep);
+                            else ImportDynamicFont(dep);
+                        }
                         else if (dep.Type == Schema.ResourceKind.Sound)
                             ImportSound(dep);
                     }
@@ -207,11 +218,14 @@ namespace OpenFairy.UGUI.Editor
                 }
                 if (child.DefaultItem is { } defaultItem && TryResolve(defaultItem, component.PackageId, out var item))
                     Collect(item, components, images);
+                foreach (var entry in child.Items)
+                    if (entry.Url is { } itemUrl && TryResolve(itemUrl, component.PackageId, out var itemResource))
+                        Collect(itemResource, components, images);
                 foreach (var uri in child.ScrollBarRes ?? Array.Empty<string>())
-                    if (TryResolve(uri, component.PackageId, out var bar)) Collect(bar, components, images);
+                    if (TryResolveScrollBar(uri, out var bar)) Collect(bar, components, images);
             }
             foreach (var uri in xml.ScrollBarRes ?? Array.Empty<string>())
-                if (TryResolve(uri, component.PackageId, out var bar)) Collect(bar, components, images);
+                if (TryResolveScrollBar(uri, out var bar)) Collect(bar, components, images);
             // ComboBox 的 dropdown 组件只在根 <ComboBox dropdown> 属性引用（displayList 里没有），单独跟随。
             if (xml.ComboBox?.Dropdown is { } dropdown
                 && TryResolve(dropdown, component.PackageId, out var dropdownRes) && dropdownRes.Type == Schema.ResourceKind.Component)
@@ -460,15 +474,11 @@ namespace OpenFairy.UGUI.Editor
                 fields.Add("        }");
             }
 
-            foreach (var child in xml.DisplayList)
+            foreach (var (child, field) in PublishedChildFields(xml))
             {
-                // 仅忽略 n + ASCII 数字；title、icon 等控件约定名称仍生成字段。
-                if (CodeSettings().ignoreNoname && Regex.IsMatch(child.Name ?? "", @"\An[0-9]+\z"))
-                    continue;
-                var fieldName = Identifier(child.Name);
                 var fieldType = FieldType(child, component.PackageId);
-                if (fieldType != null && used.Add(Field(fieldName)))
-                    fields.Add($"        public {fieldType} {Field(fieldName)};");
+                if (fieldType != null)
+                    fields.Add($"        public {fieldType} {field};");
             }
 
             foreach (var transition in xml.Transitions)
@@ -806,8 +816,8 @@ namespace OpenFairy.UGUI.Editor
                     SetupScrollBar(root, children);
 
                 var byName = new Dictionary<string, GameObject>();
-                foreach (var (element, go) in children)
-                    byName.TryAdd(Field(element.Name), go);
+                foreach (var (element, field) in PublishedChildFields(xml))
+                    byName.Add(field, children.AsValueEnumerable().First(child => child.Xml == element).Go);
 
                 foreach (var field in comp.GetType().GetFields())
                 {
@@ -1852,8 +1862,8 @@ namespace OpenFairy.UGUI.Editor
             if (element.Overflow == Schema.Overflow.Hidden)
                 go.AddComponent<RectMask2D>();
             var size = (Vector2)element.Size;
-            var prefab = LoadPrefab(Resolve(element.DefaultItem, owner.PackageId));
-            var itemSize = ((RectTransform)prefab.transform).sizeDelta;
+            var prefab = element.DefaultItem != null ? LoadPrefab(Resolve(element.DefaultItem, owner.PackageId)) : null;
+            var itemSize = prefab != null ? ((RectTransform)prefab.transform).rect.size : Vector2.zero;
             var lineGap = element.LineGap;
             var colGap = element.ColGap;
             var layout = element.Layout;
@@ -1885,51 +1895,70 @@ namespace OpenFairy.UGUI.Editor
             source.scrollPane = view.Pane;
             if (view.Pane != null) view.Pane.source = source;
 
-            var positions = new List<Vector2>();
-            float x = 0, y = 0;
-            foreach (var _ in element.Items)
+            var variants = new List<GameObject>();
+            var content = Vector2.zero;
+            float x = 0, y = 0, lineExtent = 0;
+            var lineCount = 0;
+            foreach (var item in element.Items)
+            {
+                var resource = Resolve(item.Url ?? element.DefaultItem, owner.PackageId);
+                var itemPrefab = LoadPrefab(resource);
+                var itemGo = (GameObject)PrefabUtility.InstantiatePrefab(itemPrefab, view.Content);
+                if (itemPrefab != prefab) variants.Add(itemGo);
+                ConfigureButton(itemGo, item, owner.PackageId);
+                ConfigureInstanceControllers(itemGo.GetComponent<Component>(), resource.ComponentXml, item.Controllers);
+                var itemRect = (RectTransform)itemGo.transform;
+                if (element.AutoItemSize && layout == Schema.ListLayout.SingleColumn)
+                    itemRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, viewSize.x);
+                else if (element.AutoItemSize && layout == Schema.ListLayout.SingleRow)
+                    itemRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, viewSize.y);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(itemRect);
+                var actualSize = itemRect.rect.size;
+                Vector2 position;
                 switch (layout)
                 {
                     case Schema.ListLayout.SingleRow:
-                        positions.Add(new Vector2(x, 0));
-                        x += itemSize.x + colGap;
+                        position = new Vector2(x, 0);
+                        x += actualSize.x + colGap;
                         break;
                     case Schema.ListLayout.FlowHorizontal:
                     case Schema.ListLayout.Pagination: // 分页吸附不做：按 flow_hz 排布
-                        if (x != 0 && x + itemSize.x > viewSize.x)
+                        if (lineCount > 0 && (element.LineItemCount > 0
+                            ? lineCount == element.LineItemCount : x + actualSize.x > viewSize.x))
                         {
                             x = 0;
-                            y += itemSize.y + lineGap;
+                            y += lineExtent + lineGap;
+                            lineExtent = 0;
+                            lineCount = 0;
                         }
-                        positions.Add(new Vector2(x, y));
-                        x += itemSize.x + colGap;
+                        position = new Vector2(x, y);
+                        x += actualSize.x + colGap;
+                        lineExtent = Mathf.Max(lineExtent, actualSize.y);
+                        lineCount++;
                         break;
                     case Schema.ListLayout.FlowVertical:
-                        if (y != 0 && y + itemSize.y > viewSize.y)
+                        if (lineCount > 0 && (element.LineItemCount > 0
+                            ? lineCount == element.LineItemCount : y + actualSize.y > viewSize.y))
                         {
                             y = 0;
-                            x += itemSize.x + colGap;
+                            x += lineExtent + colGap;
+                            lineExtent = 0;
+                            lineCount = 0;
                         }
-                        positions.Add(new Vector2(x, y));
-                        y += itemSize.y + lineGap;
+                        position = new Vector2(x, y);
+                        y += actualSize.y + lineGap;
+                        lineExtent = Mathf.Max(lineExtent, actualSize.x);
+                        lineCount++;
                         break;
                     default: // SingleColumn
-                        positions.Add(new Vector2(0, y));
-                        y += itemSize.y + lineGap;
+                        position = new Vector2(0, y);
+                        y += actualSize.y + lineGap;
                         break;
                 }
-
-            var content = Vector2.zero;
-            var index = 0;
-            foreach (var item in element.Items)
-            {
-                var position = positions[index++];
-                content = Vector2.Max(content, position + itemSize);
-                var itemGo = (GameObject)PrefabUtility.InstantiatePrefab(prefab, view.Content);
-                ((RectTransform)itemGo.transform).anchoredPosition = new Vector2(position.x, -position.y);
-                ConfigureButton(itemGo, item, owner.PackageId);
-                ConfigureInstanceControllers(itemGo.GetComponent<Component>(), Resolve(element.DefaultItem, owner.PackageId).ComponentXml, item.Controllers);
+                content = Vector2.Max(content, position + actualSize);
+                itemRect.anchoredPosition = new Vector2(position.x, -position.y);
             }
+            source.variantItems = variants.ToArray();
             SetGrips(view, content);
             ListLayoutBuilder.Configure(source);
             if (element.SelectionMode != ListSelectionMode.None)
@@ -1939,9 +1968,17 @@ namespace OpenFairy.UGUI.Editor
         // 默认滚动条来自 Common.json 的 ui:// 引用；未配置则返回 null，viewport 退化为满宽。
         private static GameObject InstantiateScrollBar(string uiRef, Transform parent)
         {
-            if (string.IsNullOrEmpty(uiRef) || !TryResolve(uiRef, null, out var resource))
+            if (!TryResolveScrollBar(uiRef, out var resource))
                 return null;
             return (GameObject)PrefabUtility.InstantiatePrefab(LoadPrefab(resource), parent);
+        }
+
+        private static bool TryResolveScrollBar(string uiRef, out Resource resource)
+        {
+            resource = null;
+            return !string.IsNullOrEmpty(uiRef) && TryResolve(uiRef, null, out resource)
+                && resource.Type == Schema.ResourceKind.Component
+                && resource.ComponentXml.Extension == Schema.ComponentExtension.ScrollBar;
         }
 
         private static GameObject LoadPrefab(Resource component)
@@ -2291,6 +2328,8 @@ namespace OpenFairy.UGUI.Editor
         // 空文本静置时页面显示的正是 placeholder，故静态 golden 不受影响。
         private static void ConfigureInput(GameObject go, TextField display, Schema.Display element)
         {
+            var font = display.font;
+            var fontNames = display.fontNames;
             var fontSize = display.fontSize;
             var color = display.color;
             var alignment = display.alignment;
@@ -2309,7 +2348,7 @@ namespace OpenFairy.UGUI.Editor
 
             var textGo = NewChild("Text", (RectTransform)go.transform, typeof(UnityEngine.UI.Text));
             var text = textGo.GetComponent<UnityEngine.UI.Text>();
-            text.font = UnityEngine.Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); // 可序列化的内置字体（Resources 名与本类字段冲突，需全限定）
+            text.font = font;
             text.fontSize = fontSize;
             text.color = color;
             text.alignment = alignment;
@@ -2322,6 +2361,8 @@ namespace OpenFairy.UGUI.Editor
             {
                 var phGo = NewChild("placeholder", (RectTransform)go.transform, typeof(TextField));
                 var ph = phGo.GetComponent<TextField>();
+                ph.font = font;
+                ph.fontNames = fontNames;
                 ph.fontSize = fontSize;
                 ph.alignment = alignment;
                 ph.ubb = true;
@@ -2567,20 +2608,33 @@ namespace OpenFairy.UGUI.Editor
                 (_, Schema.Align.Right) => TextAnchor.UpperRight,
                 _ => TextAnchor.UpperLeft,
             };
-            if (element.Font is { } font)
+            if ((element.Font ?? Settings().font) is { } font)
             {
-                // 只有 .fnt 是位图字体；ttf/otf 资源（如 TextMeshPro 包的 SDF 字体）按字体名当动态字体。
+                // 位图字体与原生动态字体都在导入期保存直接引用。
                 if (TryResolve(font, owner.PackageId, out var fontResource) && fontResource.Type == Schema.ResourceKind.Font)
                     if (fontResource.File.EndsWith(".fnt"))
                         text.bitmapFont = ImportFont(fontResource);
                     else
+                    {
                         text.fontNames = Path.GetFileNameWithoutExtension(fontResource.File);
+                        text.font = ImportDynamicFont(fontResource);
+                    }
                 else
                     text.fontNames = font;
             }
             // 运行时字体也烘定：通用工程无需业务胶水设 TextField.defaultFont 静态量。
             if (text.bitmapFont == null && string.IsNullOrEmpty(text.fontNames))
                 text.fontNames = TextField.defaultFont;
+        }
+
+        private static Font ImportDynamicFont(Resource resource)
+        {
+            if (DynamicFonts.TryGetValue(resource, out var font))
+                return font;
+            var target = AssetPath(resource.File);
+            if (WriteFileIfChanged(target, File.ReadAllBytes(resource.File)) || AssetImporter.GetAtPath(target) == null)
+                AssetDatabase.ImportAsset(target);
+            return DynamicFonts[resource] = AssetDatabase.LoadAssetAtPath<Font>(target);
         }
 
         // 解析 FairyGUI 编辑器工程里的 .fnt：标准 BMFont（atlas 坐标 + texture 属性指向图集）
@@ -2805,19 +2859,62 @@ namespace OpenFairy.UGUI.Editor
             return SerializedBaseFields.Contains(field) ? field + "_" : field;
         }
 
+        private static IEnumerable<(Schema.Display Element, string Field)> PublishedChildFields(Schema.Component xml)
+        {
+            var used = new HashSet<string>();
+            foreach (var controller in xml.Controllers) used.Add(Field(controller.Name));
+            foreach (var transition in xml.Transitions) used.Add(TransitionField(transition.Name));
+            var authored = new HashSet<string>();
+            foreach (var child in xml.DisplayList)
+            {
+                if (CodeSettings().ignoreNoname && Regex.IsMatch(child.Name ?? "", @"\An[0-9]+\z")) continue;
+                var name = Field(child.Name);
+                if (!authored.Add(name)) continue;
+                var field = name;
+                for (var index = 2; !used.Add(field); index++) field = $"{name}_{index}";
+                yield return (child, field);
+            }
+        }
+
         // 空成员前缀时，控制器字段与内嵌枚举不能同名。
         private static string ControllerEnumName(string name) =>
             Field(name) == Identifier(name) ? Identifier(name) + "Pages" : Identifier(name);
 
-        private static string AssetPath(string file) =>
-            $"{OutputRoot}/Assets/{Path.GetRelativePath($"{UiRoot}/assets", file).Replace('\\', '/')}";
+        private static IEnumerable<string> SourceRoots()
+        {
+            yield return UiRoot;
+            foreach (var root in MigrationSettings.instance.dependencyDirectories) yield return root;
+        }
+
+        private static void IndexSources()
+        {
+            Resources.Clear();
+            foreach (var root in SourceRoots())
+                foreach (var path in Directory.EnumerateFiles($"{root}/assets", "package.xml", SearchOption.AllDirectories))
+                    IndexPackage(path.Replace('\\', '/'));
+        }
+
+        private static bool WithinAssets(string root, string file, out string relative)
+        {
+            relative = Path.GetRelativePath($"{root}/assets", file).Replace('\\', '/');
+            return relative != ".." && !relative.StartsWith("../", StringComparison.Ordinal) && !Path.IsPathRooted(relative);
+        }
+
+        private static string SourceRelativePath(string file)
+        {
+            foreach (var root in SourceRoots())
+                if (WithinAssets(root, file, out var relative)) return relative;
+            throw new InvalidOperationException($"Resource '{file}' is outside the configured source directories.");
+        }
+
+        private static string AssetPath(string file) => $"{OutputRoot}/Assets/{SourceRelativePath(file)}";
 
         private static string SpritePath(Resource resource) =>
             resource.Type == Schema.ResourceKind.MovieClip ? FramePath(AssetPath(resource.File), 0) : AssetPath(resource.File);
 
         private static string ScriptPath(Resource component)
         {
-            var relativePath = Path.GetRelativePath($"{UiRoot}/assets", component.File);
+            var relativePath = SourceRelativePath(component.File);
             var name = ClassName(component);
             return $"{OutputRoot}/Scripts/{Path.GetDirectoryName(relativePath)}/{name}.cs".Replace('\\', '/');
         }
@@ -2856,12 +2953,14 @@ namespace OpenFairy.UGUI.Editor
                 ? JsonUtility.FromJson<CommonSettings>(File.ReadAllText($"{UiRoot}/settings/Common.json"))
                 : new CommonSettings();
 
-        // 烘焙字体 = Common.json 的设计期字体首个族名。游戏运行时字体（FairyGUI 的 UIConfig.defaultFont）
-        // 不在工程文件里，由用户脚本在实例化后按 fontNames 遍历替换（见 Assets/Scripts 的 DemoFont）。
+        // Common.json 支持字体资源 URL，也保留系统字体族名。
         private static string DefaultFont()
         {
             var designFont = Settings().font;
-            return string.IsNullOrEmpty(designFont) ? "Arial" : designFont.Split(',')[0].Trim();
+            if (string.IsNullOrEmpty(designFont)) return "Arial";
+            if (TryResolve(designFont, null, out var resource) && resource.Type == Schema.ResourceKind.Font)
+                return Path.GetFileNameWithoutExtension(resource.File);
+            return designFont.Split(',')[0].Trim();
         }
 
         // 缺省值硬编码自 FairyGUI 新建工程的 settings/Common.json（Common.json 允许不存在）。

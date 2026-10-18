@@ -15,7 +15,7 @@
         "url": "https://github.com/nanamicat"
     },
     "dependencies": {
-        "com.unity.inputsystem": "6.7.0",
+        "com.unity.inputsystem": "1.19.0",
         "com.unity.ugui": "2.0.0",
         "com.unity.splines": "2.8.4",
         "com.unity.mathematics": "1.2.6"

@@ -10,6 +10,7 @@ namespace OpenFairy.UGUI
     {
         internal const string PoolName = "__listPool";
         public GameObject itemPrefab;
+        [SerializeField] internal GameObject[] variantItems = Array.Empty<GameObject>();
         public Vector2 itemSize;
         public float lineGap;
         public float colGap;
@@ -500,6 +501,12 @@ namespace OpenFairy.UGUI
                 var child = content.GetChild(i);
                 if (child.name != PoolName)
                 {
+                    if (Array.IndexOf(variantItems, child.gameObject) >= 0)
+                    {
+                        child.gameObject.SetActive(false);
+                        child.SetParent(PoolRoot, false);
+                        continue;
+                    }
                     EnsurePool();
                     _pool.Release(child.gameObject);
                 }
