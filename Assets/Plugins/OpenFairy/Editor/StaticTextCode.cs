@@ -29,17 +29,17 @@ namespace OpenFairy.UGUI.Editor
             var code = new StringBuilder();
             var hasInput = false;
             foreach (var choice in choices) hasInput |= choice.initialOnly;
-            code.AppendLine("[System.Serializable]")
+            code.AppendLine("[global::System.Serializable]")
                 .Append("public sealed class ").Append(name).AppendLine("Texts\n{");
             foreach (var choice in choices)
-                code.Append("    public ").Append(variables.Length > 0 ? "OpenFairy.UGUI.TextTemplate " : "string ").Append(choice.member).AppendLine(";");
+                code.Append("    public ").Append(variables.Length > 0 ? "global::OpenFairy.UGUI.TextTemplate " : "string ").Append(choice.member).AppendLine(";");
             code.AppendLine("}")
-                .Append("[UnityEngine.SerializeField] private ").Append(name).Append("Texts _").Append(name).AppendLine("Texts = null;");
+                .Append("[global::UnityEngine.SerializeField] private ").Append(name).Append("Texts _").Append(name).AppendLine("Texts = null;");
             if (variables.Length > 0)
             {
-                code.Append("private readonly OpenFairy.UGUI.TextTemplateState _").Append(name).Append("Variables = new(").Append(variables.Length).AppendLine(");");
+                code.Append("private readonly global::OpenFairy.UGUI.TextTemplateState _").Append(name).Append("Variables = new(").Append(variables.Length).AppendLine(");");
                 code.Append("public enum ").Append(name).AppendLine("Variable\n{");
-                var used = new HashSet<string>(StringComparer.Ordinal);
+                var used = new HashSet<string>(StringComparer.Ordinal) { "value__" };
                 foreach (var variable in variables)
                 {
                     var member = identifier(variable);

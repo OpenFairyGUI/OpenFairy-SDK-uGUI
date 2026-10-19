@@ -1,6 +1,6 @@
 namespace OpenFairyTextFixtures.Localization
 {
-public sealed class LocaleTable : UnityEngine.ScriptableObject
+public sealed class LocaleTable : global::UnityEngine.ScriptableObject
 {
     public global::OpenFairyTextFixtures.NativeTextFixture.NativeTextButton.LocalizedTexts NativeTextFixture_NativeTextButton;
     public global::OpenFairyTextFixtures.NativeTextFixture.NativeTextInput.LocalizedTexts NativeTextFixture_NativeTextInput;

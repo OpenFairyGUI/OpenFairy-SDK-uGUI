@@ -103,7 +103,7 @@ namespace OpenFairy.UGUI.Editor
             if (text == null)
                 throw new InvalidOperationException($"Authored text '{element.Id}' is missing from '{prefab.name}'.");
             string field = null;
-            foreach (var binding in PublishedChildFields(xml))
+            foreach (var binding in PublishedChildFields(xml, prefab.GetComponent<Component>().GetType().Name))
                 if (binding.Element == element) field = binding.Field;
             if (field != null)
             {

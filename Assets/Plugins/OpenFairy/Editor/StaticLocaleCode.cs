@@ -20,7 +20,7 @@ namespace OpenFairy.UGUI.Editor
         {
             var code = new StringBuilder();
             code.Append("namespace ").Append(namespaceName).AppendLine("\n{")
-                .Append("public sealed class ").Append(className).AppendLine(" : UnityEngine.ScriptableObject\n{");
+                .Append("public sealed class ").Append(className).AppendLine(" : global::UnityEngine.ScriptableObject\n{");
             foreach (var field in fields)
                 code.Append("    public ").Append(field.type).Append(' ').Append(field.member).AppendLine(";");
             return code.AppendLine("}\n}").ToString();
@@ -30,12 +30,12 @@ namespace OpenFairy.UGUI.Editor
         {
             var code = new StringBuilder();
             code.Append("namespace ").Append(namespaceName).AppendLine("\n{")
-                .Append("public sealed class ").Append(className).AppendLine(" : UnityEngine.ScriptableObject\n{")
+                .Append("public sealed class ").Append(className).AppendLine(" : global::UnityEngine.ScriptableObject\n{")
                 .AppendLine("    public enum Language\n    {");
             foreach (var language in languages)
                 code.Append("        ").Append(language).AppendLine(",");
             return code.AppendLine("    }")
-                .Append("    [UnityEngine.SerializeField] private ").Append(tableType).Append("[] tables = new ").Append(tableType).Append('[').Append(languages.Length).AppendLine("];")
+                .Append("    [global::UnityEngine.SerializeField] private ").Append(tableType).Append("[] tables = new ").Append(tableType).Append('[').Append(languages.Length).AppendLine("];")
                 .Append("    public ").Append(tableType).AppendLine(" Get(Language language) => tables[(int)language];")
                 .AppendLine("}\n}").ToString();
         }

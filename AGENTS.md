@@ -1,10 +1,15 @@
 # AGENTS.md
 
+导入测试必须隔离源、输出和依赖目录并恢复设置，不能扫描或改写消费工程的真实资源。需要保护脚本路径/GUID 的测试使用预先编译的脚本，不在运行中的测试里导入临时 C# 触发意外程序集重载。C# enum 可以保留与类型相同的成员名；只处理实际不支持的标识符与作用域冲突。
+
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
 Builtin TextField 使用自己的字形排版，原生 UI.Text 的 Best Fit 不会驱动该网格；Shrink/Ellipsis 必须走已烘焙的 overflowMode。缩放保留原始 text/fontSize，字体大小 gear、矩形和文本变化重新求解；行内图片保留作者尺寸。RebuildImages 烘焙所有已知图片及直接引用，包含初始被省略的项；运行时只更新位置与显隐，不重建节点。更新 SDK 后重跑 Migrate，不能只改旧 Prefab 的原生 overflow 标志。
 
 新建语言表/集合先填充字段，再调用 CreateAsset；该 API 会立即写初始文件，不能依赖随后反射赋值和更晚的统一 SaveAssets 赶在首次重导之前。首写回归直接强制重导后检查翻译内容，不能只断言内存中的新对象。
+
+
+2026-10-19 代码生成名称已统一到生成期作用域分配：标识符、同作用域去重、控制器页、动效 Hook、本地化及烘焙引用使用同一映射，原作者名称不改。最终 TMP 完整套件在交互 Editor 中为 Editor 215/215、PlayMode 215/215，无失败或跳过；TMP/Builtin 各四程序集另零错误编译。后台缺少渲染帧的失败保留，不能将交互结果外推为 batchmode 已通过。交互首轮另因外部命令请求超时日志为214/215；同版重跑215/215，未改SDK断言。传统 Demo/golden、Builtin 原生整套和 Player 未重跑。
 
 当前能力以状态文档的最新日期为准，下文开发经验保留其历史背景。原 `ScrollPaneHost` 已删除，滚动交互由原生 `ScrollRect`/`Scrollbar` 承担；虚拟列表、循环索引与变高行已实现。输入框已有 Input System 撤销/重做与单行 Tab 实现；虚拟输入测试使用官方 `InputTestFixture` 隔离设备并恢复宿主状态，不能依赖 Editor 窗口焦点。按钮 `grayed` 只决定视觉，触摸/交互是独立通道，不再以灰显一律拦截点击。
 
@@ -14,7 +19,7 @@ Builtin TextField 使用自己的字形排版，原生 UI.Text 的 Best Fit 不�
 
 对象捕获/模糊/容器颜色滤镜保留显式同步刷新，Play 自动刷新使用 `Application.onBeforeRender`，晚于关系的 `PostLateUpdate` 同步，不能改回普通 `LateUpdate` 或 `willRenderCanvases` 捕获。最外层滤镜负责内层逆序刷新。重复无域/场景重载 Play 的测试按当前原生组件重新取得托管支持对象，不能把旧托管包装器里的观察列表当成当前组件；这一测试已通过，无需为夹具引用问题改生产生命周期。
 
-当前 TMP 包内测试在 Unity Editor/Mono 的实际结果为 Editor **199/199**、PlayMode **199/199**，对应同一正式源码的完整两套运行，均无跳过或失败。TMP/Builtin 两后端各四个程序集另有离线零错误编译；Builtin 不据此视为原生行为通过。灰显、原生 SingleRow 布局/滚动查询、Hidden 列表裁剪、fitter 关系初态、共享 Transition 声音及十三种混合捕获均有回归。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
+较早 TMP 包内测试在 Unity Editor/Mono 的实际结果为 Editor **199/199**、PlayMode **199/199**，对应同一正式源码的完整两套运行，均无跳过或失败。TMP/Builtin 两后端各四个程序集另有离线零错误编译；Builtin 不据此视为原生行为通过。灰显、原生 SingleRow 布局/滚动查询、Hidden 列表裁剪、fitter 关系初态、共享 Transition 声音及十三种混合捕获均有回归。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
 
 静态文本与本地化由普通导出器生成 typed 方法、直接原生引用和语言资产；按钮 selected icon、声音和实例控制器覆盖在导入期烘焙。位图字体同域重导会失效查找缓存。Canvas overlay 使用 native anchors；非 Canvas 的兄弟 overlay 复制 anchors/pivot/rect/pose，并在 `LateUpdate` 检查矩形和变换矩阵变化，公开坐标仍从左上起算。
 
@@ -22,7 +27,7 @@ Builtin TextField 使用自己的字形排版，原生 UI.Text 的 Best Fit 不�
 
 原生 Window/popup 已采用组件与预烘焙 WindowBuilder，关闭等待 Transition、重开取消旧 session，外点由显式选择的 PopupInputModule 在原生派发前检查，不用透明拦截层重发事件。Root 必须继承设计根的 layer；两种相机模式的真实 GPU 对照已确认差异，永久回归通过。十项 popup 首轮失败来自夹具向不接受 null 的 EventSystem.current 赋空；清理仅恢复已有宿主，未给生产逻辑加兜底。
 
-Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事件整体缩放，不运行时解析 URL。image/movie/empty/content 切换与 mask/alpha GPU 检查通过。六项几何测试首轮把 height=60、pivot.y=.7 的顶边写成42，实际应为18；仅修独立测试数值。当前199/199包含所有新增包内回归，不与历史总数累加，消费端和完整Demo/golden仍须单独验证。
+Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事件整体缩放，不运行时解析 URL。image/movie/empty/content 切换与 mask/alpha GPU 检查通过。六项几何测试首轮把 height=60、pivot.y=.7 的顶边写成42，实际应为18；仅修独立测试数值。上述199/199检查点包含所有新增包内回归，不与历史总数累加，消费端和完整Demo/golden仍须单独验证。
 
 整根 Overlay Canvas 停启保留已有 Relation 基线，避免 CanvasScaler 恢复期间的临时尺寸被重复累计；隐藏期间真实父尺寸和内容变化仍在恢复后同步。原生锚点只消化 anchor span 对应的尺寸差，fitter 自身改宽仍保持对齐。新增三项真实 prefab/Canvas 回归覆盖原生父缩放、同帧和隔帧内容变化及三种水平 pivot。
 
@@ -188,8 +193,8 @@ AI 操作流程：
 - gearSize 值兼容老格式 `"w,h"`（无 scale 分量时回退 default 的 scale，复刻 GearSize.Init）。
 - 2026-07-15 起 `UIProject/` 含 FairyGUI 官方 demo 全部 30+ 包，Migrate 全量 199 个组件成功；parity 测试仍只覆盖 Basics/Transition。
 
-**已知 codegen 约束（无法自动消解，命名时避免）**
-同一包内两个组件/控制器名若仅差标点或大小写折叠后相同（`Panel-A` 与 `Panel A`、`2p` 与 `_2p`），会折叠成同一 C# 标识符 → 重复类/枚举编译冲突。这是静态强类型 codegen 的固有边界；FairyGUI 工程里避免用仅靠标点区分的同名组件/控制器。
+**生成式名称的冲突分配**
+不同作者名转义为相同标识符时，由导出器在对应作用域分配唯一名称，保留所有对象及直接引用。C# 允许 enum 与成员同名，不为此追加后缀；仍避开保留的 value__。完整索引相同的源和依赖包后生成脚本，并在编译完成后重烘相应 prefab 和语言资产。
 
 **踩坑：别给烘焙的 scrollbar grip AddComponent 一个 `Graphic`**
 给已有 CanvasRenderer 的 grip 再加 `Graphic` 子类（当时想做无图形 grip 的射线面）会破坏 grip 的 CanvasRenderer 状态，`MainNavigation` 里 Main 页含滚动列表 → 整页场景污染 → 14 个导航 case 连锁失败。结论：`ScrollBarGrip.Bind` 只接**已带 `Graphic`** 的 grip（烘焙的可见 grip 都带 Image），绝不 AddComponent。改 runtime 交互后必跑 `Run PlayMode Tests`。

@@ -65,7 +65,7 @@ namespace OpenFairy.UGUI.Editor
             public List<object> Actions = new();
             public object Value;
 
-            public string FieldName => Field(Name);
+            public string FieldName;
         }
 
         private class MovieClipData
@@ -175,6 +175,7 @@ namespace OpenFairy.UGUI.Editor
 
         private static void IndexPackage(string packagePath)
         {
+            ClassNames.Clear();
             var package = Schema.Package.Load(packagePath);
             var packageName = Path.GetFileName(Path.GetDirectoryName(packagePath));
 
@@ -417,28 +418,25 @@ namespace OpenFairy.UGUI.Editor
         {
             var xml = component.ComponentXml;
             var name = ClassName(component);
-            var used = new HashSet<string>();
+            var names = new GeneratedMembers(xml, name);
             var fields = new List<string>();
             var controllerBindings = new List<(int Index, string Type, string Field)>();
 
             for (var controllerIndex = 0; controllerIndex < xml.Controllers.Length; controllerIndex++)
             {
                 var controller = xml.Controllers[controllerIndex];
-                var cname = ControllerEnumName(controller.Name);
-                var field = Field(controller.Name);
-                if (used.Add(field))
-                {
-                    fields.Add(EnumDeclaration(cname, xml.Extension));
-                    fields.Add("        {");
-                    foreach (var page in PageMembers(controller))
-                        fields.Add($"            {page.Member},");
-                    fields.Add("        }");
-                    if (controller.Name == "button" && xml.Extension is Schema.ComponentExtension.Button or Schema.ComponentExtension.ComboBox)
-                        fields.Add($"        public ref Controller<{cname}> {field} => ref controller;");
-                    else
-                        fields.Add($"        public Controller<{cname}> {field};");
-                    controllerBindings.Add((controllerIndex, cname, field));
-                }
+                var cname = names.controllerEnums[controller];
+                var field = names.controllerFields[controller];
+                fields.Add(EnumDeclaration(cname, xml.Extension));
+                fields.Add("        {");
+                foreach (var page in PageMembers(controller))
+                    fields.Add($"            {page.Member},");
+                fields.Add("        }");
+                if (controller.Name == "button" && xml.Extension is Schema.ComponentExtension.Button or Schema.ComponentExtension.ComboBox)
+                    fields.Add($"        public ref Controller<{cname}> {field} => ref controller;");
+                else
+                    fields.Add($"        public Controller<{cname}> {field};");
+                controllerBindings.Add((controllerIndex, cname, field));
             }
 
             if (controllerBindings.Count > 0)
@@ -474,7 +472,7 @@ namespace OpenFairy.UGUI.Editor
                 fields.Add("        }");
             }
 
-            foreach (var (child, field) in PublishedChildFields(xml))
+            foreach (var (child, field) in PublishedChildFields(xml, name))
             {
                 var fieldType = FieldType(child, component.PackageId);
                 if (fieldType != null)
@@ -483,29 +481,18 @@ namespace OpenFairy.UGUI.Editor
 
             foreach (var transition in xml.Transitions)
             {
-                var field = TransitionField(transition.Name);
-                fields.Add($"        public OpenFairy.UGUI.Transition {field};");
-                var hooks = new List<(string Name, int Item, bool End)>();
-                var labels = new HashSet<string>();
-                var itemIndex = 0;
-                foreach (var item in TransitionItems(xml, transition))
-                {
-                    if (!string.IsNullOrEmpty(item.Label) && labels.Add(item.Label))
-                        hooks.Add((Identifier(item.Label), itemIndex, false));
-                    if (item.Tween && !string.IsNullOrEmpty(item.EndLabel) && labels.Add(item.EndLabel))
-                        hooks.Add((Identifier(item.EndLabel), itemIndex, true));
-                    itemIndex++;
-                }
-                if (hooks.Count == 0)
-                    continue;
-                var namePrefix = Identifier(transition.Name);
-                fields.Add($"        public enum {namePrefix}Hook {{ {string.Join(", ", hooks.AsValueEnumerable().Select(hook => hook.Name).ToArray())} }}");
-                fields.Add($"        public void Set{namePrefix}Hook({namePrefix}Hook label, System.Action callback)");
+                var field = names.transitionFields[transition];
+                fields.Add($"        public global::OpenFairy.UGUI.Transition {field};");
+                var hooks = TransitionHooks(xml, transition);
+                if (hooks.Count == 0) continue;
+                var hookType = names.hookTypes[transition];
+                fields.Add($"        public enum {hookType} {{ {string.Join(", ", hooks.AsValueEnumerable().Select(hook => hook.Name).ToArray())} }}");
+                fields.Add($"        public void {names.hookMethods[transition]}({hookType} label, global::System.Action callback)");
                 fields.Add("        {");
                 fields.Add("            switch (label)");
                 fields.Add("            {");
                 foreach (var hook in hooks)
-                    fields.Add($"                case {namePrefix}Hook.{hook.Name}: {field}.SetHook({hook.Item}, {(hook.End ? "true" : "false")}, callback); break;");
+                    fields.Add($"                case {hookType}.{hook.Name}: {field}.SetHook({hook.Item}, {(hook.End ? "true" : "false")}, callback); break;");
                 fields.Add("            }");
                 fields.Add("        }");
             }
@@ -519,20 +506,20 @@ namespace OpenFairy.UGUI.Editor
             if (isButtonFamily && buttonController == null)
                 fields.InsertRange(0, new[]
                 {
-                    EnumDeclaration(ControllerEnumName("button"), xml.Extension),
+                    EnumDeclaration(names.buttonEnum, xml.Extension),
                     "        {",
                     "            up,",
                     "        }",
                 });
-            var stateEnum = ControllerEnumName(buttonController?.Name ?? "button");
+            var stateEnum = names.buttonEnum;
             var baseType = xml.Extension switch
             {
-                Schema.ComponentExtension.Button => $"OpenFairy.UGUI.Button<{name}.{stateEnum}>",
-                Schema.ComponentExtension.ComboBox => $"OpenFairy.UGUI.ComboBox<{name}.{stateEnum}>",
-                Schema.ComponentExtension.ProgressBar => "OpenFairy.UGUI.ProgressBar",
-                Schema.ComponentExtension.Slider => "OpenFairy.UGUI.Slider",
-                Schema.ComponentExtension.Label => "OpenFairy.UGUI.Label",
-                _ => "OpenFairy.UGUI.Component",
+                Schema.ComponentExtension.Button => $"global::OpenFairy.UGUI.Button<{name}.{stateEnum}>",
+                Schema.ComponentExtension.ComboBox => $"global::OpenFairy.UGUI.ComboBox<{name}.{stateEnum}>",
+                Schema.ComponentExtension.ProgressBar => "global::OpenFairy.UGUI.ProgressBar",
+                Schema.ComponentExtension.Slider => "global::OpenFairy.UGUI.Slider",
+                Schema.ComponentExtension.Label => "global::OpenFairy.UGUI.Label",
+                _ => "global::OpenFairy.UGUI.Component",
             };
             var code = new StringBuilder();
             if (xml.Controllers.Length > 0)
@@ -617,24 +604,25 @@ namespace OpenFairy.UGUI.Editor
         {
             if (!File.Exists(path))
                 return;
+            // A current component can own the former standalone controller-enum path.
+            if (Resources.Values.AsValueEnumerable().Any(resource => resource.Type == Schema.ResourceKind.Component && ScriptPath(resource) == path))
+                return;
             AssetDatabase.DeleteAsset(path);
             _scriptsChanged = true;
         }
 
         private static string FieldType(Schema.Display child, string packageId) => child.Kind switch
         {
-            Schema.DisplayKind.Image => "UnityEngine.UI.Image",
-            Schema.DisplayKind.Graph when child.Type == Schema.ShapeType.None => "UnityEngine.RectTransform",
-            Schema.DisplayKind.Graph => "OpenFairy.UGUI.Graph",
+            Schema.DisplayKind.Image => "global::UnityEngine.UI.Image",
+            Schema.DisplayKind.Graph when child.Type == Schema.ShapeType.None => "global::UnityEngine.RectTransform",
+            Schema.DisplayKind.Graph => "global::OpenFairy.UGUI.Graph",
             Schema.DisplayKind.Text or Schema.DisplayKind.RichText or Schema.DisplayKind.InputText => TextFieldType(child),
-            Schema.DisplayKind.Loader => "OpenFairy.UGUI.Loader",
+            Schema.DisplayKind.Loader => "global::OpenFairy.UGUI.Loader",
             Schema.DisplayKind.Component when TryResolve(child.Source, packageId, out var dep) =>
-                dep.PackageId == packageId
-                    ? ClassName(dep)
-                    : $"global::{GeneratedNamespace(dep)}.{ClassName(dep)}",
+                $"global::{GeneratedNamespace(dep)}.{ClassName(dep)}",
             Schema.DisplayKind.Component => null,
-            _ when IsMovieClip(child, packageId) => "OpenFairy.UGUI.MovieClip",
-            _ => "UnityEngine.RectTransform",
+            _ when IsMovieClip(child, packageId) => "global::OpenFairy.UGUI.MovieClip",
+            _ => "global::UnityEngine.RectTransform",
         };
 
         private static string TextFieldType(Schema.Display child) =>
@@ -656,18 +644,20 @@ namespace OpenFairy.UGUI.Editor
                     root.AddComponent<RectMask2D>();
 
                 var componentType = FindType($"{GeneratedNamespace(component)}.{ClassName(component)}");
+                var names = new GeneratedMembers(xml, ClassName(component));
                 var comp = (Component)root.AddComponent(componentType);
 
                 var controllers = new Dictionary<string, ControllerData>();
                 foreach (var element in xml.Controllers)
                 {
-                    var name = Identifier(element.Name);
+                    var name = element.Name;
                     var pages = PageMembers(element).AsValueEnumerable().ToArray();
-                    var pageType = componentType.GetNestedType(ControllerEnumName(element.Name));
+                    var pageType = componentType.GetNestedType(names.controllerEnums[element]);
                     controllers[element.Name] = new ControllerData
                     {
                         Index = controllers.Count,
                         Name = name,
+                        FieldName = names.controllerFields[element],
                         PageType = pageType,
                         PageIds = pages.AsValueEnumerable().Select(page => page.Id).ToArray(),
                         Source = element,
@@ -816,7 +806,7 @@ namespace OpenFairy.UGUI.Editor
                     SetupScrollBar(root, children);
 
                 var byName = new Dictionary<string, GameObject>();
-                foreach (var (element, field) in PublishedChildFields(xml))
+                foreach (var (element, field) in PublishedChildFields(xml, ClassName(component)))
                     byName.Add(field, children.AsValueEnumerable().First(child => child.Xml == element).Go);
 
                 foreach (var field in comp.GetType().GetFields())
@@ -829,7 +819,7 @@ namespace OpenFairy.UGUI.Editor
                 }
 
                 foreach (var transition in root.GetComponents<Transition>())
-                    comp.GetType().GetField(TransitionField(transition.transitionName)).SetValue(comp, transition);
+                    comp.GetType().GetField(names.transitionFields[Array.Find(xml.Transitions, item => item.Name == transition.transitionName)]).SetValue(comp, transition);
                 comp.controllerChildren = children.AsValueEnumerable().Select(child => child.Go.GetComponent<Component>())
                     .Where(child => child != null).ToArray();
                 comp.Initialize();
@@ -983,7 +973,7 @@ namespace OpenFairy.UGUI.Editor
             if (go.GetComponent<TextField>() is { } createdText)
                 createdText.RebuildImages(); // 依赖最终 rect 的排版，须在 SetRect 之后烘焙
             ConfigureTextLayout(go, element);
-            ApplyElement(go, element);
+            ApplyElement(go, element, owner);
             if (element.Kind == Schema.DisplayKind.Component)
             {
                 ConfigureInstanceControllers(go.GetComponent<Component>(), Resolve(element.Source, owner.PackageId).ComponentXml, element.Controller);
@@ -1588,7 +1578,7 @@ namespace OpenFairy.UGUI.Editor
                 relation.Sync();
         }
 
-        private static void ApplyElement(GameObject go, Schema.Display element)
+        private static void ApplyElement(GameObject go, Schema.Display element, Resource owner)
         {
             var rt = (RectTransform)go.transform;
             if (element.Rotation is { } rotation)
@@ -1642,7 +1632,9 @@ namespace OpenFairy.UGUI.Editor
             {
                 var button = go.GetComponent<ButtonBase>();
                 // FairyGUI 约定：存在名为 grayed 的控制器时，置灰只切换其页面 1，不套灰度材质。
-                if (button != null && button.GetType().GetField(Field("grayed")) is { } grayedController)
+                var source = element.Kind == Schema.DisplayKind.Component ? Resolve(element.Source, owner.PackageId) : null;
+                var gray = source != null ? Array.Find(source.ComponentXml.Controllers, controller => controller.Name == "grayed") : null;
+                if (button != null && gray != null && button.GetType().GetField(new GeneratedMembers(source.ComponentXml, ClassName(source)).controllerFields[gray]) is { } grayedController)
                 {
                     var controller = grayedController.GetValue(button);
                     var pageProperty = controller.GetType().GetProperty("page");
@@ -2823,16 +2815,9 @@ namespace OpenFairy.UGUI.Editor
 
         private static IEnumerable<(string Id, string Member)> PageMembers(Schema.Controller controller)
         {
-            // 两个页名经 Identifier 折叠后可能相同（如 "my page" 与 "my-page"），去重避免枚举成员重名编译失败。
-            var used = new HashSet<string>();
+            var used = new HashSet<string>(StringComparer.Ordinal) { "value__" };
             foreach (var (id, name) in controller.Pages)
-            {
-                var member = Identifier(name == "" ? id : name);
-                var unique = member;
-                for (var i = 2; !used.Add(unique); i++)
-                    unique = $"{member}_{i}";
-                yield return (id, unique);
-            }
+                yield return (id, UniqueName(used, Identifier(string.IsNullOrEmpty(name) ? id : name)));
         }
 
         private static GameObject NewChild(string name, RectTransform parent, params Type[] components)
@@ -2884,21 +2869,28 @@ namespace OpenFairy.UGUI.Editor
             "private", "protected", "public", "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof", "stackalloc",
             "static", "string", "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
             "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+            "__arglist", "__makeref", "__reftype", "__refvalue",
         };
 
         private static string Identifier(string name)
         {
-            var id = new string((name ?? "").AsValueEnumerable().Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray());
-            return id.Length == 0 || char.IsDigit(id[0]) || Keywords.Contains(id) ? "_" + id : id;
+            static bool Letter(char c) => char.IsLetter(c) || char.GetUnicodeCategory(c) == UnicodeCategory.LetterNumber;
+            static bool Part(char c) => Letter(c) || char.GetUnicodeCategory(c) is UnicodeCategory.DecimalDigitNumber
+                or UnicodeCategory.ConnectorPunctuation or UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark;
+            var id = new string((name ?? "").AsValueEnumerable().Select(c => Part(c) ? c : '_').ToArray());
+            return id.Length == 0 || !Letter(id[0]) && id[0] != '_' || Keywords.Contains(id) ? "_" + id : id;
         }
+
+        private static readonly HashSet<string> CodeTypeNames = new(StringComparer.Ordinal)
+        {
+            "UnityEngine", "OpenFairy", "System", "OpenFairyTextComponent", "OpenFairyInputComponent",
+            "LocalizedTexts", "ApplyLocale", "LocaleTable", "LocaleSet",
+        };
 
         private static string ClassName(Resource component)
         {
-            var name = Identifier(CodeSettings().classNamePrefix + Path.GetFileNameWithoutExtension(component.File));
-            var duplicated = Resources.Values.AsValueEnumerable().Any(other => other.Type == Schema.ResourceKind.Component
-                && other.PackageId == component.PackageId && other.File != component.File
-                && Identifier(CodeSettings().classNamePrefix + Path.GetFileNameWithoutExtension(other.File)) == name);
-            return duplicated ? name + "_" + Identifier(component.Id) : name;
+            PrepareCodeNames(component);
+            return ClassNames[component];
         }
 
         private static readonly HashSet<string> SerializedBaseFields = new(StringComparer.Ordinal)
@@ -2914,22 +2906,8 @@ namespace OpenFairy.UGUI.Editor
             return SerializedBaseFields.Contains(field) ? field + "_" : field;
         }
 
-        private static IEnumerable<(Schema.Display Element, string Field)> PublishedChildFields(Schema.Component xml)
-        {
-            var used = new HashSet<string>();
-            foreach (var controller in xml.Controllers) used.Add(Field(controller.Name));
-            foreach (var transition in xml.Transitions) used.Add(TransitionField(transition.Name));
-            var authored = new HashSet<string>();
-            foreach (var child in xml.DisplayList)
-            {
-                if (CodeSettings().ignoreNoname && Regex.IsMatch(child.Name ?? "", @"\An[0-9]+\z")) continue;
-                var name = Field(child.Name);
-                if (!authored.Add(name)) continue;
-                var field = name;
-                for (var index = 2; !used.Add(field); index++) field = $"{name}_{index}";
-                yield return (child, field);
-            }
-        }
+        private static IEnumerable<(Schema.Display Element, string Field)> PublishedChildFields(Schema.Component xml, string className = "")
+            => new GeneratedMembers(xml, className).children;
 
         // 空成员前缀时，控制器字段与内嵌枚举不能同名。
         private static string ControllerEnumName(string name) =>
@@ -2984,8 +2962,8 @@ namespace OpenFairy.UGUI.Editor
         }
 
         private static string GeneratedNamespace(Resource resource) =>
-            string.IsNullOrEmpty(CodeSettings().packageName) ? Identifier(resource.Package)
-                : string.Join(".", Array.ConvertAll(CodeSettings().packageName.Split('.'), Identifier)) + "." + Identifier(resource.Package);
+            string.IsNullOrEmpty(CodeSettings().packageName) ? PackageName(resource)
+                : string.Join(".", Array.ConvertAll(CodeSettings().packageName.Split('.'), Identifier)) + "." + PackageName(resource);
 
         [Serializable]
         private class PublishSettings

@@ -11,7 +11,7 @@ using OpenFairyInputComponent = OpenFairy.UGUI.TextInput;
 
 namespace OpenFairyTextFixtures.NativeTextFixture
 {
-    public partial class NativeTextButton : OpenFairy.UGUI.Button<NativeTextButton.button>
+    public partial class NativeTextButton : global::OpenFairy.UGUI.Button<NativeTextButton.button>
     {
         public enum button
         {
@@ -47,16 +47,16 @@ namespace OpenFairyTextFixtures.NativeTextFixture
             m_button.Initialize();
         }
         public OpenFairyTextComponent m_title;
-        public UnityEngine.RectTransform m_FirstGroup;
-        public UnityEngine.RectTransform m_SecondGroup;
-[System.Serializable]
+        public global::UnityEngine.RectTransform m_FirstGroup;
+        public global::UnityEngine.RectTransform m_SecondGroup;
+[global::System.Serializable]
 public sealed class LocalizedCaptionTexts
 {
-    public OpenFairy.UGUI.TextTemplate Text;
-    public OpenFairy.UGUI.TextTemplate Selected;
+    public global::OpenFairy.UGUI.TextTemplate Text;
+    public global::OpenFairy.UGUI.TextTemplate Selected;
 }
-[UnityEngine.SerializeField] private LocalizedCaptionTexts _LocalizedCaptionTexts = null;
-private readonly OpenFairy.UGUI.TextTemplateState _LocalizedCaptionVariables = new(2);
+[global::UnityEngine.SerializeField] private LocalizedCaptionTexts _LocalizedCaptionTexts = null;
+private readonly global::OpenFairy.UGUI.TextTemplateState _LocalizedCaptionVariables = new(2);
 public enum LocalizedCaptionVariable
 {
     name,
@@ -76,13 +76,13 @@ public void RefreshLocalizedCaptionText()
     RefreshTitle();
 }
 
-[UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText2 = null;
-[System.Serializable]
+[global::UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText2 = null;
+[global::System.Serializable]
 public sealed class LocalizedCaption_2Texts
 {
     public string Text;
 }
-[UnityEngine.SerializeField] private LocalizedCaption_2Texts _LocalizedCaption_2Texts = null;
+[global::UnityEngine.SerializeField] private LocalizedCaption_2Texts _LocalizedCaption_2Texts = null;
 public void ApplyLocalizedCaption_2Texts(LocalizedCaption_2Texts texts)
 {
     _LocalizedCaption_2Texts = texts;
@@ -93,13 +93,13 @@ public void RefreshLocalizedCaption_2Text()
     _localizedText2.text = _LocalizedCaption_2Texts.Text;
 }
 
-[UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText3 = null;
-[System.Serializable]
+[global::UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText3 = null;
+[global::System.Serializable]
 public sealed class LocalizedCaption_3Texts
 {
     public string Text;
 }
-[UnityEngine.SerializeField] private LocalizedCaption_3Texts _LocalizedCaption_3Texts = null;
+[global::UnityEngine.SerializeField] private LocalizedCaption_3Texts _LocalizedCaption_3Texts = null;
 public void ApplyLocalizedCaption_3Texts(LocalizedCaption_3Texts texts)
 {
     _LocalizedCaption_3Texts = texts;
@@ -110,13 +110,13 @@ public void RefreshLocalizedCaption_3Text()
     _localizedText3.text = _LocalizedCaption_3Texts.Text;
 }
 
-[UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText4 = null;
-[System.Serializable]
+[global::UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText4 = null;
+[global::System.Serializable]
 public sealed class LocalizedCaption_4Texts
 {
     public string Text;
 }
-[UnityEngine.SerializeField] private LocalizedCaption_4Texts _LocalizedCaption_4Texts = null;
+[global::UnityEngine.SerializeField] private LocalizedCaption_4Texts _LocalizedCaption_4Texts = null;
 public void ApplyLocalizedCaption_4Texts(LocalizedCaption_4Texts texts)
 {
     _LocalizedCaption_4Texts = texts;
@@ -127,13 +127,13 @@ public void RefreshLocalizedCaption_4Text()
     _localizedText4.text = _LocalizedCaption_4Texts.Text;
 }
 
-[UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText5 = null;
-[System.Serializable]
+[global::UnityEngine.SerializeField] private OpenFairyTextComponent _localizedText5 = null;
+[global::System.Serializable]
 public sealed class LocalizedCaption_5Texts
 {
     public string Text;
 }
-[UnityEngine.SerializeField] private LocalizedCaption_5Texts _LocalizedCaption_5Texts = null;
+[global::UnityEngine.SerializeField] private LocalizedCaption_5Texts _LocalizedCaption_5Texts = null;
 public void ApplyLocalizedCaption_5Texts(LocalizedCaption_5Texts texts)
 {
     _LocalizedCaption_5Texts = texts;
@@ -144,7 +144,7 @@ public void RefreshLocalizedCaption_5Text()
     _localizedText5.text = _LocalizedCaption_5Texts.Text;
 }
 
-[System.Serializable] public sealed class LocalizedTexts
+[global::System.Serializable] public sealed class LocalizedTexts
 {
 public LocalizedCaptionTexts LocalizedCaption;
 public LocalizedCaption_2Texts LocalizedCaption_2;
