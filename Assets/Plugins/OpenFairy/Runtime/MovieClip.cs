@@ -61,12 +61,14 @@ namespace OpenFairy.UGUI
                 if (frames is { Length: > 0 })
                 {
                     _frame = Mathf.Clamp(value, 0, frames.Length - 1);
-                    sprite = frames[_frame];
+                    SetFrameSprite(frames[_frame]);
                 }
                 else
                     _frame = value;
             }
         }
+
+        protected virtual void SetFrameSprite(Sprite value) => sprite = value;
 
         protected override void OnEnable()
         {

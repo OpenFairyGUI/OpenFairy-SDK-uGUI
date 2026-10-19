@@ -1,0 +1,5 @@
+<component size="180,40" extention="ComboBox">
+ <controller name="button" pages="0,up,1,over"/>
+ <displayList><text id="caption" name="title" xy="0,0" size="180,40" autoSize="none" text="Choice"/></displayList>
+ <ComboBox/>
+</component>

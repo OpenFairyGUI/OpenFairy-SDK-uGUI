@@ -23,6 +23,14 @@
 
 ### 代码生成设置
 
+源目录和输出目录由 `OpenFairy.UGUI.Editor.MigrationSettings.instance` 的
+`sourceDirectory`、`outputDirectory` 指定。调用 `Save()` 后配置保存在
+`ProjectSettings/OpenFairySettings.asset`，域重载与编辑器重启后继续生效。路径相对于 Unity
+工程根目录解析，默认分别为 `UIProject`、`Assets/UIProject`；源目录可以位于工程外。
+`dependencyDirectories` 可以配置其他 FairyGUI 源工程目录。导入器会索引它们的 `assets/`
+以解析跨包引用，仅随主工程实际依赖导出，不额外导出这些工程的所有入口。输出保留各自的包目录，
+不会因源目录位于工程外而把文件写出输出目录。
+
 `Migrate` 读取 `UIProject/settings/Publish.json` 的 `codeGeneration`：
 
 - `classNamePrefix`：生成类名及脚本文件名的前缀，也用于组件类型引用和 Prefab 绑定。已有 Prefab 对应的生成脚本改名时保留 `.meta` GUID。

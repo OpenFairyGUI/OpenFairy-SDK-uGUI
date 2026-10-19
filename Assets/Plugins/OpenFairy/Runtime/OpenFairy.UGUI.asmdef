@@ -2,6 +2,7 @@
     "name": "OpenFairy.UGUI",
     "rootNamespace": "OpenFairy.UGUI",
     "references": [
+        "Unity.InputSystem",
         "UniTask",
         "ZLinq.Unity",
         "Unity.Splines",

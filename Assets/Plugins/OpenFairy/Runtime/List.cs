@@ -15,10 +15,12 @@ namespace OpenFairy.UGUI
     // 列表结构工具：动态填充入口在 ListSource.Fill（状态与烘焙描述都在 ListSource 上）。
     public static class List
     {
-        // 列表项所在容器：viewport/content（已挂 ScrollPane）或 viewport 或 list 本身。
-        public static RectTransform Container(RectTransform list) =>
-            list.Find("viewport/content") as RectTransform
-            ?? list.Find("viewport") as RectTransform
-            ?? list;
+        public static RectTransform Container(RectTransform list)
+        {
+            if (list.TryGetComponent<ListSource>(out var source) && source.content != null) return source.content;
+            var content = ScrollPane.Attach(list)?.content ?? list;
+            if (source != null) source.content = content;
+            return content;
+        }
     }
 }

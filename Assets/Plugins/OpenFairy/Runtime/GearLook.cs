@@ -41,7 +41,7 @@ namespace OpenFairy.UGUI
             }
             if (_grayedEffect != null)
                 _grayedEffect.enabled = isGrayed;
-            // 传播到按钮：置 grayed → 进 disabled 页并拦截点击（复刻 GButton.HandleGrayedChanged），否则灰显却仍可点。
+            // Visual graying and touchability are independent authored channels.
             if (_button != null)
                 _button.grayed = isGrayed;
         }

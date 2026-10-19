@@ -34,6 +34,12 @@ https://github.com/OpenFairyGUI/OpenFairy-SDK-uGUI.git?path=Assets/Plugins/OpenF
 2. 菜单 `Tools/OpenFairy/Migrate`：转换生成 `Assets/UIProject/Assets/` 下的 prefab/资源和 `Assets/UIProject/Scripts/` 下的 C# 代码。
 3. 把生成的 prefab 挂到你的 Canvas 下即可使用；按钮 tab/单选组、滚动、下拉、窗口拖动等交互已烘焙进 prefab，开箱即用。
 
+源工程与输出位置可通过 `OpenFairy.UGUI.Editor.MigrationSettings.instance` 的
+`sourceDirectory`、`outputDirectory` 配置，再调用 `Save()` 保存到
+`ProjectSettings/OpenFairySettings.asset`。目录相对于 Unity 工程根目录解析，支持位于工程外的
+FairyGUI 源目录；缺省仍为 `UIProject` 和 `Assets/UIProject`。脚本重编译后的自动续建使用同一份配置。
+跨源工程的资源包可加入 `dependencyDirectories`，仅导出主工程引用到的依赖。
+
 ## 全局 TextMeshPro
 
 定义 `FAIRYGUI_TMPRO` 后执行 `Tools/OpenFairy/Migrate`，所有普通文本、富文本和输入框分别使用原生 `TextMeshProUGUI` / `TMP_InputField`，无需在 XML 配置 `tmp="true"`。按钮标题、Label、进度条、滑块、文字/字号 gear 和文字动效使用同一后端；生成字段通过编译宏选择强类型。

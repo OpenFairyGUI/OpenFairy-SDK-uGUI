@@ -24,11 +24,25 @@ namespace OpenFairy.UGUI
     public abstract class ButtonBase : Component
     {
         public UnityEvent onClick = new();
+        public UnityEvent onRightClick = new();
         public UnityEvent onChanged = new(); // 复刻 GButton.onChanged：仅用户点击翻转 Check/Radio 时发
 
         public ButtonMode mode;
         public string selectedTitle;
         public bool changeStateOnClick = true; // 复刻 GButton：列表项交给 ListSelection 管选择时置 false，禁本体自翻 selected
+
+        [SerializeField] internal AudioClip clickSound;
+        [SerializeField] internal float clickSoundVolume = 1;
+        public AudioClip sound { get => clickSound; set => clickSound = value; }
+        public float soundVolumeScale { get => clickSoundVolume; set => clickSoundVolume = value; }
+
+        protected void PlayClickSound()
+        {
+            if (clickSound == null) return;
+            var root = Root.inst;
+            if (root == null) root = Root.Create((RectTransform)GetComponentInParent<Canvas>().rootCanvas.transform);
+            root.soundSource.PlayOneShot(clickSound, clickSoundVolume);
+        }
 
         // 烘焙接线（Migrate 写入），不属用户 API 面。
         [SerializeField] internal TextComponent titleText;
@@ -52,16 +66,41 @@ namespace OpenFairy.UGUI
             }
         }
 
+        [SerializeField] private Sprite _icon;
+        [SerializeField] private Sprite _selectedIcon;
+        [SerializeField] private bool _useSelectedIcon;
+
         public Sprite icon
         {
-            get => iconLoader != null ? iconLoader.sprite : null;
+            get => _icon;
+            set { _icon = value; RefreshIcon(); }
+        }
+
+        public Sprite selectedIcon
+        {
+            get => _selectedIcon;
             set
             {
-                if (iconLoader == null)
-                    return;
-                iconLoader.sprite = value;
-                iconLoader.enabled = value != null;
+                _selectedIcon = value;
+                _useSelectedIcon = value != null;
+                RefreshIcon();
             }
+        }
+
+        // A selected override can intentionally contain no sprite.
+        public bool useSelectedIcon
+        {
+            get => _useSelectedIcon;
+            set { _useSelectedIcon = value; RefreshIcon(); }
+        }
+
+        internal void RefreshIcon()
+        {
+            if (iconLoader == null)
+                return;
+            var sprite = selected && _useSelectedIcon ? _selectedIcon : _icon;
+            iconLoader.sprite = sprite;
+            iconLoader.enabled = sprite != null;
         }
 
         // 复刻 GButton.selected 的 setter：Common 忽略选中态、同值早返回；
@@ -75,6 +114,7 @@ namespace OpenFairy.UGUI
                     return;
                 _selected = value;
                 RefreshState();
+                if (_useSelectedIcon) RefreshIcon();
                 if (HasRelatedController && Application.isPlaying) // 烘焙期选中态由控制器初始页经 GearButton 驱动，不反向写页
                 {
                     if (_selected)
@@ -85,7 +125,7 @@ namespace OpenFairy.UGUI
             }
         }
 
-        // 复刻 GButton.grayed（HandleGrayedChanged）：置灰后进 disabled/selectedDisabled 页并拦截交互（守卫在各 handler 里）。
+        // Graying selects the disabled visual pages; it does not disable pointer input.
         public bool grayed
         {
             get => _grayed;
@@ -152,44 +192,57 @@ namespace OpenFairy.UGUI
 
         private bool _down, _over;
 
-        // grayed 只拦视觉/动作，指针状态照常维护——否则灰显期间移入移出后 _down/_over 残留，恢复时状态画错。
-        public void OnPointerDown(PointerEventData eventData)
+        protected override void OnDisable()
+        {
+            _down = _over = false;
+            base.OnDisable();
+            RefreshState();
+        }
+
+        // Keep pointer state while grayed, including the authored pressed-disabled page.
+        public virtual void OnPointerDown(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left) // 复刻 GButton.__touchBegin：仅左键
                 return;
             _down = true;
-            if (!grayed && mode == ButtonMode.Common) // 仅 Common 按下进 down 态，Check/Radio 按住不变
-                SetState(VisualState.Down);
+            if (mode == ButtonMode.Common)
+                SetState(grayed && StatePages.HasDisabled ? VisualState.SelectedDisabled : VisualState.Down);
         }
 
-        public void OnPointerUp(PointerEventData eventData)
+        public virtual void OnPointerUp(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left)
                 return;
             _down = false;
-            if (!grayed && mode == ButtonMode.Common)
+            if (mode == ButtonMode.Common)
                 RefreshState();
         }
 
-        public void OnPointerEnter(PointerEventData eventData)
+        public virtual void OnPointerEnter(PointerEventData eventData)
         {
             _over = true;
-            if (!grayed && !_down)
+            if (!_down)
                 RefreshState();
         }
 
-        public void OnPointerExit(PointerEventData eventData)
+        public virtual void OnPointerExit(PointerEventData eventData)
         {
             _over = false;
-            if (!grayed && !_down)
+            if (!_down)
                 RefreshState();
         }
 
         // 复刻 GButton.__click：Check/Radio 经 Selected setter 翻选并驱动关联控制器；Common 直接换页。
         public virtual void OnPointerClick(PointerEventData eventData)
         {
-            if (eventData.button != PointerEventData.InputButton.Left || grayed)
+            if (eventData.button == PointerEventData.InputButton.Right)
+            {
+                onRightClick.Invoke();
                 return;
+            }
+            if (eventData.button != PointerEventData.InputButton.Left)
+                return;
+            PlayClickSound();
             if (mode == ButtonMode.Check)
             {
                 if (changeStateOnClick)

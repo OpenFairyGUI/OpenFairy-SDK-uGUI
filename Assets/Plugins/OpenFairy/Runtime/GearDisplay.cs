@@ -31,6 +31,14 @@ namespace OpenFairy.UGUI
         public bool on = true;
 
         [NonSerialized] private int _locks;
+        [NonSerialized] private int _updates;
+
+        internal void BeginUpdate() => _updates++;
+        internal void EndUpdate()
+        {
+            _updates--;
+            UpdateVisible();
+        }
 
         public bool On => on;
         public DisplayCondition Condition => condition;
@@ -57,12 +65,15 @@ namespace OpenFairy.UGUI
 
         private void UpdateVisible()
         {
+            if (_updates != 0)
+                return;
             var visible = partner == null ? on
                 : condition == DisplayCondition.Or || partner.Condition == DisplayCondition.Or ? on || partner.On
                 : on && partner.On;
             if (!visible && _locks > 0)
                 visible = true; // 被 tween 锁住：暂不隐藏，等 tween 结束 ReleaseLock 后再隐藏
-            target.SetActive(visible);
+            if (target.activeSelf != visible)
+                target.SetActive(visible);
         }
     }
 }

@@ -1,0 +1,15 @@
+# Grayed rendering
+
+`Grayed` is a visual toggle. It does not change raycast flags, button selection, click dispatch, or native `Selectable.interactable`.
+
+The importer pre-bakes a `Grayed` reference to the object's existing `ColorAdjust`, promoting it to the existing object-capture path. There is one presentation and one capture lifecycle per object. Component-loader content, native text/SDF materials, dynamically filled lists and nested filter presentations are captured together. The source materials are not replaced with a generic image shader.
+
+The authored brightness/contrast/saturation/hue transform runs first. Graying appends the existing luminance transform, with weights `0.299, 0.587, 0.114`; alpha remains unchanged. A single color matrix and PMA pass perform both transforms. Disabling `Grayed` leaves the authored color filter intact. Disabling the authored `ColorAdjust` leaves an enabled `Grayed` active. `ColorAdjust.Dispose()` disables both and releases the composed effect. `ObjectFilter.isFiltering` reports this effective state; callers using explicit capture should call `Refresh` directly rather than exclude the effect solely because its color component is disabled.
+
+The importer intentionally uses final-subtree capture for all authored gray targets, including images. This avoids maintaining a second material-replacement path and keeps component loaders and text correct. A gray-only object's capture/RT is released when graying is disabled. Objects with an active authored color filter retain its capture. Automatic refresh, nested ordering, source visibility, parent masks and CanvasGroup alpha use the existing ObjectFilter implementation.
+
+Regenerate previously exported prefabs after this change: the old `Grayed.shader` material-replacement field is replaced by direct effect references. Programmatically assembled views should use `ColorFilterBuilder.Configure` and `GrayedBuilder.Configure` during Editor baking. Both the source and presentation must belong to the same prefab. No runtime resource URL lookup or hierarchy wrapping is introduced.
+
+Capture retains the existing ObjectFilter boundaries: source rectangle and a pipeline supporting synchronous StandardRequest, or Built-in Camera.Render. Authored internal BlendModeEffect modes use isolated-group RGBA/coverage semantics; additive emission survives graying. See Documentation~/CaptureBlending.md for the alpha equations and external-backdrop boundary. Arbitrary custom shader adapters are not added. Nested effects and final UI masks remain separate from this toggle. External geometry outside the authored source rectangle needs the existing capture-bounds policy to be considered; this change does not claim expanded visual bounds.
+
+The regression suite contains an actual colored-glyph positive control, a nested color-filter image, dynamic content, parent clipping/alpha, independent color/gray toggles and disable/reactivate/restore cycles. Editor tests serialize and reload direct capture references. These tests require native execution; successful offline compilation alone does not prove their pixels or lifecycle behavior.

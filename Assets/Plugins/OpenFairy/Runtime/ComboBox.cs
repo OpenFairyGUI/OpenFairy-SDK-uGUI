@@ -95,9 +95,13 @@ namespace OpenFairy.UGUI
 
         public override void OnPointerClick(PointerEventData eventData)
         {
-            if (eventData.button != PointerEventData.InputButton.Left || grayed)
+            if (eventData.button != PointerEventData.InputButton.Left)
+            {
+                base.OnPointerClick(eventData);
                 return;
-            // 展开时点按钮外区域由 Root 的透明 blocker 收起（blocker 在按钮之上截获点击），故这里只管展开。
+            }
+            PlayClickSound();
+            // Toggle honors popups closed by the pointer-down phase of this same click.
             RefreshState();
             ShowDropdown().Forget();
         }
@@ -110,6 +114,7 @@ namespace OpenFairy.UGUI
                 Root.Create((RectTransform)GetComponentInParent<Canvas>().rootCanvas.transform);
             if (_itemsChanged && _dropdown != null) // items/values 变过：销毁重建（复刻 _itemsUpdated → RenderDropdownList）
             {
+                Root.inst.HidePopupImmediately(_dropdownRt);
                 Destroy(_dropdown);
                 _dropdown = null;
                 _dropdownRt = null;
@@ -118,12 +123,21 @@ namespace OpenFairy.UGUI
                 Build();
             if (_dropdownRt != null)
             {
-                var closed = Root.inst.ShowPopup(_dropdownRt, (RectTransform)transform, popupDirection);
+                var closed = Root.inst.TogglePopup(_dropdownRt, (RectTransform)transform, popupDirection);
                 SetState(VisualState.Down); // 打开时按钮进 down 态（复刻 GComboBox）
-                await closed;
-                if (this != null)
-                    RefreshState(); // 关闭（含外点）恢复态
+                if (await closed.SuppressCancellationThrow() || this == null) return;
+                RefreshState(); // 关闭（含外点）恢复态
             }
+        }
+
+        protected override void OnDestroy()
+        {
+            if (_dropdown != null)
+            {
+                if (Root.inst != null) Root.inst.HidePopupImmediately(_dropdownRt);
+                Destroy(_dropdown);
+            }
+            base.OnDestroy();
         }
 
         private void Build()
@@ -140,9 +154,8 @@ namespace OpenFairy.UGUI
             // 下拉项点击 + 滚动由 ComboBox 自管，去掉列表自带的选择/自挂滚动接线（否则未超可见数也会挂 ScrollPane）。
             if (list.GetComponent<ListSelection>() is { } listSelection)
                 listSelection.enabled = false;
-            if (list.GetComponent<ScrollPaneHost>() is { } host)
-                host.enabled = false;
             var source = list.GetComponent<ListSource>();
+            if (source.scrollPane != null) source.scrollPane.enabled = false;
             source.Fill(_items.Length, (itemGo, i) =>
             {
                 var button = itemGo.GetComponent<ButtonBase>();
@@ -158,7 +171,7 @@ namespace OpenFairy.UGUI
             // 背景等其余子件带容器 relation，已烘成拉伸锚点，随下拉根缩放自动跟随。
             // 项数超出可见数：viewport 已被裁到可见高，内容更高，挂 ScrollPane 支持拖动/滚轮滚动。
             if (_items.Length > visible)
-                ScrollPane.Attach(list);
+                ScrollPane.Attach(list).enabled = true;
         }
 
         private void Select(int index)

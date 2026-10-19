@@ -16,22 +16,36 @@ namespace OpenFairy.UGUI
 
     // 顶层覆盖层 host（复刻 FairyGUI GRoot）：承载 window 与 popup，渲染在页面之上。设计坐标系（左上原点、y 向下），
     // 与页面共用；popup 定位复刻 Root.GetPoupPosition（down/flip-up/right-align）。
-    // 外点关闭用一个透明 blocker（IPointerClickHandler）而非输入轮询——本工程用新 Input System，读旧版 UnityEngine.Input 会抛异常。
-    public sealed class Root : MonoBehaviour
+    // PopupInputModule checks outside presses before native event dispatch without consuming the click.
+    public sealed partial class Root : UIBehaviour
     {
         private static Root _inst;
         public static Root inst => _inst;
+        [SerializeField] private AudioSource _soundSource;
+        [SerializeField] private RootSizeBinding _sizeBinding;
+        public AudioSource soundSource => _soundSource;
 
         public RectTransform rect;
-        private readonly List<RectTransform> _popups = new();
-        private readonly Dictionary<RectTransform, AutoResetUniTaskCompletionSource> _popupClosed = new();
         private readonly List<Window> _windows = new();
-        private GameObject _blocker;
         private GameObject _modalLayer;
+        private Label _tooltipTemplate;
+        private Label _tooltipView;
+        private Tooltip _tooltipOwner;
+        private PointerEventData _tooltipPointer;
+        private Vector2 _tooltipPosition;
+        private string _tooltipText;
+        private float _tooltipTime;
+        private bool _tooltipPending;
 
         public Color modalColor = new(0, 0, 0, 0.4f);
 
         public Vector2 size => rect.rect.size;
+
+        protected override void Awake()
+        {
+            base.Awake();
+            _inst = this;
+        }
 
         // 把覆盖层建到 designRoot 所在画布上、与 designRoot 同坐标区，自带高 sortingOrder 的
         // Canvas + GraphicRaycaster 渲染在页面之上并复用场景 EventSystem。
@@ -40,20 +54,34 @@ namespace OpenFairy.UGUI
         {
             if (_inst != null)
                 return _inst;
-            var go = new GameObject("Root", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
+            var go = new GameObject("Root", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster), typeof(AudioSource), typeof(LayoutElement));
+            go.layer = designRoot.gameObject.layer;
             var rt = (RectTransform)go.transform;
             var isCanvas = designRoot.GetComponent<Canvas>() != null;
             rt.SetParent(isCanvas ? designRoot : designRoot.parent, false);
-            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
-            rt.sizeDelta = designRoot.rect.size;
-            // canvas 根的 anchoredPosition 是屏幕派生值，覆盖层须归零贴其左上；设计根则与其同位。
-            rt.anchoredPosition = isCanvas ? Vector2.zero : designRoot.anchoredPosition;
+            rt.pivot = new Vector2(0, 1);
             rt.localScale = Vector3.one;
+            go.GetComponent<LayoutElement>().ignoreLayout = true;
             var canvas = go.GetComponent<Canvas>();
             canvas.overrideSorting = true;
             canvas.sortingOrder = 10000;
             _inst = go.AddComponent<Root>();
             _inst.rect = rt;
+            _inst._soundSource = go.GetComponent<AudioSource>();
+            _inst._soundSource.playOnAwake = false;
+            if (isCanvas)
+            {
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.offsetMin = rt.offsetMax = Vector2.zero;
+            }
+            else
+            {
+                if (!designRoot.TryGetComponent(out RootSizeBinding binding))
+                    binding = designRoot.gameObject.AddComponent<RootSizeBinding>();
+                _inst._sizeBinding = binding;
+                binding.Bind(_inst);
+            }
             return _inst;
         }
 
@@ -72,26 +100,6 @@ namespace OpenFairy.UGUI
         public int activeWindowCount =>
             _windows.AsValueEnumerable().Count(w => w.contentPane != null && w.contentPane.gameObject.activeSelf);
 
-        public UniTask ShowPopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
-        {
-            if (_popups.Contains(popup))
-                HidePopup(popup); // 去重：已在栈里则先收起该 popup 以上
-            popup.SetParent(rect, false);
-            popup.gameObject.SetActive(true);
-            EnsureBlocker();
-            _blocker.SetActive(true);
-            _blocker.transform.SetAsLastSibling();
-            popup.SetAsLastSibling(); // popup 在 blocker 之上
-            _popups.Add(popup);
-            var closed = AutoResetUniTaskCompletionSource.Create();
-            _popupClosed.Add(popup, closed);
-
-            var pos = GetPopupPosition(popup, target, dir); // 设计坐标（y-down）
-            popup.anchorMin = popup.anchorMax = popup.pivot = new Vector2(0, 1);
-            popup.anchoredPosition = new Vector2(pos.x, -pos.y);
-            return closed.Task;
-        }
-
         // 在指定设计坐标（y-down、左上原点）弹出：先把 popup 摆到该点，再走通用定位（含屏内翻转），
         // 复刻 FairyGUI target==null 时用 touchPosition 定位——供右键上下文菜单在指针处弹出。
         public UniTask ShowPopupAt(RectTransform popup, Vector2 designPos, PopupDirection dir = PopupDirection.Down)
@@ -105,50 +113,113 @@ namespace OpenFairy.UGUI
         public Vector2 ScreenToDesign(Vector2 screen, Camera camera)
         {
             RectTransformUtility.ScreenPointToLocalPointInRectangle(rect, screen, camera, out var local);
-            return new Vector2(local.x, -local.y);
+            return new Vector2(local.x - rect.rect.xMin, rect.rect.yMax - local.y);
         }
 
-        public UniTask TogglePopup(RectTransform popup, RectTransform target = null, PopupDirection dir = PopupDirection.Auto)
+        // Positions use the same top-left design coordinates as popups.
+        public void ShowTooltip(Label template, string message, Vector2 position, float delay = .1f)
         {
-            if (_popups.Contains(popup))
-            {
-                HidePopup(popup);
-                return UniTask.CompletedTask;
-            }
-            return ShowPopup(popup, target, dir);
-        }
-
-        // popup==null：收起全部；否则收起该 popup 及其上层。
-        public void HidePopup(RectTransform popup = null)
-        {
-            var from = popup == null ? 0 : _popups.IndexOf(popup);
-            if (from < 0)
+            HideTooltip();
+            if (template == null || string.IsNullOrEmpty(message))
                 return;
-            for (var i = _popups.Count - 1; i >= from; i--)
+            if (_tooltipTemplate != template)
             {
-                var current = _popups[i];
-                current.gameObject.SetActive(false);
-                _popups.RemoveAt(i);
-                if (_popups.Count == 0 && _blocker != null)
-                    _blocker.SetActive(false);
-                if (_popupClosed.Remove(current, out var closed))
-                    closed.TrySetResult();
+                if (_tooltipView != null)
+                    Destroy(_tooltipView.gameObject);
+                _tooltipTemplate = template;
+                _tooltipView = Instantiate(template, rect);
+                var group = _tooltipView.GetComponent<CanvasGroup>();
+                if (group == null) group = _tooltipView.gameObject.AddComponent<CanvasGroup>();
+                group.blocksRaycasts = false;
+                group.interactable = false;
+                foreach (var graphic in _tooltipView.GetComponentsInChildren<Graphic>(true))
+                    graphic.raycastTarget = false;
+                _tooltipView.gameObject.SetActive(false);
+            }
+            _tooltipText = message;
+            _tooltipPosition = position;
+            _tooltipTime = Time.unscaledTime + delay;
+            _tooltipPending = true;
+            if (delay <= 0) PresentTooltip();
+        }
+
+        internal void ShowTooltip(Tooltip owner, PointerEventData pointer)
+        {
+            ShowTooltip(owner.template, owner.text, TooltipPosition(pointer), owner.delay);
+            _tooltipOwner = owner;
+            _tooltipPointer = pointer;
+        }
+
+        private Vector2 TooltipPosition(PointerEventData pointer) =>
+            ScreenToDesign(pointer.position + new Vector2(10, -20), pointer.enterEventCamera);
+
+        internal void RefreshTooltip(Tooltip owner)
+        {
+            if (_tooltipOwner != owner) return;
+            if (string.IsNullOrEmpty(owner.text)) { HideTooltip(); return; }
+            _tooltipText = owner.text;
+            if (!_tooltipPending) PresentTooltip();
+        }
+
+        internal void HideTooltip(Tooltip owner)
+        {
+            if (_tooltipOwner == owner) HideTooltip();
+        }
+
+        public void HideTooltip()
+        {
+            _tooltipPending = false;
+            _tooltipOwner = null;
+            _tooltipPointer = null;
+            if (_tooltipView != null) _tooltipView.gameObject.SetActive(false);
+        }
+
+        private void Update()
+        {
+            // Observe the existing event data without adding a pointer-down handler
+            // that would intercept a parent button or scroll view's input.
+            if (_tooltipPointer != null && (_tooltipPointer.eligibleForClick || _tooltipPointer.pointerPress != null || _tooltipPointer.dragging))
+                HideTooltip();
+            if (_tooltipPending && Time.unscaledTime >= _tooltipTime)
+            {
+                if (_tooltipPointer != null) _tooltipPosition = TooltipPosition(_tooltipPointer);
+                PresentTooltip();
             }
         }
 
-        private void EnsureBlocker()
+        private void PresentTooltip()
         {
-            if (_blocker != null)
-                return;
-            _blocker = new GameObject("PopupBlocker", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image), typeof(PopupBlocker));
-            var brt = (RectTransform)_blocker.transform;
-            brt.SetParent(rect, false);
-            brt.anchorMin = Vector2.zero;
-            brt.anchorMax = Vector2.one;
-            brt.offsetMin = brt.offsetMax = Vector2.zero;
-            var img = _blocker.GetComponent<UnityEngine.UI.Image>();
-            img.color = new Color(0, 0, 0, 0); // 透明但可接收射线
-            _blocker.SetActive(false);
+            _tooltipPending = false;
+            _tooltipView.gameObject.SetActive(true);
+            _tooltipView.transform.SetAsLastSibling();
+            _tooltipView.title = _tooltipText;
+            _tooltipView.titleText.RefreshText();
+            var rt = (RectTransform)_tooltipView.transform;
+            // A Label is not a layout controller. Rebuild the title's own layout
+            // root rather than asking LayoutRebuilder to traverse an unrelated root.
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_tooltipView.titleText.rectTransform);
+            foreach (var relation in _tooltipView.GetComponentsInChildren<Relation>(true))
+                relation.Sync();
+            var position = _tooltipPosition;
+            if (position.x + rt.rect.width > size.x) position.x -= rt.rect.width;
+            if (position.y + rt.rect.height > size.y) position.y -= rt.rect.height + 1;
+            position.x = Mathf.Clamp(position.x, 0, Mathf.Max(0, size.x - rt.rect.width));
+            position.y = Mathf.Clamp(position.y, 0, Mathf.Max(0, size.y - rt.rect.height));
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
+            rt.anchoredPosition = new Vector2(Mathf.Round(position.x), -Mathf.Round(position.y));
+        }
+
+        protected override void OnDisable()
+        {
+            HideTooltip();
+            CancelPopups();
+            base.OnDisable();
+        }
+        protected override void OnDestroy()
+        {
+            if (_sizeBinding != null) _sizeBinding.Unbind(this);
+            if (_inst == this) _inst = null;
+            base.OnDestroy();
         }
 
         // 复刻 Root.GetPoupPosition（FairyGUI 设计坐标、左上 y-down）。
@@ -190,39 +261,8 @@ namespace OpenFairy.UGUI
         public Vector2 RootTopLeft(RectTransform node)
         {
             node.GetWorldCorners(_corners); // [1] = top-left（world）
-            var local = rect.InverseTransformPoint(_corners[1]); // Root 局部（pivot 0,1 → 原点在左上、y 向上）
-            return new Vector2(local.x, -local.y);
-        }
-
-        // ---- Window 托管（复刻 Root.ShowWindow/HideWindowImmediately/BringToFront）----
-        public void ShowWindow(Window win)
-        {
-            if (!_windows.Contains(win))
-                _windows.Add(win);
-            win.EnsureInited(rect);
-            win.contentPane.SetParent(rect, false);
-            win.contentPane.SetAsLastSibling();
-            // 复刻 GRoot.ShowWindow：已有模态层时，非模态窗插到模态层之下（不越过模态窗）。
-            if (!win.modal && _modalLayer != null && _modalLayer.activeSelf)
-                win.contentPane.SetSiblingIndex(_modalLayer.transform.GetSiblingIndex());
-            win.contentPane.gameObject.SetActive(true);
-            win.DoShow();
-            RefreshModal();
-        }
-
-        public void HideWindowImmediately(Window win)
-        {
-            _windows.Remove(win);
-            if (win.contentPane != null)
-                win.contentPane.gameObject.SetActive(false);
-            RefreshModal();
-        }
-
-        public void BringToFront(Window win)
-        {
-            if (win.contentPane != null)
-                win.contentPane.SetAsLastSibling();
-            RefreshModal();
+            var local = rect.InverseTransformPoint(_corners[1]); // Root local coordinates; convert from its native pivot to the top-left origin
+            return new Vector2(local.x - rect.rect.xMin, rect.rect.yMax - local.y);
         }
 
         public bool hasModalWindow => TopModalWindow() != null;
@@ -230,14 +270,12 @@ namespace OpenFairy.UGUI
         // 按显示序（兄弟序）从上往下找最上层激活的模态窗（复刻 GRoot.AdjustModalLayer 的扫描方向）。
         private Window TopModalWindow()
         {
-            for (var i = rect.childCount - 1; i >= 0; i--)
-            {
-                var child = rect.GetChild(i);
-                foreach (var w in _windows)
-                    if (w.modal && w.contentPane == child && child.gameObject.activeSelf)
-                        return w;
-            }
-            return null;
+            Window top = null;
+            foreach (var window in _windows)
+                if (window.modal && window.gameObject.activeSelf &&
+                    (top == null || window.contentPane.GetSiblingIndex() > top.contentPane.GetSiblingIndex()))
+                    top = window;
+            return top;
         }
 
         // 复刻 GRoot.AdjustModalLayer：模态层插到最上层模态窗之下，不改变窗口自身顺序；无模态窗则收起。
@@ -266,9 +304,4 @@ namespace OpenFairy.UGUI
         }
     }
 
-    // 透明全屏 blocker：点它（= 点在 popup 之外）即收起全部 popup（复刻 FairyGUI 外点关闭，避开新 Input System）。
-    public sealed class PopupBlocker : UIBehaviour, IPointerClickHandler
-    {
-        public void OnPointerClick(PointerEventData eventData) => Root.inst.HidePopup();
-    }
 }

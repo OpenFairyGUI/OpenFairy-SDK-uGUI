@@ -126,7 +126,7 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Window_shows_centered_and_close_hides()
         {
-            var win = new CenteringWindow { prefab = Load(WindowAPrefab) };
+            var win = Object.Instantiate(Load(WindowAPrefab)).GetComponent<OpenFairy.UGUI.Window>();
             win.Show();
             Canvas.ForceUpdateCanvases();
             yield return null;
@@ -149,7 +149,8 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Modal_window_shows_dim_layer_below_window_and_hides_on_close()
         {
-            var win = new CenteringWindow { prefab = Load(WindowAPrefab), modal = true };
+            var win = Object.Instantiate(Load(WindowAPrefab)).GetComponent<OpenFairy.UGUI.Window>();
+            win.modal = true;
             win.Show();
             Canvas.ForceUpdateCanvases();
             yield return null;
@@ -184,20 +185,20 @@ namespace OpenFairy.UGUI.Tests
             Assert.IsNotNull(list, "应实例化下拉 list");
             var source = list.GetComponent<ListSource>();
             Assert.IsFalse(list.GetComponent<ListSelection>()?.enabled ?? false, "ComboBox 下拉应禁用普通 ListSelection，由 ComboBox 自己发 onChanged");
-            Assert.IsFalse(list.GetComponent<ScrollPaneHost>()?.enabled ?? false, "ComboBox 下拉应禁用 prefab 自带 ScrollPaneHost，只在超出可见项时手动 Attach");
+            Assert.IsTrue(list.GetComponent<ScrollPane>()?.enabled ?? false, "Overflow enables the native ScrollPane.");
             Assert.AreEqual(5 * source.itemSize.y, list.rect.height, 1f, "list 高应裁到 visibleItemCount*itemH");
             Assert.IsNotNull(list.GetComponent<ScrollPane>(), "项数超可见数应挂 ScrollPane 以滚动");
             _gr.HidePopup();
             yield return null;
 
-            // 短列表（3 项，可见 5）：撑开显示全部，不挂 ScrollPane（与旧行为一致，golden 不受影响）。
+            // A short list displays every row and disables any baked native scrolling.
             var shortCombo = MakeCombo(3, 5);
             shortCombo.OnPointerClick(new PointerEventData(EventSystem.current));
             yield return null;
             var list2 = FindDeep(_gr.rect, "list");
             var source2 = list2.GetComponent<ListSource>();
             Assert.AreEqual(3 * source2.itemSize.y, list2.rect.height, 1f, "短列表 list 高 = 项数*itemH");
-            Assert.IsNull(list2.GetComponent<ScrollPane>(), "未超可见数不应挂 ScrollPane");
+            Assert.IsFalse(list2.GetComponent<ScrollPane>()?.enabled ?? false, "A short list must not enable scrolling.");
         }
 
         private TestCombo MakeCombo(int itemCount, int visible)
@@ -232,13 +233,5 @@ namespace OpenFairy.UGUI.Tests
             return null;
         }
 
-        private sealed class CenteringWindow : OpenFairy.UGUI.Window
-        {
-            protected override void OnInit()
-            {
-                base.OnInit();
-                Center();
-            }
-        }
     }
 }

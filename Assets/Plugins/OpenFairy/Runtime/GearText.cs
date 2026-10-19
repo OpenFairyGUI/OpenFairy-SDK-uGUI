@@ -20,7 +20,10 @@ namespace OpenFairy.UGUI
         public override void Apply(T page)
         {
             var index = Array.IndexOf(pages, page);
-            (_textField ??= target.GetComponentInChildren<TextComponent>(true)).text = index >= 0 ? values[index] : defaultValue;
+            var text = index >= 0 ? values[index] : defaultValue;
+            if (target.TryGetComponent<ButtonBase>(out var button)) button.title = text;
+            else if (target.TryGetComponent<Label>(out var label)) label.title = text;
+            else (_textField ??= target.GetComponentInChildren<TextComponent>(true)).text = text;
         }
     }
 }

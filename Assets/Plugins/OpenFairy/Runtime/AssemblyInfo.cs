@@ -6,3 +6,7 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Assembly-CSharp-Editor")]
 [assembly: InternalsVisibleTo("OpenFairy.UGUI.Tests.PlayMode")]
 [assembly: InternalsVisibleTo("OpenFairy.UGUI.TestSupport")]
+
+[assembly: InternalsVisibleTo("OpenFairy.UGUI.Tests.Runtime")]
+
+[assembly: InternalsVisibleTo("OpenFairy.UGUI.Tests.Editor")]

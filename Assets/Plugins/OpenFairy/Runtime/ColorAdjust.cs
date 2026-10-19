@@ -1,29 +1,24 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace OpenFairy.UGUI
 {
-    // 复刻 FairyGUI ColorFilter 的 4x5 颜色矩阵（亮度/对比度/饱和度/色相依次连乘）。
-    public class ColorAdjust : UIBehaviour
+    [ExecuteAlways, DisallowMultipleComponent]
+    public sealed class ColorAdjust : ObjectFilter, IMaterialModifier
     {
-        private const float LumaR = 0.299f;
-        private const float LumaG = 0.587f;
-        private const float LumaB = 0.114f;
+        public float brightness, contrast, saturation, hue;
+        [SerializeField] internal Shader shader;
+        // Only image primitives use the direct path; text and containers are captured.
+        [SerializeField] internal Graphic graphic;
+        [SerializeField] internal Grayed grayed;
 
-        public float brightness;
-        public float contrast;
-        public float saturation;
-        public float hue;
-        public Shader shader; // Migrate 烘焙
-
-        private static readonly int ColorMatrixId = Shader.PropertyToID("_ColorMatrix");
-        private static readonly int ColorOffsetId = Shader.PropertyToID("_ColorOffset");
-
-        private BlendModeEffect _blend;
         private Material _material;
-        private readonly float[] _matrix = new float[20];
-        private readonly float[] _tmp = new float[20];
+        private Material _original;
+        private readonly ColorMatrix _matrix = new();
+        private bool _colorActive;
+        protected override bool ShouldRender => graphic == null;
+        protected override bool IsFilterActive => _colorActive || grayed != null && grayed.active;
+        protected override float Padding => 0;
 
         public void Set(float brightnessValue, float contrastValue, float saturationValue, float hueValue)
         {
@@ -31,49 +26,118 @@ namespace OpenFairy.UGUI
             contrast = contrastValue;
             saturation = saturationValue;
             hue = hueValue;
-            Apply();
+            enabled = true;
+            if (graphic != null) graphic.SetMaterialDirty();
+        }
+
+        public Material GetModifiedMaterial(Material original)
+        {
+            if (!IsFilterActive || graphic == null || shader == null) return original;
+            if (_material == null || _original != original)
+            {
+                ReleaseMaterial();
+                _material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+                _original = original;
+            }
+            _material.CopyMatchingPropertiesFromMaterial(original);
+            _material.shaderKeywords = original.shaderKeywords;
+            ApplyMatrix();
+            return _material;
+        }
+
+        protected override void ProcessPmaTexture(RenderTexture texture)
+        {
+            if (_material == null) _material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            ApplyMatrix();
+            var descriptor = texture.descriptor;
+            descriptor.depthBufferBits = 0;
+            descriptor.msaaSamples = 1;
+            var temporary = RenderTexture.GetTemporary(descriptor);
+            var active = RenderTexture.active;
+            try
+            {
+                Graphics.Blit(texture, temporary, _material, 1);
+                Graphics.Blit(temporary, texture);
+            }
+            finally
+            {
+                RenderTexture.active = active;
+                RenderTexture.ReleaseTemporary(temporary);
+            }
+        }
+
+        private void ApplyMatrix()
+        {
+            _matrix.Set(_colorActive ? brightness : 0, _colorActive ? contrast : 0,
+                _colorActive ? saturation : 0, _colorActive ? hue : 0,
+                grayed != null && grayed.active);
+            var values = _matrix.Values;
+            var matrix = new Matrix4x4();
+            for (var row = 0; row < 4; row++)
+            {
+                var i = row * 5;
+                matrix.SetRow(row, new Vector4(values[i], values[i + 1], values[i + 2], values[i + 3]));
+            }
+            _material.SetMatrix("_ColorMatrix", matrix);
+            _material.SetVector("_ColorOffset", new Vector4(values[4], values[9], values[14], values[19]));
         }
 
         protected override void OnEnable()
         {
+            _colorActive = true;
             base.OnEnable();
-            _blend = GetComponent<BlendModeEffect>();
-            Apply();
+            if (graphic != null) graphic.SetMaterialDirty();
         }
-
+        internal void RefreshGrayed()
+        {
+            RefreshActivation();
+            if (graphic != null) graphic.SetMaterialDirty();
+        }
+        public override void Dispose()
+        {
+            if (grayed != null) grayed.enabled = false;
+            base.Dispose();
+        }
+        protected override void OnDisable()
+        {
+            _colorActive = false;
+            base.OnDisable();
+            if (graphic != null) graphic.SetMaterialDirty();
+            ReleaseMaterial();
+            if (grayed != null && grayed.active) RefreshActivation();
+        }
         protected override void OnDestroy()
         {
-            if (_material != null)
-                Destroy(_material);
+            ReleaseMaterial();
             base.OnDestroy();
         }
-
-        private void Apply()
+        private void ReleaseMaterial()
         {
-            if (shader == null)
-                return; // Migrate AddComponent 时 OnEnable 先于字段注入
-            if (_material == null)
+            if (_material != null)
             {
-                _material = new Material(shader);
-                GetComponent<Graphic>().material = _material;
+                if (Application.isPlaying) Destroy(_material);
+                else DestroyImmediate(_material);
             }
+            _material = null;
+            _original = null;
+        }
+    }
 
+    internal sealed class ColorMatrix
+    {
+        private const float LumaR = 0.299f, LumaG = 0.587f, LumaB = 0.114f;
+        private readonly float[] _matrix = new float[20];
+        private readonly float[] _tmp = new float[20];
+        internal float[] Values => _matrix;
+        internal void Set(float brightness, float contrast, float saturation, float hue, bool grayed = false)
+        {
             System.Array.Clear(_matrix, 0, 20);
             _matrix[0] = _matrix[6] = _matrix[12] = _matrix[18] = 1;
             AdjustBrightness(brightness);
             AdjustContrast(contrast);
             AdjustSaturation(saturation);
             AdjustHue(hue);
-
-            var matrix = new Matrix4x4();
-            matrix.SetRow(0, new Vector4(_matrix[0], _matrix[1], _matrix[2], _matrix[3]));
-            matrix.SetRow(1, new Vector4(_matrix[5], _matrix[6], _matrix[7], _matrix[8]));
-            matrix.SetRow(2, new Vector4(_matrix[10], _matrix[11], _matrix[12], _matrix[13]));
-            matrix.SetRow(3, new Vector4(_matrix[15], _matrix[16], _matrix[17], _matrix[18]));
-            _material.SetMatrix(ColorMatrixId, matrix);
-            _material.SetVector(ColorOffsetId, new Vector4(_matrix[4], _matrix[9], _matrix[14], _matrix[19]));
-            if (_blend != null)
-                _blend.RefreshMaterial();
+            if (grayed) AdjustSaturation(-1);
         }
 
         private void AdjustBrightness(float value)

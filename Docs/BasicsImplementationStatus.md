@@ -4,6 +4,59 @@
 
 ## 当前结论
 
+### 2026-10-19 原生指针扩展验证
+
+- `Button<T>` 的 Enter/Exit/Down/Up 原生指针方法可覆写；业务 partial 调用基类即可保留视觉状态，无需额外事件中继组件。包内回归通过 EventSystem 的 ExecuteEvents 枚举 Common/Check/Radio、选中/未选中、灰显/正常以及左/右键，检查派生方法分发和基类页面状态。
+- 按钮停用时清除瞬时按下和悬浮状态，避免复用后停留在旧的悬浮页；选中与灰显保持原值。新增停启回归枚举全部模式、选中和灰显组合，未修复时负控失败，修复后通过。
+- 本轮独立 Builtin 工程的完整包级 Test Runner 结果为 **157/157 Editor**、**169/169 PlayMode**，失败、跳过、不确定项均为零。没有重跑 TMP 后端的完整套件或传统 Basics/Transition golden；下方历史结果保留各自验证范围。
+
+### 2026-10-18 当前通用包能力与验证
+
+- 滚动交互使用原生 `ScrollRect`/`Scrollbar`，保留虚拟窗口、对象池、变高行、循环索引和选择；显式滚条、分页/吸附标志与页面控制器在导入期烘焙。
+- 增加原生 UI 对象捕获、对象模糊和容器颜色滤镜，共用捕获、预乘透明度、遮罩及释放生命周期。管线通过同步渲染回调接入；刷新不挂在 `Canvas.willRenderCanvases` 上。捕获扫描使用对象内复用 List，网格仍按引擎借用语义读取。
+- 提示框使用作者配置的 Label prefab 直接引用。普通文本自动尺寸交给原生 `ContentSizeFitter`；根关系与尺寸 gear 尊重内容拥有的自动轴。立即显示提示框时刷新实际文字布局节点，避免非布局容器阻断子树遍历。
+- 输入框通过 Input System 支持焦点期五步撤销/重做、选区恢复和单行 Tab 导航，程序赋值清除历史。灰显保留视觉语义，命中与点击由独立触摸/交互通道决定。
+- 生成器支持发布命名空间前缀，避开 Unity 原生序列化保留字段。未绘图的 Graph 节点生成 `RectTransform` 引用。Transition 使用各自动画的帧率，缺省仍为 24。
+- 当前同一正式源码在 Unity Editor/Mono 的完整 Test Runner 结果为 **141/141 Editor**、**175/175 PlayMode**，失败、跳过及不确定项均为零。TMP 与 Builtin 两种文字后端各四个程序集离线编译零错误，Builtin 不据此视为原生行为通过。此前104/119及更早结果为历史检查点，不与当前总数相加；传统 Basics/Transition 历史 golden 套件没有重新运行。
+- 灰显与已有颜色滤镜共用子树捕获，保留原生 TMP 字体材质以及独立的触摸/交互通道。十三种内置混合方式已有覆盖率和预乘透明度捕获回归，alpha 为零的发光 RGB 不被提前丢弃；离屏组对外部背景的 Multiply/Screen 等依赖不承诺等同直接画屏。
+- 捕获保留原生 MaskableGraphic/Mask 的完整材质链，只在 owned 副本上还原 base 遮罩参数，再由代理重算内部遮罩。此前不同输入会使颜色或混合缓存释放源图仍在使用的材质，下一帧源图消失；两项跨帧 GPU 回归及增强的 TMP 图文混排现已验证源图、材质、原生 pop 和图集保持。
+- 非虚拟 SingleRow 使用原生布局与实际子物体矩形，公开滚动、吸附和可见项查询不再假设固定宽度；虚拟列表保留既有窗口和固定行路径。Hidden 列表在导入期增加原生 RectMask2D，新增六项导入和一项 GPU 裁剪回归；不是消费端运行时补挂蒙版。
+- Advanced 横纵组预挂原生 LayoutGroup 派生与 ContentSizeFitter：只推进布局轴，保留交叉轴偏移；零尺寸、隐藏成员与负间距按作者语义处理。真实 TMP 长短变化、成员零宽转非零、父尺寸传播及保存后实例化已 Native；撤去导入配置调用的负控确实失败。
+- 列表 selectionController 在导入期烘焙直接 owner/索引与 typed GearListSelection，保留程序换页、点击/合法 selectedIndex 双向同步、清除/越界和多选重入语义；虚拟回收/refill与真实 prefab 保存重载已 Native。 独立点击中继脚本修复编辑期保存后缺失 MonoScript；新增损坏资产保存失败回归，失败不会再被当成完整导入。
+- Graph 开放折线使用原生 MaskableGraphic 网格，保留左上坐标、宽度/颜色、百分比点及可选圆端点；不闭合或填充内部。Schema/实际配置与 GPU 裁剪、透明度正控均已通过。
+- TMP shadowColor/shadowOffset 烘焙为直接引用的原生 SDF underlay 材质；白字白底、alpha、fallback 原生释放与捕获均已 GPU。已发布字段窄刷新经真实嵌套 prefab、GUID/local ID、重载与重复字节检查；不重建层级或运行完整发布。
+- 整根 Overlay Canvas 停启保留已有 Relation 基线，避免 CanvasScaler 恢复期间的临时尺寸被重复累计；隐藏期间真实父尺寸和内容变化仍在恢复后同步。原生锚点只消化 anchor span 对应的尺寸差，fitter 自身改宽仍保持对齐。新增三项真实 prefab/Canvas 回归覆盖原生父缩放、同帧和隔帧内容变化及三种水平 pivot。
+- 首次启用的 Relation 先恢复已烘焙的 ContentSizeFitter driven 尺寸，再记录关系基线，随后仍接受正常内容重排。新增真实 prefab 往返用例，不以未序列化的零尺寸重写作者位置。
+- Transition 声音优先复用 Root 的音源/路由，无 Root 才使用预烘焙的独立音源；停用的对象或音源不发声，其余 timeline 动作仍照常推进。声音夹具在首次启用前配置音源、提供自己的 listener，八项专项及最终整套均通过；未把一次不确定构造时序认定为生产故障原因。
+- 本轮夹具明确处理两种引擎时序：popup 关闭按实际结束条件等待并保留超时，不能靠短固定秒数；动态改变 maskable 的 GPU 正控调用 RecalculateClipping，确保未裁剪 lane 实际更新原生 clip parent。已有输入测试仍使用官方 InputTestFixture 隔离后台设备状态。
+- 修正拉伸锚点改变pivot时的补偿：使用 `sizeDelta`，不能把父锚点跨度重复计入位移。组件实例及列表项的作者控制器设置在导入期按页ID、有序解析为既有静态控制器调用；缺省保留定义默认，失效名称/页ID按原语义跳过。布局结算放在控件配置/初始actions之后，避免将早期标题宽度保存进最终prefab。
+- 捕获相机的 `useOcclusionCulling` 在新引擎有弃用警告，目前没有等价的逐相机新接口；保留隔离捕获的明确关闭语义。`CanvasRenderer.GetMesh()` 未弃用，不增加网格复制或改变借用所有权。
+- 位图字体同域重导已补查找缓存失效。对象滤镜自动运行已接 `Application.onBeforeRender`，在关系 `PostLateUpdate` 同步之后由最外层滤镜驱动内层逆序捕获；保留显式刷新供 Edit Mode 和离屏工具使用。两次 Play 都禁用域与场景重载的原生会话测试已通过。先前失败来自测试持有的旧托管组件包装器；支持组件改按真实原生对象重新取当前包装器，没有为此改生产滤镜生命周期。
+- 静态文本、本地化、selected icon、按钮声音和输入编辑已接普通导出流程。语言资产保留直接引用，生成方法使用 typed 行及变量槽；不在运行时解析资源 URL。
+- Root 的 Canvas 分支采用原生 stretch anchors；非 Canvas 分支保留兄弟 overlay，复制 anchors/pivot/size/pose，原生尺寸事件和 `LateUpdate` 矩形/矩阵变化检测共同同步，位置/旋转/缩放变化也会跟随。公开设计坐标仍以实际矩形左上为原点。
+- 完整 Demo 及重新生成的 golden 仍需单独验证。包内测试通过不能替代被稀疏 checkout 排除的 Demo 脚本、生成资产或传统文字后端的完整行为证明。
+
+- Window/popup 使用原生组件、预烘焙关闭/拖动/Transition 引用；PopupInputModule 保留同一次下层点击，重开与关闭动画有明确取消语义。十项运行用例与一项prefab往返通过。Root继承设计层，两种UI相机GPU回归通过；否则同一红色popup会被layer mask剔除。
+- Loader支持静态Component子树，保留原尺寸并整体缩放；readonly content与ShowContent不创建资源。十一项Runtime、两项真实导入往返通过，含native尺寸回调、movie切换、空mesh、遮罩/alpha GPU对照。原URL资源仍只在导入期解析。
+
+### 2026-10-19 通用导入与 Builtin 后端验证
+
+- 源目录、输出目录和依赖源目录可保存在 ProjectSettings，通过既有 Migrate 入口读取，域重载后的续建沿用配置。依赖源只参与实际引用的收集，输出保持包目录结构。
+- 修正发布包的 Input System 依赖版本。TTF/OTF 资源在导入期生成可序列化的原生 Font 引用；Common.json 默认字体支持资源 URL，输入文字与提示文字保留该引用。
+- 列表支持无默认模板的空容器和逐项模板覆盖，按实际项尺寸排列并序列化原生引用；不同模板的作者项不会进入默认模板的重填池。控制器与子节点同名时生成独立字段，代码、Prefab、本地化和阴影刷新共用绑定规则；作者重复子节点仍保留首项公开引用。
+- 非滚动条资源不进入滚动条组件收集或实例化；没有标题的组件忽略无效果的标题覆盖。Blit 专用颜色矩阵 Pass 单独标记，避免 Builtin UI 绘制额外执行该 Pass，保留直接图像的透明度和裁剪。
+- 新增十项字体、八项导入边界与三项滚动条资源回归，包含真实 Prefab 保存、重导和实例化；缺省/空字体仍采用默认字体族，混合模板另验证默认重填池。折线网格测试显式选择 VertexHelper 重载。
+- Root 可预烘焙在原生 Canvas Prefab 中；音源与设计根尺寸绑定保留序列化引用，实例化时注册当前 Root。两项真实 Prefab 保存、重导及 PlayMode 实例化回归覆盖 Canvas 子层和非 Canvas 兄弟层，四种列表布局的重填池行为放在实际 PlayMode 验证。
+- 文本发布的 `autoClearText` 同时作用于原生初始文字和生成式本地化，避免设计预览文字重新出现；九种文字类型/标志组合已有回归。Button/Label 的 icon 可经嵌套 Button/Label 在导入期绑定到末端 Loader，运行时仍使用直接序列化引用，四种组合的 Prefab 保存、重导和赋值均已验证。
+- 控制器补间显式使用引擎 Normal 更新，保留缩放时间语义，不继承宿主的 DOTween 手动更新默认值；四类补间分别覆盖运行、暂停和恢复。原生滚条在显示比例为零或一时隐藏 grip，四方向均验证恢复溢出后的显隐。`ListSource.GetItemAt` 按逻辑索引取得作者项或已绑定项，重填后的对象池顺序不影响访问；未绑定索引明确抛出异常。
+- 首次启用的 Relation 保留序列化的作者关系基准，避免 CanvasScaler 的临时尺寸覆盖烘焙值；两项真实 Prefab 往返测试覆盖位置与扩边关系。非列表滚动内容在原生布局变化后更新范围和 grip，动画滚动显式使用不受缩放的引擎时钟；新增两项运行回归覆盖动态内容和手动补间默认值。
+- 普通 Image/MovieClip 不阻挡底层按钮的原生射线，Loader 保留自己的命中面；三项 Prefab 往返及 PlayMode 射线回归分别覆盖这些类型。列表回收保留业务 Awake 注册的点击监听，Fill 回调自行替换每次绑定的业务监听；选择中继以绑定版本取消重填留下的在途回调，避免旧点击作用于回收后的项。普通与虚拟列表均覆盖四种布局及点击期间重填为空、一项和多项。
+- Builtin 输入提交在导入期以持久 UnityEvent 绑定到原生 InputField.onSubmit。聚焦的 InputField 会消费 EventSystem 导航事件，不能用同节点的 ISubmitHandler 代替文字提交；失焦仍是独立的 onEndEdit。两项真实 Prefab 往返及 PlayMode 回归覆盖单行/多行、聚焦、失焦及原生提交文本。
+- 作者预置的 SingleRow 项首次按逻辑索引读取后，原生尺寸采样会初始化缓存并应用交叉轴自动尺寸；不要求先 Fill。新增运行回归枚举自动尺寸与滚动容器的四种组合，并验证后续宽度变化。
+- Unity 6000.4.2f1 中 Builtin 后端完整包内测试 **157/157 Editor、167/167 PlayMode**，失败、跳过和不确定项均为零；GPU 回归在可渲染 Game 视图的编辑器中运行。此处数量包含新增回归，不与上方 TMP 后端的历史 141/175 相加。TMP 后端和传统完整 Demo/golden 尚未在本轮重验，消费端仍须单独验证。
+
+### 历史示例检查点（不代表当前版本重验）
+
 - `Basics` demo 的静态渲染、主要交互、窗口/弹窗、拖拽、滚动、下拉、文本链接、列表填充、翻页动效已完成。
 - `Transition` demo 的主要动效已完成，路径、嵌套 transition、滤镜、shake、循环/yoyo 等运行时行为已覆盖。
 - 当前公开 Unity 菜单只保留：
@@ -132,3 +185,9 @@
 - 通用工程交互（无 demo 胶水）：`BakedInteractionTests` 直接实例化转换 prefab，真射线驱动，覆盖 tab 换页、单选组互斥、`overflow=scroll` 自挂滚动、输入框结构、Slider 连续拖动。
 
 上次完整 PlayMode 测试结果为 `134/134` 通过；2026-07-19 新增的无 icon Loader 按钮及 BlendMode 回归用例计入下一次完整测试。
+
+阴影窄刷新保留生成字段的首个同名项规则；未公开的重复文本仅在Editor按原group/mask与同名兄弟顺序精确对应。公开引用或作者层级不符仍失败。新增跨组/同组同名、独立材质、保存重载、父继承与重复幂等回归；不为窄刷新增加运行时标记或重新生成整套界面。
+
+导入器将预挂捕获 presentation 与源一同移入作者 group、mask 或 scroll 层级。已有发布定义可经同一依赖顺序窄修，只搬已验证的既有 companion，保留 GUID/local ID 与引用；直通图像颜色滤镜不变，Runtime 严格父层校验保留。新增三种真实导入/损坏保存/重载与幂等检查、两个失效绑定正控和一项三模式 GPU 回归。
+
+生成式本地化与原生标题绑定共用首个作者 title 身份；后续同名文本走既有 private typed 引用，保留公开首项、语言 family 名称和翻译 key。新增五项 Editor 与一项 Play 回归，覆盖 Button/Label/ComboBox 生成、跨组同名文本、持久化重载和独立语言切换；不增加运行时名称查找。

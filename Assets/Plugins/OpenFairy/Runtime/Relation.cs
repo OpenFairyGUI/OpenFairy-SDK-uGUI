@@ -1,182 +1,201 @@
+using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace OpenFairy.UGUI
 {
-    // FairyGUI RelationType 的 XML 词表（sidePair="left-left" 等，解析时去标点折叠）。
-    // Width/WidthWidth、Height/HeightHeight 是同一语义的两种 XML 拼写，行为一致。
-    public enum RelationSide
-    {
-        LeftLeft,
-        LeftCenter,
-        LeftRight,
-        CenterCenter,
-        RightLeft,
-        RightCenter,
-        RightRight,
-        TopTop,
-        TopMiddle,
-        TopBottom,
-        MiddleMiddle,
-        BottomTop,
-        BottomMiddle,
-        BottomBottom,
-        Width,
-        WidthWidth,
-        Height,
-        HeightHeight,
-        Size,
-        LeftExtLeft,
-        LeftExtRight,
-        RightExtLeft,
-        RightExtRight,
-        TopExtTop,
-        TopExtBottom,
-        BottomExtTop,
-        BottomExtBottom,
-    }
-
-    // 复刻 FairyGUI 指向兄弟节点的关联：目标位置/尺寸变化时按增量跟随。
-    // 基准状态在 Migrate 构建时序列化，运行时逐帧对比。
-    // 复刻 RelationItem 非 percent、pivot=0 的情形（ApplyOnXYChanged + ApplyOnSizeChanged 合并成 move/grow 增量）。
+    // One baked host owns the constraints for an authored element.
     public class Relation : UIBehaviour
     {
-        public RectTransform target;
-        public RelationSide[] sidePairs;
-        public Vector2 lastTopLeft;
-        public Vector2 lastSize;
+        public RectTransform reference;
+        public RectTransform coordinateSpace;
+        public bool pivotAsAnchor;
+        public RelationBinding[] bindings = Array.Empty<RelationBinding>();
+        [SerializeField, HideInInspector] private Vector2 _ownerSize;
+        [SerializeField, HideInInspector] private Vector2 _referenceSize;
+        [SerializeField, HideInInspector] private bool _hasBaseline;
+        private bool _recorded;
+        private bool _applying;
+        private bool _registered;
+
+        private static readonly List<Relation> Active = new();
+        private static bool _running;
+        private static int _generation;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            Active.Clear();
+            _running = false;
+            _generation++;
+        }
 
         public static Vector2 TopLeft(RectTransform rt) =>
             (Vector2)rt.localPosition + new Vector2(rt.rect.xMin, rt.rect.yMax);
 
+        private static RelationGeometry Read(RectTransform rt, bool asAnchor, RectTransform space)
+        {
+            if (rt == space)
+                return new RelationGeometry { size = rt.rect.size };
+            var origin = space.InverseTransformPoint(rt.position);
+            var size = rt.rect.size;
+            var pivot = new Vector2(rt.pivot.x, 1 - rt.pivot.y);
+            return new RelationGeometry {
+                position = new Vector2(origin.x - space.rect.xMin - pivot.x * size.x,
+                    space.rect.yMax - origin.y - pivot.y * size.y),
+                size = size, pivot = pivot, pivotAsAnchor = asAnchor,
+            };
+        }
+
+        private RelationGeometry ReadTarget(RelationBinding binding) => binding.target == reference
+            ? new RelationGeometry { size = reference.rect.size }
+            : Read(binding.target, binding.pivotAsAnchor,
+                binding.target.parent == transform ? (RectTransform)transform : coordinateSpace);
+
+        private void Write(RelationGeometry geometry)
+        {
+            var rt = (RectTransform)transform;
+            _applying = true;
+            try
+            {
+                // A component can follow its own child. Capture its coordinate origin before resizing it.
+                var point = new Vector3(coordinateSpace.rect.xMin + geometry.position.x + geometry.pivot.x * geometry.size.x,
+                    coordinateSpace.rect.yMax - geometry.position.y - geometry.pivot.y * geometry.size.y, 0);
+                var position = coordinateSpace.TransformPoint(point);
+                position.z = rt.position.z;
+                var movement = coordinateSpace == rt
+                    ? rt.TransformVector(new Vector3(geometry.position.x, -geometry.position.y, 0))
+                    : position - rt.position;
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, geometry.size.x);
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, geometry.size.y);
+                // Other relations on this component may preserve an outer alignment during the size callback.
+                rt.position = coordinateSpace == rt ? rt.position + movement : position;
+                _ownerSize = geometry.size;
+            }
+            finally { _applying = false; }
+        }
+
         public void Record()
         {
-            if (target == null) // AddComponent 时 OnEnable 先于字段注入
+            if (reference == null) // AddComponent calls OnEnable before the bake assigns references.
                 return;
-            lastTopLeft = TopLeft(target);
-            lastSize = target.rect.size;
+            foreach (var binding in bindings)
+                binding.previous = ReadTarget(binding);
+            _ownerSize = ((RectTransform)transform).rect.size;
+            _referenceSize = reference.rect.size;
+            _hasBaseline = true;
+            _recorded = true;
+            Register();
+        }
+
+        private void Register()
+        {
+            if (!_registered && isActiveAndEnabled && Application.isPlaying
+                && Array.Exists(bindings, binding => !binding.nativeAnchors))
+            {
+                _registered = true;
+                Active.Add(this);
+                if (!_running)
+                    RunLoop().Forget();
+            }
         }
 
         public void Sync()
         {
-            if (target == null)
+            if (!_recorded || _applying)
                 return;
-            var topLeft = TopLeft(target);
-            var size = target.rect.size;
-            var move = topLeft - lastTopLeft; // uGUI 本地系（y 向上）
-            var grow = size - lastSize;
-            if (move == Vector2.zero && grow == Vector2.zero)
-                return;
-            lastTopLeft = topLeft;
-            lastSize = size;
-
-            var rt = (RectTransform)transform;
-            var position = Vector2.zero;
-            var resize = Vector2.zero;
-            // X 位置关联 = 目标锚点 x 的变化（左锚 move.x、中锚 +0.5 grow.x、右锚 +grow.x）；
-            // Y 位置关联 = 目标锚点 y 的变化（上锚 move.y、中锚 -0.5 grow.y、下锚 -grow.y，y 向下取负 grow）。
-            // ext 关联 = 本体一边跟随目标、对边保持不动（尺寸随之伸缩）。
-            foreach (var pair in sidePairs)
-                switch (pair)
+            var owner = Read((RectTransform)transform, pivotAsAnchor, coordinateSpace);
+            var changed = false;
+            foreach (var binding in bindings)
+            {
+                var target = ReadTarget(binding);
+                if (!binding.nativeAnchors && (target.origin != binding.previous.origin || target.size != binding.previous.size))
                 {
-                    case RelationSide.LeftLeft:
-                    case RelationSide.RightLeft:
-                        position.x += move.x;
-                        break;
-                    case RelationSide.LeftCenter:
-                    case RelationSide.CenterCenter:
-                    case RelationSide.RightCenter:
-                        position.x += move.x + grow.x * 0.5f;
-                        break;
-                    case RelationSide.LeftRight:
-                    case RelationSide.RightRight:
-                        position.x += move.x + grow.x;
-                        break;
-                    case RelationSide.TopTop:
-                    case RelationSide.BottomTop:
-                        position.y += move.y;
-                        break;
-                    case RelationSide.TopMiddle:
-                    case RelationSide.MiddleMiddle:
-                    case RelationSide.BottomMiddle:
-                        position.y += move.y - grow.y * 0.5f;
-                        break;
-                    case RelationSide.TopBottom:
-                    case RelationSide.BottomBottom:
-                        position.y += move.y - grow.y;
-                        break;
-                    case RelationSide.Width:
-                    case RelationSide.WidthWidth:
-                        resize.x += grow.x;
-                        break;
-                    case RelationSide.Height:
-                    case RelationSide.HeightHeight:
-                        resize.y += grow.y;
-                        break;
-                    case RelationSide.Size:
-                        resize += grow;
-                        break;
-                    case RelationSide.LeftExtLeft: // 左边跟随目标左边，右边不动
-                        resize.x -= move.x;
-                        position.x += move.x;
-                        break;
-                    case RelationSide.LeftExtRight: // 左边跟随目标右边，右边不动
-                        position.x += move.x + grow.x;
-                        resize.x -= grow.x + move.x;
-                        break;
-                    case RelationSide.RightExtLeft: // 右边跟随目标左边，左边不动
-                        resize.x += move.x;
-                        break;
-                    case RelationSide.RightExtRight: // 右边跟随目标右边，左边不动
-                        resize.x += move.x + grow.x;
-                        break;
-                    case RelationSide.TopExtTop: // 上边跟随目标上边，下边不动
-                        resize.y += move.y;
-                        position.y += move.y;
-                        break;
-                    case RelationSide.TopExtBottom: // 上边跟随目标下边，下边不动
-                        resize.y += move.y - grow.y;
-                        position.y += move.y - grow.y;
-                        break;
-                    case RelationSide.BottomExtTop: // 下边跟随目标上边，上边不动
-                        resize.y -= move.y;
-                        break;
-                    case RelationSide.BottomExtBottom: // 下边跟随目标下边，上边不动
-                        resize.y += grow.y - move.y;
-                        break;
+                    RelationMath.Apply(ref owner, binding.previous, target, binding, bindings,
+                        binding.target == reference, binding.target.parent == transform);
+                    changed = true;
                 }
-            if (position != Vector2.zero)
-                rt.anchoredPosition += position;
-            var rectSize = rt.rect.size;
-            if (resize.x != 0)
-                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, rectSize.x + resize.x);
-            if (resize.y != 0)
-                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rectSize.y + resize.y);
+                binding.previous = target;
+            }
+            if (changed)
+            {
+                Write(owner);
+                foreach (var binding in bindings)
+                    if (binding.target.parent == transform)
+                        binding.previous = ReadTarget(binding);
+            }
+            _referenceSize = reference.rect.size;
         }
 
-        // 集中驱动：单个循环遍历所有活跃 Relation，替代每实例每帧一次 LateUpdate 的 native→managed 派发底噪。
-        private static readonly List<Relation> Active = new();
-        private static bool _running;
+        protected override void OnRectTransformDimensionsChange()
+        {
+            if (!_recorded || _applying)
+                return;
+            var rect = (RectTransform)transform;
+            var owner = Read(rect, pivotAsAnchor, coordinateSpace);
+            var difference = owner.size - _ownerSize;
+            _ownerSize = owner.size;
+            // Only the anchor span's size change is native; a fitted-size change still needs alignment.
+            if (Array.Exists(bindings, binding => binding.nativeAnchors))
+                difference -= Vector2.Scale(reference.rect.size - _referenceSize, rect.anchorMax - rect.anchorMin);
+            _referenceSize = reference.rect.size;
+            if (difference == Vector2.zero)
+                return;
+            RelationMath.SelfSize(ref owner, difference, true, bindings);
+            Write(owner);
+        }
 
         protected override void OnEnable()
         {
-            Record();
-            Active.Add(this);
-            if (!_running && Application.isPlaying)
-                RunLoop().Forget();
+            if (_recorded)
+            {
+                Register();
+                return;
+            }
+            if (reference != null)
+            {
+                // Native layout omits driven sizes from serialization. Targets without relations need their baseline too.
+                RestoreFittedSize((RectTransform)transform, _ownerSize);
+                foreach (var binding in bindings)
+                    RestoreFittedSize(binding.target, binding.previous.size);
+            }
+            if (_hasBaseline)
+            {
+                _recorded = true;
+                Register();
+            }
+            else Record();
         }
 
-        protected override void OnDisable() => Active.Remove(this);
+        private static void RestoreFittedSize(RectTransform rect, Vector2 size)
+        {
+            if (!rect.TryGetComponent(out ContentSizeFitter fitter) || !fitter.enabled)
+                return;
+            if (fitter.horizontalFit is ContentSizeFitter.FitMode.MinSize or ContentSizeFitter.FitMode.PreferredSize)
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, size.x);
+            if (fitter.verticalFit is ContentSizeFitter.FitMode.MinSize or ContentSizeFitter.FitMode.PreferredSize)
+                rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, size.y);
+        }
+
+        protected override void OnDisable()
+        {
+            Active.Remove(this);
+            _registered = false;
+        }
 
         private static async UniTask RunLoop()
         {
             _running = true;
+            var generation = _generation;
             while (Active.Count > 0)
             {
                 await UniTask.Yield(PlayerLoopTiming.PostLateUpdate);
-                for (var i = Active.Count - 1; i >= 0; i--) // 逆序：Sync 连锁触发的 OnDisable 移除不打乱遍历
+                if (generation != _generation)
+                    return;
+                for (var i = Active.Count - 1; i >= 0; i--)
                     Active[i].Sync();
             }
             _running = false;

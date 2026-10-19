@@ -74,6 +74,9 @@ namespace OpenFairy.UGUI.Editor
         public static Schema.Component LoadComponent(string file) =>
             Deserialize<Schema.Component>(file);
 
+        internal static string PublishedText(XElement xml) =>
+            (string)xml.Attribute("autoClearText") == "true" ? "" : (string)xml.Attribute("text");
+
         private static T Deserialize<T>(string file) where T : new() =>
             (T)Read(typeof(T), XDocument.Load(file).Root);
 
@@ -125,10 +128,20 @@ namespace OpenFairy.UGUI.Editor
                     resource.Kind = (Schema.ResourceKind)ParseEnum(typeof(Schema.ResourceKind), xml.Name.LocalName);
                     break;
                 case Schema.Display display:
+                    display.Text = PublishedText(xml);
                     // <jta> 是 movieclip 实例的扩展名标签，归一到 movieclip 类型
                     var tag = xml.Name.LocalName == "jta" ? "movieclip" : xml.Name.LocalName;
                     display.Kind = (Schema.DisplayKind)ParseEnum(typeof(Schema.DisplayKind), tag);
-                    display.Source = display.Src ?? display.Url;
+                    display.LayoutSpecified = xml.Attribute("layout") != null;
+                    display.Source = display.Src != null && !string.IsNullOrEmpty(display.Package)
+                        ? "ui://" + display.Package + display.Src : display.Src ?? display.Url;
+                    if (xml.Attribute("autoSize") is { } autoSize)
+                    {
+                        if (display.Kind == Schema.DisplayKind.Loader)
+                            display.LoaderAutoSize = autoSize.Value == "true";
+                        else
+                            display.AutoSize = (Schema.TextAutoSize)Convert(autoSize.Value, typeof(Schema.TextAutoSize));
+                    }
                     break;
                 case Schema.Gear gear:
                     gear.Kind = (Schema.GearKind)ParseEnum(typeof(Schema.GearKind), xml.Name.LocalName);
@@ -174,15 +187,29 @@ namespace OpenFairy.UGUI.Editor
                 return float.Parse(value, CultureInfo.InvariantCulture);
             if (type == typeof(Vector2))
                 return ParsePair(value);
+            if (type == typeof(Schema.ColorFilterData))
+            {
+                var values = value.Split(',');
+                if (values.Length != 4)
+                    throw new FormatException("Color filter data requires brightness, contrast, saturation and hue.");
+                return new Schema.ColorFilterData {
+                    Brightness = float.Parse(values[0], CultureInfo.InvariantCulture),
+                    Contrast = float.Parse(values[1], CultureInfo.InvariantCulture),
+                    Saturation = float.Parse(values[2], CultureInfo.InvariantCulture),
+                    Hue = float.Parse(values[3], CultureInfo.InvariantCulture),
+                };
+            }
             if (type == typeof(string[]))
                 return value.Split(',');
             if (type == typeof(ValueTuple<string, string>[]))
                 return ParsePages(value);
+            if (type == typeof(OpenFairy.UGUI.RelationRule[]))
+                return ParseRelations(value);
             if (type.IsEnum)
                 return value == "" ? Enum.ToObject(type, 0) : ParseEnum(type, value); // 空属性值（如 scale=""）= 缺省
             if (type.IsArray && type.GetElementType().IsEnum)
             {
-                var parts = value.Split(',');
+                var parts = value.Split(',', StringSplitOptions.RemoveEmptyEntries);
                 var array = Array.CreateInstance(type.GetElementType(), parts.Length);
                 for (var i = 0; i < parts.Length; i++)
                     array.SetValue(ParseEnum(type.GetElementType(), parts[i]), i);
@@ -193,6 +220,11 @@ namespace OpenFairy.UGUI.Editor
 
         private static object ParseEnum(Type type, string value)
         {
+            if (type == typeof(Schema.ListLayout))
+            {
+                if (value == "hz") return Schema.ListLayout.SingleRow;
+                if (value == "vt") return Schema.ListLayout.SingleColumn;
+            }
             if (!EnumAliases.TryGetValue(type, out var aliases))
             {
                 aliases = new Dictionary<string, object>();
@@ -205,6 +237,34 @@ namespace OpenFairy.UGUI.Editor
                 return alias;
             // XML 词表的标点风格（left-left / multiple_singleclick）折叠成成员名，忽略大小写（titleType="valueAndmax" 等杂写）。
             return Enum.Parse(type, value.Replace("-", "").Replace("_", ""), true);
+        }
+
+        private static OpenFairy.UGUI.RelationRule[] ParseRelations(string value)
+        {
+            var rules = new List<OpenFairy.UGUI.RelationRule>();
+            foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var percent = token.EndsWith('%');
+                var name = token.TrimEnd('%').Replace("-", "").Replace("_", "");
+                if (name.Equals("size", StringComparison.OrdinalIgnoreCase))
+                {
+                    Add(OpenFairy.UGUI.RelationSide.Width, percent);
+                    Add(OpenFairy.UGUI.RelationSide.Height, percent);
+                }
+                else
+                {
+                    if (name.Equals("widthwidth", StringComparison.OrdinalIgnoreCase)) name = "Width";
+                    else if (name.Equals("heightheight", StringComparison.OrdinalIgnoreCase)) name = "Height";
+                    Add((OpenFairy.UGUI.RelationSide)ParseEnum(typeof(OpenFairy.UGUI.RelationSide), name), percent);
+                }
+            }
+            return rules.ToArray();
+
+            void Add(OpenFairy.UGUI.RelationSide side, bool percent)
+            {
+                if (!rules.AsValueEnumerable().Any(rule => rule.side == side))
+                    rules.Add(new OpenFairy.UGUI.RelationRule { side = side, percent = percent });
+            }
         }
 
         private static Vector2 ParsePair(string value)
@@ -266,6 +326,13 @@ namespace OpenFairy.UGUI.Editor.Schema
         List,
     }
 
+    public enum FilterKind { None, Color }
+
+    public struct ColorFilterData
+    {
+        public float Brightness, Contrast, Saturation, Hue;
+    }
+
     public enum ComponentExtension
     {
         None,
@@ -286,9 +353,19 @@ namespace OpenFairy.UGUI.Editor.Schema
 
     public enum Scroll
     {
-        [XmlEnum("vertical")] Vertical,
-        [XmlEnum("horizontal")] Horizontal,
+        [XmlEnum("vt")] Vertical,
+        [XmlEnum("hz")] Horizontal,
         [XmlEnum("both")] Both,
+    }
+
+    public enum ScrollBarDisplay { Default, Visible, Auto, Hidden }
+
+    [Flags]
+    public enum ScrollFlags
+    {
+        None = 0, DisplayOnLeft = 1, SnapToItem = 2, DisplayInDemand = 4, PageMode = 8,
+        TouchOn = 16, TouchOff = 32, BounceOn = 64, BounceOff = 128,
+        InertiaDisabled = 256, MaskDisabled = 512, Floating = 1024,
     }
 
     public enum LoaderFill
@@ -340,6 +417,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlEnum("eclipse")] Ellipse,
         [XmlEnum("polygon")] Polygon,
         [XmlEnum("regular_polygon")] RegularPolygon,
+        [XmlEnum("polyline")] Polyline,
     }
 
     // package.xml 图片资源的缩放方式（缺省/空 = 整图）。
@@ -358,6 +436,13 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlEnum("flow_hz")] FlowHorizontal,
         [XmlEnum("flow_vt")] FlowVertical,
         [XmlEnum("pagination")] Pagination,
+    }
+
+    public enum ListRenderOrder
+    {
+        Ascent,
+        Descent,
+        Arch,
     }
 
     // 文本自动尺寸。Shrink/Ellipsis 未实现，转换时按 Height 处理。
@@ -464,13 +549,16 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("overflow")] public Overflow Overflow;
         [XmlAttribute("mask")] public string Mask;
         [XmlAttribute("scroll")] public Scroll Scroll = Scroll.Vertical;
-        [XmlAttribute("scrollBar")] public string ScrollBar;
-        [XmlAttribute("scrollBarFlags")] public int ScrollBarFlags;
+        [XmlAttribute("scrollBar")] public ScrollBarDisplay ScrollBar;
+        [XmlAttribute("scrollBarRes")] public string[] ScrollBarRes;
+        [XmlAttribute("pageController")] public string PageController;
+        [XmlAttribute("scrollBarFlags")] public ScrollFlags ScrollBarFlags;
         [XmlAttribute("margin")] public string Margin;
         [XmlAttribute("scrollBarMargin")] public string ScrollBarMargin;
         [XmlAttribute("clipSoftness")] public string ClipSoftness;
 
         [XmlElement("controller")] public Controller[] Controllers = Array.Empty<Controller>();
+        [XmlElement("relation")] public Relation[] Relations = Array.Empty<Relation>();
 
         [XmlArray("displayList")]
         [XmlArrayItem("image")]
@@ -500,15 +588,44 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("name")] public string Name;
         [XmlAttribute("selected")] public int Selected;
         [XmlAttribute("pages")] public (string Id, string Name)[] Pages = Array.Empty<(string Id, string Name)>();
+        [XmlElement("action")] public ControllerAction[] Actions = Array.Empty<ControllerAction>();
+    }
+
+    public enum ControllerActionType
+    {
+        [XmlEnum("change_page")] ChangePage,
+        [XmlEnum("play_transition")] PlayTransition,
+    }
+
+    public class ControllerAction
+    {
+        [XmlAttribute("type")] public ControllerActionType Type;
+        [XmlAttribute("fromPage")] public string FromPage;
+        [XmlAttribute("toPage")] public string ToPage;
+        [XmlAttribute("objectId")] public string ObjectId;
+        [XmlAttribute("controller")] public string Controller;
+        [XmlAttribute("targetPage")] public string TargetPage;
+        [XmlAttribute("transition")] public string Transition;
+        [XmlAttribute("repeat")] public int Repeat = 1;
+        [XmlAttribute("delay")] public float Delay;
+        [XmlAttribute("stopOnExit")] public bool StopOnExit;
     }
 
     public class Display
     {
         [XmlAttribute("id")] public string Id;
         [XmlAttribute("name")] public string Name;
+        [XmlAttribute("controller")] public string Controller;
         [XmlAttribute("src")] public string Src;
+        [XmlAttribute("pkg")] public string Package;
+        [XmlAttribute("lineItemCount")] public int LineItemCount;
+        [XmlAttribute("renderOrder")] public ListRenderOrder RenderOrder;
+        [XmlAttribute("apex")] public int Apex;
         [XmlAttribute("url")] public string Url;
         [XmlAttribute("group")] public string Group;
+        [XmlAttribute("advanced")] public bool Advanced;
+        [XmlAttribute("excludeInvisibles")] public bool ExcludeInvisibles;
+        public bool LayoutSpecified;
         [XmlAttribute("defaultItem")] public string DefaultItem;
         [XmlAttribute("xy")] public Vector2? Position;
         [XmlAttribute("size")] public Vector2? Size;
@@ -517,10 +634,13 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("anchor")] public bool Anchor;
         [XmlAttribute("visible")] public bool Visible = true;
         [XmlAttribute("touchable")] public bool Touchable = true;
+        [XmlAttribute("tooltips")] public string Tooltips;
         [XmlAttribute("grayed")] public bool Grayed;
         [XmlAttribute("rotation")] public float? Rotation;
         [XmlAttribute("alpha")] public float? Alpha;
         [XmlAttribute("blend")] public BlendMode BlendMode;
+        [XmlAttribute("filter")] public FilterKind Filter;
+        [XmlAttribute("filterData")] public ColorFilterData FilterData;
         [XmlAttribute("type")] public ShapeType Type;
         [XmlAttribute("color")] public string Color;
         [XmlAttribute("fillMethod")] public ImageFillMethod FillMethod;
@@ -535,6 +655,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("align")] public Align Align;
         [XmlAttribute("vAlign")] public VAlign VAlign;
         [XmlAttribute("lineSize")] public float LineSize = 1;
+        [XmlAttribute("roundEdge")] public bool RoundEdge;
         [XmlAttribute("lineColor")] public string LineColor = "#ff000000";
         [XmlAttribute("fillColor")] public string FillColor = "#ffffffff";
         [XmlAttribute("skew")] public Vector2? Skew;
@@ -547,20 +668,25 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("frame")] public int Frame;
         [XmlAttribute("overflow")] public Overflow Overflow;
         [XmlAttribute("scroll")] public Scroll Scroll = Scroll.Vertical;
-        [XmlAttribute("scrollBar")] public string ScrollBar;
-        [XmlAttribute("scrollBarFlags")] public int ScrollBarFlags;
+        [XmlAttribute("scrollBar")] public ScrollBarDisplay ScrollBar;
+        [XmlAttribute("scrollBarRes")] public string[] ScrollBarRes;
+        [XmlAttribute("pageController")] public string PageController;
+        [XmlAttribute("selectionController")] public string SelectionController;
+        [XmlAttribute("scrollBarFlags")] public ScrollFlags ScrollBarFlags;
         [XmlAttribute("margin")] public string Margin;
         [XmlAttribute("scrollBarMargin")] public string ScrollBarMargin;
         [XmlAttribute("clipSoftness")] public string ClipSoftness;
         [XmlAttribute("lineGap")] public float LineGap;
         [XmlAttribute("colGap")] public float ColGap;
         [XmlAttribute("layout")] public ListLayout Layout;
+        [XmlAttribute("autoItemSize")] public bool AutoItemSize = true;
         [XmlAttribute("selectionMode")] public OpenFairy.UGUI.ListSelectionMode SelectionMode = OpenFairy.UGUI.ListSelectionMode.Single; // FairyGUI 列表默认单选
         [XmlAttribute("text")] public string Text = "";
         [XmlAttribute("fontSize")] public int? FontSize;
         [XmlAttribute("leading")] public int Leading = 3;
         [XmlAttribute("letterSpacing")] public int LetterSpacing;
         [XmlAttribute("ubb")] public bool Ubb;
+        [XmlAttribute("vars")] public bool Vars;
         [XmlAttribute("input")] public bool Input;
         [XmlAttribute("password")] public bool Password;
         [XmlAttribute("maxLength")] public int MaxLength;
@@ -568,7 +694,8 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("prompt")] public string Prompt;
         [XmlAttribute("bold")] public bool Bold;
         [XmlAttribute("italic")] public bool Italic;
-        [XmlAttribute("autoSize")] public TextAutoSize AutoSize = TextAutoSize.Both;
+        public TextAutoSize AutoSize = TextAutoSize.Both;
+        public bool LoaderAutoSize;
         [XmlAttribute("singleLine")] public bool SingleLine;
         [XmlAttribute("font")] public string Font;
         // Optional TMP font override; the backend is selected by FAIRYGUI_TMPRO.
@@ -601,7 +728,7 @@ namespace OpenFairy.UGUI.Editor.Schema
     public class Relation
     {
         [XmlAttribute("target")] public string Target = "";
-        [XmlAttribute("sidePair")] public OpenFairy.UGUI.RelationSide[] SidePairs = Array.Empty<OpenFairy.UGUI.RelationSide>();
+        [XmlAttribute("sidePair")] public OpenFairy.UGUI.RelationRule[] Rules = Array.Empty<OpenFairy.UGUI.RelationRule>();
     }
 
     public class Gear
@@ -621,8 +748,16 @@ namespace OpenFairy.UGUI.Editor.Schema
 
     public class Extension
     {
+        [XmlAttribute("url")] public string Url;
+        [XmlAttribute("controllers")] public string Controllers;
         [XmlAttribute("title")] public string Title;
+        [XmlAttribute("prompt")] public string Prompt;
+        [XmlAttribute("password")] public bool? Password;
+        [XmlAttribute("maxLength")] public int? MaxLength;
         [XmlAttribute("selectedTitle")] public string SelectedTitle;
+        [XmlAttribute("selectedIcon")] public string SelectedIcon;
+        [XmlAttribute("sound")] public string Sound;
+        [XmlAttribute("volume")] public float? SoundVolume;
         [XmlAttribute("icon")] public string Icon;
         [XmlAttribute("mode")] public OpenFairy.UGUI.ButtonMode? Mode; // 实例级缺省时不覆盖定义级
         [XmlAttribute("checked")] public bool Checked;
@@ -651,6 +786,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("autoPlay")] public bool AutoPlay;
         [XmlAttribute("autoPlayRepeat")] public int AutoPlayRepeat = 1;
         [XmlAttribute("autoPlayDelay")] public float AutoPlayDelay;
+        [XmlAttribute("frameRate")] public int FrameRate = 24;
         [XmlElement("item")] public TransitionItem[] Items = Array.Empty<TransitionItem>();
     }
 
@@ -668,5 +804,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("endValue")] public string EndValue;
         [XmlAttribute("value")] public string Value;
         [XmlAttribute("path")] public string Path;
+        [XmlAttribute("label")] public string Label;
+        [XmlAttribute("label2")] public string EndLabel;
     }
 }

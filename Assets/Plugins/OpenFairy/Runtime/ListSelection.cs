@@ -23,7 +23,17 @@ namespace OpenFairy.UGUI
 
         [System.NonSerialized] public UnityEvent<int> onClickItem = new();
 
-        private readonly List<(Transform Item, ButtonBase Button, ListSelectionItem Relay)> _items = new();
+        private readonly List<(Transform Item, ButtonBase Button, ListSelectionItem Relay, int Index)> _items = new();
+        private readonly HashSet<int> _selectedIndices = new();
+        private ListSource _source;
+        private bool _bound;
+        private bool _updatingController;
+        [SerializeField] internal Component selectionOwner;
+        [SerializeField] internal int selectionController = -1;
+        [SerializeField] internal int selectionPageCount;
+
+
+        private bool Virtual => _source != null && _source.isVirtual;
 
         protected override void Start() => Rebind();
 
@@ -33,23 +43,54 @@ namespace OpenFairy.UGUI
             foreach (var item in _items)
                 item.Relay?.Unbind();
             _items.Clear();
+            _source = GetComponent<ListSource>();
+            if (!Virtual)
+                _selectedIndices.Clear();
+            else
+                _selectedIndices.RemoveWhere(index => index >= _source.count);
             var content = List.Container((RectTransform)transform);
             for (var i = 0; i < content.childCount; i++)
             {
                 var child = content.GetChild(i);
-                if (child.name == ScrollPane.HitName || child.name == ListSource.PoolName)
+                if (child.name == ListSource.PoolName)
                     continue;
+                int index = _source != null && _source.TryGetItemIndex(child.gameObject, out int logical)
+                    ? logical : _items.Count;
                 var button = child.GetComponent<ButtonBase>();
                 ListSelectionItem relay = null;
                 if (button != null)
                 {
-                    var index = _items.Count;
                     if (!child.TryGetComponent(out relay))
                         relay = child.gameObject.AddComponent<ListSelectionItem>();
                     relay.Bind(this, button, index);
                     button.changeStateOnClick = false; // 选择由本组件驱动，禁项本体自翻 selected（复刻 GList 关掉 item changeStateOnClick）
                 }
-                _items.Add((child, button, relay));
+                if (!Virtual && button != null && button.selected)
+                    _selectedIndices.Add(index);
+                if (Virtual && button != null)
+                    button.selected = _selectedIndices.Contains(index);
+                _items.Add((child, button, relay, index));
+            }
+            _bound = true;
+            if (selectionOwner != null && !_updatingController)
+                SetSelection(ControllerBinding.GetPage(selectionOwner, selectionController));
+        }
+
+        internal void SelectFromController(int index)
+        {
+            if (_updatingController) return;
+            if (!_bound) Rebind();
+            SetSelection(index);
+        }
+
+        private void UpdateSelectionController(int index)
+        {
+            if (selectionOwner != null && index >= 0 && index < selectionPageCount
+                && !selectionOwner.IsControllerChanging(selectionController))
+            {
+                _updatingController = true;
+                try { ControllerBinding.SetPage(selectionOwner, selectionController, index); }
+                finally { _updatingController = false; }
             }
         }
 
@@ -64,7 +105,7 @@ namespace OpenFairy.UGUI
                 {
                     for (var i = 0; i < _items.Count; i++)
                         if (_items[i].Item == t && _items[i].Button == null) // 按钮项经自身 onClick 走 Click，不重复
-                            onClickItem.Invoke(i);
+                            onClickItem.Invoke(_items[i].Index);
                     return;
                 }
         }
@@ -72,74 +113,88 @@ namespace OpenFairy.UGUI
         // 复刻 GList.selectedIndex：get 取第一个选中项；set 排它选中该项（-1 = 清空）。
         public int selectedIndex
         {
-            get => _items.FindIndex(item => item.Button != null && item.Button.selected);
+            get
+            {
+                if (!Virtual)
+                {
+                    foreach (var item in _items)
+                        if (item.Button != null && item.Button.selected)
+                            return item.Index;
+                    return -1;
+                }
+                int first = int.MaxValue;
+                foreach (int index in _selectedIndices)
+                    if (index < first)
+                        first = index;
+                return first == int.MaxValue ? -1 : first;
+            }
             set
             {
-                for (var i = 0; i < _items.Count; i++)
-                    if (_items[i].Button is { } button)
-                        button.selected = i == value;
+                if (!_bound) Rebind();
+                var previous = selectedIndex;
+                SetSelection(value);
+                if (selectedIndex != previous && selectedIndex >= 0)
+                    UpdateSelectionController(selectedIndex);
             }
+        }
+
+        private void SetSelection(int value)
+        {
+            _selectedIndices.Clear();
+            int count = Virtual ? _source.count : _items.Count;
+            if (value >= 0 && value < count)
+                _selectedIndices.Add(value);
+            ApplySelection();
         }
 
         public void ClearSelection() => selectedIndex = -1;
 
-        // 复刻 GList.GetSelection：当前全部选中项索引（Multiple 模式可多个）。
         public List<int> GetSelection()
         {
             var result = new List<int>();
-            for (var i = 0; i < _items.Count; i++)
-                if (_items[i].Button is { selected: true })
-                    result.Add(i);
+            if (Virtual)
+                result.AddRange(_selectedIndices);
+            else
+                foreach (var item in _items)
+                    if (item.Button is { selected: true })
+                        result.Add(item.Index);
+            result.Sort();
             return result;
+        }
+
+        private void ApplySelection()
+        {
+            foreach (var item in _items)
+                if (item.Button != null)
+                    item.Button.selected = _selectedIndices.Contains(item.Index);
         }
 
         internal void Click(int index)
         {
-            var clicked = _items[index].Button;
+            if (!Virtual)
+            {
+                _selectedIndices.Clear();
+                foreach (var item in _items)
+                    if (item.Button is { selected: true })
+                        _selectedIndices.Add(item.Index);
+            }
             switch (selectionMode)
             {
                 case ListSelectionMode.None:
                     break;
                 case ListSelectionMode.MultipleSingleClick:
-                    clicked.selected = !clicked.selected; // 每次点击切换
+                    if (!_selectedIndices.Remove(index))
+                        _selectedIndices.Add(index);
                     break;
                 case ListSelectionMode.Single:
-                case ListSelectionMode.Multiple: // 无修饰键点击与 Single 一致：排它选中
-                    foreach (var item in _items)
-                        if (item.Button != null)
-                            item.Button.selected = ReferenceEquals(item.Button, clicked);
+                case ListSelectionMode.Multiple:
+                    _selectedIndices.Clear();
+                    _selectedIndices.Add(index);
                     break;
             }
+            ApplySelection();
+            if (_selectedIndices.Contains(index)) UpdateSelectionController(index);
             onClickItem.Invoke(index);
         }
-    }
-
-    // 运行时列表项点击中继：每个池化 item 只创建一次 UnityAction，Rebind 只更新 owner/index，不再逐项分配闭包。
-    internal sealed class ListSelectionItem : MonoBehaviour
-    {
-        private ListSelection _owner;
-        private ButtonBase _button;
-        private int _index;
-        private UnityAction _action;
-
-        internal void Bind(ListSelection owner, ButtonBase button, int index)
-        {
-            Unbind();
-            _owner = owner;
-            _button = button;
-            _index = index;
-            _action ??= Click;
-            _button.onClick.AddListener(_action);
-        }
-
-        internal void Unbind()
-        {
-            if (_button != null && _action != null)
-                _button.onClick.RemoveListener(_action);
-            _owner = null;
-            _button = null;
-        }
-
-        private void Click() => _owner.Click(_index);
     }
 }
