@@ -30,3 +30,15 @@ its runtime items.
 This follows the FairyGUI authoring documentation for
 [lists](https://www.fairygui.com/docs/editor/list/) and
 [combo boxes](https://www.fairygui.com/docs/editor/combobox/).
+
+## Button instance title colors
+
+An authored button instance `titleColor` changes its title and the title color
+gear's current controller page before the instance's selected state is applied.
+When that page uses the gear's fallback, the importer adds an explicit page value;
+it does not change the fallback or other state colors. Returning to the initial
+page restores the instance color. A title without a color gear receives the color
+directly, while an omitted override preserves the definition.
+
+Existing published views must be rebuilt where they contain the affected button
+instances. This does not change generated fields or require runtime XML lookup.

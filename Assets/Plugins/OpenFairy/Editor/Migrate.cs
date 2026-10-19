@@ -1335,9 +1335,50 @@ namespace OpenFairy.UGUI.Editor
                 button.mode = mode;
             if (buttonXml.Sound is { } sound) button.sound = LoadButtonSound(sound, packageId);
             if (buttonXml.SoundVolume is { } volume) button.soundVolumeScale = volume;
+            if (buttonXml.TitleColor is { } titleColor)
+                ConfigureTitleColor(button, ParseColor(titleColor));
             button._selected = buttonXml.Checked && button.mode != ButtonMode.Common; // 烘焙直写（复刻 GButton.selected：Common 忽略选中态），不触发关联控制器
             button.RefreshState();
             if (button.useSelectedIcon) button.RefreshIcon();
+        }
+
+        private static void ConfigureTitleColor(ButtonBase button, Color color)
+        {
+            var text = button.titleText;
+            if (text == null) return; // A button without a text title has no title color.
+            text.color = color;
+            foreach (var field in button.GetType().GetFields())
+            {
+                var type = field.FieldType;
+                if (!type.IsGenericType || type.GetGenericTypeDefinition() != typeof(Controller<>)) continue;
+                var controller = field.GetValue(button);
+                if (type.GetField("gears").GetValue(controller) is not Array gears) continue;
+                var page = type.GetProperty("page").GetValue(controller);
+                foreach (var gear in gears)
+                {
+                    var gearType = gear.GetType();
+                    if (!gearType.IsGenericType || gearType.GetGenericTypeDefinition() != typeof(GearColor<>)
+                        || (GameObject)gearType.GetField("target").GetValue(gear) != text.gameObject) continue;
+                    var pagesField = gearType.GetField("pages");
+                    var pages = (Array)pagesField.GetValue(gear);
+                    var index = Array.IndexOf(pages, page);
+                    var valuesField = gearType.GetField("values");
+                    var values = (Color[])valuesField.GetValue(gear);
+                    if (index < 0)
+                    {
+                        index = pages.Length;
+                        var expanded = Array.CreateInstance(type.GetGenericArguments()[0], index + 1);
+                        Array.Copy(pages, expanded, index); expanded.SetValue(page, index); pagesField.SetValue(gear, expanded);
+                        Array.Resize(ref values, index + 1); valuesField.SetValue(gear, values);
+                        var strokesField = gearType.GetField("strokeValues");
+                        if (strokesField.GetValue(gear) is Color[] strokes)
+                        {
+                            Array.Resize(ref strokes, index + 1); strokes[index] = text.GetOutlineColor(); strokesField.SetValue(gear, strokes);
+                        }
+                    }
+                    values[index] = color;
+                }
+            }
         }
 
         private static void BindLabelTitle(Label label, Transform title)
