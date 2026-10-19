@@ -11,7 +11,7 @@ using OpenFairyInputComponent = OpenFairy.UGUI.TextInput;
 
 namespace OpenFairyTextFixtures.NativeTextFixture
 {
-    public partial class NativeTextCombo : OpenFairy.UGUI.ComboBox<NativeTextCombo.button>
+    public partial class NativeTextCombo : global::OpenFairy.UGUI.ComboBox<NativeTextCombo.button>
     {
         public enum button
         {
@@ -45,13 +45,13 @@ namespace OpenFairyTextFixtures.NativeTextFixture
             m_button.Initialize();
         }
         public OpenFairyTextComponent m_title;
-[System.Serializable]
+[global::System.Serializable]
 public sealed class LocalizedCaptionTexts
 {
     public string Text;
     public string Selected;
 }
-[UnityEngine.SerializeField] private LocalizedCaptionTexts _LocalizedCaptionTexts = null;
+[global::UnityEngine.SerializeField] private LocalizedCaptionTexts _LocalizedCaptionTexts = null;
 public void ApplyLocalizedCaptionTexts(LocalizedCaptionTexts texts)
 {
     _LocalizedCaptionTexts = texts;
@@ -64,11 +64,11 @@ public void RefreshLocalizedCaptionText()
     RefreshTitle();
 }
 
-[System.Serializable] public sealed class LocalizedItemsTexts { public string[] Items; }
-[UnityEngine.SerializeField] private LocalizedItemsTexts _LocalizedItemsTexts = null;
+[global::System.Serializable] public sealed class LocalizedItemsTexts { public string[] Items; }
+[global::UnityEngine.SerializeField] private LocalizedItemsTexts _LocalizedItemsTexts = null;
 public void ApplyLocalizedItemsTexts(LocalizedItemsTexts texts) { _LocalizedItemsTexts = texts; RefreshLocalizedItemsText(); }
 public void RefreshLocalizedItemsText() { items = _LocalizedItemsTexts.Items; if (selectedIndex >= 0 && selectedIndex < items.Length) text = items[selectedIndex]; }
-[System.Serializable] public sealed class LocalizedTexts
+[global::System.Serializable] public sealed class LocalizedTexts
 {
 public LocalizedCaptionTexts LocalizedCaption;
 public LocalizedItemsTexts LocalizedItems;

@@ -11,7 +11,7 @@ using OpenFairyInputComponent = OpenFairy.UGUI.TextInput;
 
 namespace OpenFairyTextFixtures.NativeTextFixture
 {
-    public partial class NativeTextPanel : OpenFairy.UGUI.Component
+    public partial class NativeTextPanel : global::OpenFairy.UGUI.Component
     {
         public enum State
         {
@@ -45,28 +45,28 @@ namespace OpenFairyTextFixtures.NativeTextFixture
             m_State.Initialize();
         }
         public OpenFairyTextComponent m_Notice;
-        public NativeTextButton m_Main;
-        public NativeTextButton m_Geared;
-        public NativeTextInput m_Edit;
-        public NativeTextCombo m_Choice;
-        public NativeTextButton m_Property;
-        public UnityEngine.RectTransform m_Items;
-[UnityEngine.SerializeField] private global::OpenFairyTextFixtures.NativeTextFixture.NativeTextButton _localizedItem5 = null;
-[UnityEngine.SerializeField] private global::OpenFairyTextFixtures.NativeTextFixture.NativeTextButton _localizedItem6 = null;
-[UnityEngine.SerializeField] private OpenFairy.UGUI.ListSource _localizedList_items = null;
-[UnityEngine.SerializeField] private OpenFairy.UGUI.Tooltip _localizedTooltip1 = null;
-[UnityEngine.SerializeReference] private OpenFairy.UGUI.GearText<State> _localizedGear1_0 = null;
-[System.Serializable]
+        public global::OpenFairyTextFixtures.NativeTextFixture.NativeTextButton m_Main;
+        public global::OpenFairyTextFixtures.NativeTextFixture.NativeTextButton m_Geared;
+        public global::OpenFairyTextFixtures.NativeTextFixture.NativeTextInput m_Edit;
+        public global::OpenFairyTextFixtures.NativeTextFixture.NativeTextCombo m_Choice;
+        public global::OpenFairyTextFixtures.NativeTextFixture.NativeTextButton m_Property;
+        public global::UnityEngine.RectTransform m_Items;
+[global::UnityEngine.SerializeField] private global::OpenFairyTextFixtures.NativeTextFixture.NativeTextButton _localizedItem5 = null;
+[global::UnityEngine.SerializeField] private global::OpenFairyTextFixtures.NativeTextFixture.NativeTextButton _localizedItem6 = null;
+[global::UnityEngine.SerializeField] private global::OpenFairy.UGUI.ListSource _localizedList_items = null;
+[global::UnityEngine.SerializeField] private global::OpenFairy.UGUI.Tooltip _localizedTooltip1 = null;
+[global::UnityEngine.SerializeReference] private global::OpenFairy.UGUI.GearText<State> _localizedGear1_0 = null;
+[global::System.Serializable]
 public sealed class LocalizedNoticeTexts
 {
-    public OpenFairy.UGUI.TextTemplate Text;
-    public OpenFairy.UGUI.TextTemplate Tooltip;
-    public OpenFairy.UGUI.TextTemplate GearDefault1;
-    public OpenFairy.UGUI.TextTemplate Gear1_0;
-    public OpenFairy.UGUI.TextTemplate Gear1_2;
+    public global::OpenFairy.UGUI.TextTemplate Text;
+    public global::OpenFairy.UGUI.TextTemplate Tooltip;
+    public global::OpenFairy.UGUI.TextTemplate GearDefault1;
+    public global::OpenFairy.UGUI.TextTemplate Gear1_0;
+    public global::OpenFairy.UGUI.TextTemplate Gear1_2;
 }
-[UnityEngine.SerializeField] private LocalizedNoticeTexts _LocalizedNoticeTexts = null;
-private readonly OpenFairy.UGUI.TextTemplateState _LocalizedNoticeVariables = new(1);
+[global::UnityEngine.SerializeField] private LocalizedNoticeTexts _LocalizedNoticeTexts = null;
+private readonly global::OpenFairy.UGUI.TextTemplateState _LocalizedNoticeVariables = new(1);
 public enum LocalizedNoticeVariable
 {
     count,
@@ -89,8 +89,8 @@ public void RefreshLocalizedNoticeText()
     _localizedGear1_0.Apply(m_State.page);
 }
 
-[UnityEngine.SerializeReference] private OpenFairy.UGUI.GearText<State> _localizedGear2_0 = null;
-[System.Serializable]
+[global::UnityEngine.SerializeReference] private global::OpenFairy.UGUI.GearText<State> _localizedGear2_0 = null;
+[global::System.Serializable]
 public sealed class LocalizedGearedTexts
 {
     public string Text;
@@ -98,7 +98,7 @@ public sealed class LocalizedGearedTexts
     public string Gear1_0;
     public string Gear1_1;
 }
-[UnityEngine.SerializeField] private LocalizedGearedTexts _LocalizedGearedTexts = null;
+[global::UnityEngine.SerializeField] private LocalizedGearedTexts _LocalizedGearedTexts = null;
 public void ApplyLocalizedGearedTexts(LocalizedGearedTexts texts)
 {
     _LocalizedGearedTexts = texts;
@@ -113,7 +113,7 @@ public void RefreshLocalizedGearedText()
     _localizedGear2_0.Apply(m_State.page);
 }
 
-[System.Serializable] public sealed class LocalizedTexts
+[global::System.Serializable] public sealed class LocalizedTexts
 {
 public LocalizedNoticeTexts LocalizedNotice;
 public LocalizedGearedTexts LocalizedGeared;

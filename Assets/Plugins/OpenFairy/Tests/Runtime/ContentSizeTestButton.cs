@@ -11,7 +11,7 @@ using OpenFairyInputComponent = OpenFairy.UGUI.TextInput;
 
 namespace OpenFairy.UGUI.Tests
 {
-    public partial class ContentSizeTestButton : OpenFairy.UGUI.Button<ContentSizeTestButton.button>
+    public partial class ContentSizeTestButton : global::OpenFairy.UGUI.Button<ContentSizeTestButton.button>
     {
         public enum button
         {
@@ -45,8 +45,8 @@ namespace OpenFairy.UGUI.Tests
             m_button.Initialize();
         }
         public OpenFairyTextComponent m_title;
-[UnityEngine.SerializeReference] private OpenFairy.UGUI.GearText<button> _localizedGear1_0 = null;
-[System.Serializable]
+[global::UnityEngine.SerializeReference] private global::OpenFairy.UGUI.GearText<button> _localizedGear1_0 = null;
+[global::System.Serializable]
 public sealed class LocalizedCaptionTexts
 {
     public string Text;
@@ -54,7 +54,7 @@ public sealed class LocalizedCaptionTexts
     public string GearDefault1;
     public string Gear1_0;
 }
-[UnityEngine.SerializeField] private LocalizedCaptionTexts _LocalizedCaptionTexts = null;
+[global::UnityEngine.SerializeField] private LocalizedCaptionTexts _LocalizedCaptionTexts = null;
 public void ApplyLocalizedCaptionTexts(LocalizedCaptionTexts texts)
 {
     _LocalizedCaptionTexts = texts;
@@ -70,7 +70,7 @@ public void RefreshLocalizedCaptionText()
     _localizedGear1_0.Apply(m_button.page);
 }
 
-[System.Serializable] public sealed class LocalizedTexts
+[global::System.Serializable] public sealed class LocalizedTexts
 {
 public LocalizedCaptionTexts LocalizedCaption;
 }

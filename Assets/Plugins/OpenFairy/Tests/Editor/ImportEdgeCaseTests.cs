@@ -327,8 +327,8 @@ namespace OpenFairy.UGUI.Tests
             using var localization = new ImportLocalizationFixture();
             localization.Prepare(resource);
             var code = (string)Invoke("ScriptCode", resource);
-            Assert.That(code, Does.Contain("public UnityEngine.RectTransform m_Status_2;"));
-            Assert.That(code, Does.Contain("public UnityEngine.RectTransform m_Status_2_2;"));
+            Assert.That(code, Does.Contain("public global::UnityEngine.RectTransform m_Status_2;"));
+            Assert.That(code, Does.Contain("public global::UnityEngine.RectTransform m_Status_2_2;"));
             Invoke("BuildPrefab", resource);
             var path = Output + "/Assets/BindingFixtures/CollisionBindingFixture.prefab";
             AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);

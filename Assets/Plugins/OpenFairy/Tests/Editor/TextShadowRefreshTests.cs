@@ -12,15 +12,46 @@ namespace OpenFairy.UGUI.Tests
 {
     public class TextShadowRefreshTests
     {
+        private sealed class SourceScope : IDisposable
+        {
+            private readonly string _source = MigrationSettings.instance.sourceDirectory;
+            private readonly string _output = MigrationSettings.instance.outputDirectory;
+            private readonly string[] _dependencies = MigrationSettings.instance.dependencyDirectories;
+            private readonly FieldInfo _settingsField = typeof(Migrate).GetField("_settings", BindingFlags.Static | BindingFlags.NonPublic);
+            private readonly object _settings;
+            public readonly string source = "Temp/OpenFairyShadowSource_" + Guid.NewGuid().ToString("N");
+            public readonly string output = "Assets/__OpenFairyShadowOutput_" + Guid.NewGuid().ToString("N");
+
+            public SourceScope()
+            {
+                _settings = _settingsField.GetValue(null);
+                _settingsField.SetValue(null, null);
+                MigrationSettings.instance.sourceDirectory = source;
+                MigrationSettings.instance.outputDirectory = output;
+                MigrationSettings.instance.dependencyDirectories = Array.Empty<string>();
+            }
+
+            public void Dispose()
+            {
+                MigrationSettings.instance.sourceDirectory = _source;
+                MigrationSettings.instance.outputDirectory = _output;
+                MigrationSettings.instance.dependencyDirectories = _dependencies;
+                _settingsField.SetValue(null, _settings);
+                AssetDatabase.DeleteAsset(output);
+                Directory.Delete(source, true);
+            }
+        }
+
         [TestCase(0)]
         [TestCase(1)]
         [TestCase(2)]
         public void Refresh_repeated_names_resolves_authored_groups_and_sibling_order_without_relaxing_bindings(int invalid)
         {
+            using var scope = new SourceScope();
             var key = "__DuplicateShadow_" + Guid.NewGuid().ToString("N");
-            var source = "UIProject/assets/" + key;
-            var output = "Assets/UIProject/Assets/" + key;
-            var publish = "UIProject/settings/Publish.json";
+            var source = scope.source + "/assets/" + key;
+            var output = scope.output + "/Assets/" + key;
+            var publish = scope.source + "/settings/Publish.json";
             var previousPublish = File.Exists(publish) ? File.ReadAllBytes(publish) : null;
             var cache = typeof(Migrate).GetField("_codeGenerationSettings", BindingFlags.Static | BindingFlags.NonPublic);
             var previousCache = cache.GetValue(null);
@@ -117,10 +148,11 @@ namespace OpenFairy.UGUI.Tests
         [Test]
         public void Refresh_existing_direct_bindings_preserves_nested_hierarchy_and_native_identity()
         {
+            using var scope = new SourceScope();
             var key = "__ShadowRefresh_" + Guid.NewGuid().ToString("N");
-            var source = "UIProject/assets/" + key;
-            var output = "Assets/UIProject/Assets/" + key;
-            var publish = "UIProject/settings/Publish.json";
+            var source = scope.source + "/assets/" + key;
+            var output = scope.output + "/Assets/" + key;
+            var publish = scope.source + "/settings/Publish.json";
             var previousPublish = File.Exists(publish) ? File.ReadAllBytes(publish) : null;
             var cache = typeof(Migrate).GetField("_codeGenerationSettings", BindingFlags.Static | BindingFlags.NonPublic);
             var previousCache = cache.GetValue(null);

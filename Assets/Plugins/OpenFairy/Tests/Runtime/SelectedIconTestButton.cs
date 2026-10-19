@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace OpenFairy.UGUI.Tests
 {
-    public partial class SelectedIconTestButton : OpenFairy.UGUI.Button<SelectedIconTestButton.button>
+    public partial class SelectedIconTestButton : global::OpenFairy.UGUI.Button<SelectedIconTestButton.button>
     {
         public enum button
         {
@@ -41,8 +41,8 @@ namespace OpenFairy.UGUI.Tests
         {
             m_button.Initialize();
         }
-        public OpenFairy.UGUI.Loader m_icon;
-[System.Serializable] public sealed class LocalizedTexts
+        public global::OpenFairy.UGUI.Loader m_icon;
+[global::System.Serializable] public sealed class LocalizedTexts
 {
 }
 public void ApplyLocale(global::OpenFairy.UGUI.Localization.LocaleTable texts)

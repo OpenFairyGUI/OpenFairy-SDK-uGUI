@@ -42,3 +42,33 @@ directly, while an omitted override preserves the definition.
 
 Existing published views must be rebuilt where they contain the affected button
 instances. This does not change generated fields or require runtime XML lookup.
+
+## Authored names and generated identifiers
+
+Authoring names are not C# identifiers. The importer preserves them in the source
+and published object/transition names, while allocating C# names in the appropriate
+namespace, class or enum scope. Keywords and invalid leading characters receive an
+underscore; punctuation becomes underscores and valid Unicode identifier parts
+are retained. Collisions receive stable suffixes instead of silently dropping a
+different authored entry. Page IDs and controller indices keep their original
+meaning. A blank page name uses its page ID as before.
+
+Controllers, child fields, transition fields, hook types/methods, localized text
+families and private bindings share the generated member scope. Enum members avoid the reserved backing-field name. A member may retain the
+same name as its containing enum, as permitted by C#. Exact duplicate
+authored child names retain the first public reference; private localization
+bindings still distinguish their source IDs. Duplicate controller names remain an
+ambiguous authoring contract; the FairyGUI controller documentation advises against
+them. Blank resource filenames or otherwise invalid authoring structures do not
+become valid merely because a C# placeholder can be allocated.
+
+Generated framework and component type references are fully qualified. Namespace
+and component-name allocation is deterministic for the complete indexed source
+set. Index the same source/dependency packages for script generation and prefab
+construction, including narrow re-publication. Regenerate scripts, wait for Unity
+compilation, then rebuild affected prefabs and locale assets together when an old
+identifier must change. Runtime code does not repair stale serialized field or
+managed-reference identities.
+
+See the authoring guidance for [publishing](https://www.fairygui.com/docs/editor/publish/)
+and [controllers](https://www.fairygui.com/docs/editor/controller/).

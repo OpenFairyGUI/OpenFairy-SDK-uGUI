@@ -10,10 +10,10 @@ using OpenFairyInputComponent = OpenFairy.UGUI.TextInput;
 
 namespace OpenFairyTextFixtures.NativeTextFixture
 {
-    public partial class NativeTextInput : OpenFairy.UGUI.Label
+    public partial class NativeTextInput : global::OpenFairy.UGUI.Label
     {
         public OpenFairyInputComponent m_title;
-[UnityEngine.SerializeField] private OpenFairyTextComponent _localizedPrompt1 = null;
+[global::UnityEngine.SerializeField] private OpenFairyTextComponent _localizedPrompt1 = null;
 private void SetLocalizedCaptionInput(string value)
 {
 #if FAIRYGUI_TMPRO
@@ -22,13 +22,13 @@ m_title.SetTextWithoutNotify(value);
 m_title.text = value;
 #endif
 }
-[System.Serializable]
+[global::System.Serializable]
 public sealed class LocalizedCaptionTexts
 {
     public string Text;
     public string Prompt;
 }
-[UnityEngine.SerializeField] private LocalizedCaptionTexts _LocalizedCaptionTexts = null;
+[global::UnityEngine.SerializeField] private LocalizedCaptionTexts _LocalizedCaptionTexts = null;
 public void ApplyLocalizedCaptionTexts(LocalizedCaptionTexts texts, bool updateInput = false)
 {
     _LocalizedCaptionTexts = texts;
@@ -40,7 +40,7 @@ public void RefreshLocalizedCaptionText(bool updateInput = true)
     _localizedPrompt1.text = _LocalizedCaptionTexts.Prompt;
 }
 
-[System.Serializable] public sealed class LocalizedTexts
+[global::System.Serializable] public sealed class LocalizedTexts
 {
 public LocalizedCaptionTexts LocalizedCaption;
 }

@@ -118,7 +118,7 @@ namespace OpenFairy.UGUI.Editor
         private static void BuildLocalizationPlans(List<Resource> components)
         {
             LocalViews.Clear();
-            var tableNames = new HashSet<string>(StringComparer.Ordinal);
+            var tableNames = new HashSet<string>(StringComparer.Ordinal) { "LocaleTable" };
             foreach (var resource in components)
             {
                 var view = new LocalView { resource = resource, xml = FairyXml.LoadPublishedComponentXml(resource.File) };
@@ -126,18 +126,10 @@ namespace OpenFairy.UGUI.Editor
                 view.names.Add(ClassName(resource));
                 view.names.Add("LocalizedTexts");
                 view.names.Add("ApplyLocale");
-                foreach (var controller in resource.ComponentXml.Controllers)
-                {
-                    view.names.Add(Field(controller.Name));
-                    view.names.Add(ControllerEnumName(controller.Name));
-                }
-                foreach (var (element, field) in PublishedChildFields(resource.ComponentXml))
-                {
-                    view.names.Add(field);
+                view.names.UnionWith(new GeneratedMembers(resource.ComponentXml, ClassName(resource)).used);
+                foreach (var (element, field) in PublishedChildFields(resource.ComponentXml, ClassName(resource)))
                     if (FieldType(element, resource.PackageId) != null)
                         view.published.Add(element.Id, field);
-                }
-                foreach (var transition in resource.ComponentXml.Transitions) view.names.Add(TransitionField(transition.Name));
                 LocalViews.Add(resource, view);
             }
             foreach (var view in LocalViews.Values) CollectLocalNodes(view);
@@ -187,10 +179,21 @@ namespace OpenFairy.UGUI.Editor
             variables = variables, target = new StaticTextChoice(member, target, setterCall, initialOnly),
         };
 
+        private static string LocalFamilyName(HashSet<string> used, string proposed)
+        {
+            string[] Members(string name) => new[] { name, name + "Texts", "_" + name + "Texts", "_" + name + "Variables",
+                name + "Variable", "Set" + name + "Variable", "Clear" + name + "Variable", "Apply" + name + "Texts",
+                "Refresh" + name + "Text", "Set" + name + "Input" };
+            var name = Identifier(proposed);
+            for (var suffix = 2; Array.Exists(Members(name), used.Contains); suffix++) name = proposed + "_" + suffix;
+            used.UnionWith(Members(name));
+            return name;
+        }
+
         private static LocalFamily AddLocalFamily(LocalView view, string element, string name)
         {
             var family = new LocalFamily { owner = view, element = element,
-                name = LocalName(view.names, "Localized" + Identifier(name)) };
+                name = LocalFamilyName(view.names, "Localized" + Identifier(name)) };
             family.source = new LocalRow { family = family, member = family.name };
             view.families.Add(family);
             return family;
@@ -282,7 +285,7 @@ namespace OpenFairy.UGUI.Editor
                             indices.Add(i);
                         }
                     family.gears.Add(gear);
-                    family.refresh.Add(gear.field + ".Apply(" + Field(source.Name) + ".page);");
+                    family.refresh.Add(gear.field + ".Apply(" + new GeneratedMembers(view.resource.ComponentXml, ClassName(view.resource)).controllerFields[source] + ".page);");
                 }
                 family.source.choices = choices.ToArray();
             }
@@ -511,35 +514,35 @@ namespace OpenFairy.UGUI.Editor
             var view = LocalViews[resource];
             var code = new StringBuilder();
             foreach (var node in view.nodes)
-                if (node.privateField) code.AppendLine($"[UnityEngine.SerializeField] private {ViewType(node.target)} {node.field} = null;");
+                if (node.privateField) code.AppendLine($"[global::UnityEngine.SerializeField] private {ViewType(node.target)} {node.field} = null;");
             var lists = new HashSet<string>();
             foreach (var node in view.nodes)
                 if (node.item >= 0 && lists.Add(node.element))
-                    code.AppendLine($"[UnityEngine.SerializeField] private OpenFairy.UGUI.ListSource {LocalListField(view, node.element)} = null;");
+                    code.AppendLine($"[global::UnityEngine.SerializeField] private global::OpenFairy.UGUI.ListSource {LocalListField(view, node.element)} = null;");
             foreach (var family in view.families)
             {
                 if (family.combo)
                 {
-                    code.AppendLine($"[System.Serializable] public sealed class {family.name}Texts {{ public string[] Items; }}")
-                        .AppendLine($"[UnityEngine.SerializeField] private {family.name}Texts _{family.name}Texts = null;")
+                    code.AppendLine($"[global::System.Serializable] public sealed class {family.name}Texts {{ public string[] Items; }}")
+                        .AppendLine($"[global::UnityEngine.SerializeField] private {family.name}Texts _{family.name}Texts = null;")
                         .AppendLine($"public void Apply{family.name}Texts({family.name}Texts texts) {{ _{family.name}Texts = texts; Refresh{family.name}Text(); }}")
                         .AppendLine($"public void Refresh{family.name}Text() {{ items = _{family.name}Texts.Items; if (selectedIndex >= 0 && selectedIndex < items.Length) text = items[selectedIndex]; }}");
                     continue;
                 }
                 if (family.textField != null && family.privateText)
-                    code.AppendLine($"[UnityEngine.SerializeField] private {(family.input ? "OpenFairyInputComponent" : "OpenFairyTextComponent")} {family.textField} = null;");
+                    code.AppendLine($"[global::UnityEngine.SerializeField] private {(family.input ? "OpenFairyInputComponent" : "OpenFairyTextComponent")} {family.textField} = null;");
                 if (family.promptField != null)
-                    code.AppendLine($"[UnityEngine.SerializeField] private OpenFairyTextComponent {family.promptField} = null;");
+                    code.AppendLine($"[global::UnityEngine.SerializeField] private OpenFairyTextComponent {family.promptField} = null;");
                 if (family.tooltipField != null)
-                    code.AppendLine($"[UnityEngine.SerializeField] private OpenFairy.UGUI.Tooltip {family.tooltipField} = null;");
+                    code.AppendLine($"[global::UnityEngine.SerializeField] private global::OpenFairy.UGUI.Tooltip {family.tooltipField} = null;");
                 foreach (var gear in family.gears)
-                    code.AppendLine($"[UnityEngine.SerializeReference] private OpenFairy.UGUI.GearText<{ControllerEnumName(gear.controller)}> {gear.field} = null;");
+                    code.AppendLine($"[global::UnityEngine.SerializeReference] private global::OpenFairy.UGUI.GearText<{new GeneratedMembers(view.resource.ComponentXml, ClassName(view.resource)).controllerEnums[Array.Find(view.resource.ComponentXml.Controllers, controller => controller.Name == gear.controller)]}> {gear.field} = null;");
                 if (family.input)
                     code.AppendLine($"private void Set{family.name}Input(string value)\n{{\n#if FAIRYGUI_TMPRO\n{family.textField}.SetTextWithoutNotify(value);\n#else\n{family.textField}.text = value;\n#endif\n}}");
                 code.AppendLine(StaticTextCode.Emit(family.name, family.variables.ToArray(),
                     Array.ConvertAll(family.source.choices, choice => choice.target), family.refresh.ToArray(), Identifier));
             }
-            code.AppendLine("[System.Serializable] public sealed class LocalizedTexts\n{");
+            code.AppendLine("[global::System.Serializable] public sealed class LocalizedTexts\n{");
             foreach (var family in view.families) code.AppendLine($"public {family.name}Texts {family.source.member};");
             foreach (var row in view.overrides)
             {
@@ -547,7 +550,7 @@ namespace OpenFairy.UGUI.Editor
             }
             code.AppendLine("}");
             foreach (var row in view.overrides)
-                if (row.path.Length > 1) code.AppendLine($"[UnityEngine.SerializeField] private {ViewType(row.family.owner)} {row.targetField} = null;");
+                if (row.path.Length > 1) code.AppendLine($"[global::UnityEngine.SerializeField] private {ViewType(row.family.owner)} {row.targetField} = null;");
             code.AppendLine($"public void ApplyLocale({LocaleType} texts)\n{{");
             foreach (var node in view.nodes)
                 code.AppendLine(node.item < 0 ? $"{node.field}.ApplyLocale(texts);"
@@ -579,7 +582,7 @@ namespace OpenFairy.UGUI.Editor
         private static string[] LocalLanguageNames()
         {
             var names = new string[_localization.languages.Length];
-            var used = new HashSet<string>();
+            var used = new HashSet<string> { "value__" };
             for (var i = 0; i < names.Length; i++) names[i] = LocalName(used, _localization.languages[i].name);
             return names;
         }
