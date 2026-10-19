@@ -16,7 +16,8 @@ namespace OpenFairy.UGUI.Editor
             _codeGenerationSettings = null;
             var pending = new List<(string Prefab, Schema.Component Xml, List<(Schema.Display Element, string Material)> Bindings)>();
             var total = 0;
-            foreach (var package in Directory.EnumerateFiles($"{UiRoot}/assets", "package.xml", SearchOption.AllDirectories))
+            foreach (var source in SourceRoots())
+            foreach (var package in Directory.EnumerateFiles($"{source}/assets", "package.xml", SearchOption.AllDirectories))
                 foreach (var resource in Schema.Package.Load(package).Resources)
                 {
                     if (resource.Kind != Schema.ResourceKind.Component) continue;
@@ -101,11 +102,10 @@ namespace OpenFairy.UGUI.Editor
                 ? input.textComponent as TextMeshProUGUI : node.GetComponent<TextMeshProUGUI>();
             if (text == null)
                 throw new InvalidOperationException($"Authored text '{element.Id}' is missing from '{prefab.name}'.");
-            var field = Field(element.Name);
-            var first = Array.Find(xml.DisplayList, child => Field(child.Name) == field);
-            var published = first == element && !Array.Exists(xml.Controllers, controller => Field(controller.Name) == field)
-                && !(CodeSettings().ignoreNoname && System.Text.RegularExpressions.Regex.IsMatch(element.Name ?? "", @"\An[0-9]+\z"));
-            if (published)
+            string field = null;
+            foreach (var binding in PublishedChildFields(xml))
+                if (binding.Element == element) field = binding.Field;
+            if (field != null)
             {
                 var owner = prefab.GetComponent<Component>();
                 var value = owner.GetType().GetField(field)?.GetValue(owner);

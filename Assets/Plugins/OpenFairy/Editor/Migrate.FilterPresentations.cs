@@ -11,13 +11,13 @@ namespace OpenFairy.UGUI.Editor
     {
         public static int RepairFilterPresentations(bool dryRun = false)
         {
-            Resources.Clear();
-            foreach (var path in Directory.EnumerateFiles($"{UiRoot}/assets", "package.xml", SearchOption.AllDirectories))
-                IndexPackage(path.Replace('\\', '/'));
+            IndexSources();
             var ordered = new List<Resource>();
             var images = new HashSet<Resource>();
             foreach (var resource in Resources.Values)
-                if (resource.Type == Schema.ResourceKind.Component) Collect(resource, ordered, images);
+                if (resource.Type == Schema.ResourceKind.Component
+                    && File.Exists(Path.ChangeExtension(AssetPath(resource.File), ".prefab")))
+                    Collect(resource, ordered, images);
             var total = 0;
             var changed = 0;
             foreach (var resource in ordered)

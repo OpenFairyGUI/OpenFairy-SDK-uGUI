@@ -7,7 +7,7 @@ namespace OpenFairy.UGUI
     [DisallowMultipleComponent, AddComponentMenu("")]
     internal sealed class RootSizeBinding : UIBehaviour
     {
-        private Root _root;
+        [SerializeField] private Root _root;
         private Rect _sourceRect;
         private Matrix4x4 _sourceMatrix;
 

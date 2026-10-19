@@ -10,6 +10,7 @@ namespace OpenFairy.UGUI
     {
         internal const string PoolName = "__listPool";
         public GameObject itemPrefab;
+        [SerializeField] internal GameObject[] variantItems = Array.Empty<GameObject>();
         public Vector2 itemSize;
         public float lineGap;
         public float colGap;
@@ -139,7 +140,6 @@ namespace OpenFairy.UGUI
             }
             if (hasNativeRowLayout)
             {
-                if (_nativeRowItemSizes.Length != _indices.Count) _nativeRowItemSizes = new Vector2[_indices.Count];
                 UpdateNativeRowItemSizes();
                 UpdateNativeRowSize(viewSize);
                 LayoutRebuilder.ForceRebuildLayoutImmediate(container);
@@ -253,6 +253,18 @@ namespace OpenFairy.UGUI
 
         internal bool TryGetItemIndex(GameObject item, out int index) => _indices.TryGetValue(item, out index);
         public int GetItemIndex(GameObject item) => _indices[item];
+
+        public GameObject GetItemAt(int index)
+        {
+            if (_pool == null && _indices.Count == 0)
+            {
+                var authored = List.Container((RectTransform)transform);
+                for (var i = 0; i < count; i++) _indices.Add(authored.GetChild(i).gameObject, i);
+            }
+            foreach (var item in _indices)
+                if (item.Value == index) return item.Key;
+            throw new KeyNotFoundException($"No bound list item at index {index}.");
+        }
 
         // Allows real async icon/model binders to reject a recycled row or old Fill.
         public bool IsBound(GameObject item, int index, int fillVersion) => version == fillVersion
@@ -434,6 +446,7 @@ namespace OpenFairy.UGUI
 
         private bool UpdateNativeRowItemSizes()
         {
+            if (_nativeRowItemSizes.Length != _indices.Count) _nativeRowItemSizes = new Vector2[_indices.Count];
             bool changed = false;
             foreach (var item in _indices)
             {
@@ -460,7 +473,7 @@ namespace OpenFairy.UGUI
             if (hasNativeRowLayout)
             {
                 var view = scrollPane != null ? scrollPane.viewportSize : ((RectTransform)transform).rect.size;
-                if (_viewport != view) UpdateNativeRowSize(view);
+                if (_viewport != view || _nativeRowItemSizes.Length != _indices.Count) UpdateNativeRowSize(view);
                 if (UpdateNativeRowItemSizes()) LayoutRebuilder.MarkLayoutForRebuild(content);
                 return;
             }
@@ -500,6 +513,12 @@ namespace OpenFairy.UGUI
                 var child = content.GetChild(i);
                 if (child.name != PoolName)
                 {
+                    if (Array.IndexOf(variantItems, child.gameObject) >= 0)
+                    {
+                        child.gameObject.SetActive(false);
+                        child.SetParent(PoolRoot, false);
+                        continue;
+                    }
                     EnsurePool();
                     _pool.Release(child.gameObject);
                 }
@@ -560,7 +579,6 @@ namespace OpenFairy.UGUI
             item.GetComponentsInChildren(true, _buttons);
             foreach (var button in _buttons)
             {
-                button.onClick.RemoveAllListeners();
                 button.grayed = false;
                 button.selected = false;
                 button.changeStateOnClick = true;

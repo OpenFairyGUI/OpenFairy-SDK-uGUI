@@ -31,7 +31,8 @@ namespace OpenFairy.UGUI.Tests
         private static List<UIVertex> Mesh(Graph graph)
         {
             using var helper = new VertexHelper();
-            typeof(Graph).GetMethod("OnPopulateMesh", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(graph, new object[] { helper });
+            typeof(Graph).GetMethod("OnPopulateMesh", BindingFlags.Instance | BindingFlags.NonPublic, null,
+                new[] { typeof(VertexHelper) }, null).Invoke(graph, new object[] { helper });
             var vertices = new List<UIVertex>();
             helper.GetUIVertexStream(vertices);
             return vertices;

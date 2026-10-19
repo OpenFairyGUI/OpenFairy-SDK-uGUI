@@ -21,8 +21,8 @@ namespace OpenFairy.UGUI
     {
         private static Root _inst;
         public static Root inst => _inst;
-        private AudioSource _soundSource;
-        private RootSizeBinding _sizeBinding;
+        [SerializeField] private AudioSource _soundSource;
+        [SerializeField] private RootSizeBinding _sizeBinding;
         public AudioSource soundSource => _soundSource;
 
         public RectTransform rect;
@@ -40,6 +40,12 @@ namespace OpenFairy.UGUI
         public Color modalColor = new(0, 0, 0, 0.4f);
 
         public Vector2 size => rect.rect.size;
+
+        protected override void Awake()
+        {
+            base.Awake();
+            _inst = this;
+        }
 
         // 把覆盖层建到 designRoot 所在画布上、与 designRoot 同坐标区，自带高 sortingOrder 的
         // Canvas + GraphicRaycaster 渲染在页面之上并复用场景 EventSystem。

@@ -121,9 +121,10 @@ Shader "OpenFairy/UI ColorMatrix"
             }
             ENDCG
         }
-        // RGB transforms linearly in PMA space; coverage weights the color offset.
+        // UI renderers skip this blit-only pass; coverage weights the PMA color offset.
         Pass
         {
+            Tags { "LightMode" = "OpenFairyPma" }
             ZTest Always
             Blend Off
             Stencil { Comp Always }

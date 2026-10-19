@@ -51,6 +51,35 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [UnityTest]
+        public IEnumerator Authored_lookup_initializes_native_row_measurements_without_a_refill()
+        {
+            foreach (var autoItemSize in new[] { false, true })
+            foreach (var scrolling in new[] { false, true })
+            {
+                var source = Row(autoItemSize, scrolling);
+                var widths = new[] { 40f, 70f, 110f };
+                for (var i = 0; i < widths.Length; i++)
+                {
+                    var item = Object.Instantiate(source.itemPrefab, source.content);
+                    var rect = (RectTransform)item.transform;
+                    rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
+                    item.GetComponent<LayoutElement>().preferredWidth = widths[i];
+                    item.SetActive(true);
+                }
+                source.count = widths.Length;
+                yield return null;
+                for (var i = 0; i < widths.Length; i++) Assert.That(source.GetItemAt(i), Is.SameAs(source.content.GetChild(i).gameObject));
+                yield return null; yield return null;
+                var items = Items(source);
+                Assert.That(items[1].anchoredPosition.x, Is.EqualTo(45).Within(.01));
+                items[0].GetComponent<LayoutElement>().preferredWidth = 90;
+                yield return null; yield return null;
+                Assert.That(items[1].anchoredPosition.x, Is.EqualTo(95).Within(.01));
+                Assert.That(items[0].rect.height, Is.EqualTo(autoItemSize ? 60 : 20).Within(.01));
+            }
+        }
+
+        [UnityTest]
         public IEnumerator ActualWidthsAndLaterContentChangesUseOneNativeLayoutOwner()
         {
             var source = Row(true);

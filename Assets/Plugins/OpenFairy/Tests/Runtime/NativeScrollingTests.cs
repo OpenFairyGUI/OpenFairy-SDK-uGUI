@@ -183,6 +183,79 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [UnityTest]
+        public IEnumerator Every_scrollbar_direction_hides_zero_and_full_grips_and_restores_overflow()
+        {
+            foreach (var direction in new[] { Scrollbar.Direction.LeftToRight, Scrollbar.Direction.RightToLeft, Scrollbar.Direction.BottomToTop, Scrollbar.Direction.TopToBottom })
+            {
+                var root = Rect("Scrollbar", null, new Vector2(200, 200), Vector2.zero);
+                var grip = Rect("Grip", root, new Vector2(20, 20), Vector2.zero);
+                var bar = root.gameObject.AddComponent<AuthoredScrollbar>();
+                bar.handleRect = grip;
+                bar.direction = direction;
+                foreach (var size in new[] { 0f, .5f, 1f, .25f })
+                {
+                    bar.size = size;
+                    yield return null;
+                    Assert.That(grip.gameObject.activeSelf, Is.EqualTo(size is > 0 and < 1), $"{direction}, size={size}");
+                    Assert.That(root.gameObject.activeSelf, Is.True);
+                }
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Non_list_content_size_changes_refresh_native_bounds_and_grips()
+        {
+            var root = Rect("Scroll", null, new Vector2(200, 120), Vector2.zero);
+            var viewport = Rect("viewport", root, root.rect.size, Vector2.zero);
+            var content = Rect("content", viewport, new Vector2(200, 300), Vector2.zero);
+            var child = Rect("Text", content, new Vector2(200, 300), Vector2.zero);
+            var pane = root.gameObject.AddComponent<ScrollPane>();
+            pane.viewport = viewport;
+            pane.content = content;
+            pane.horizontal = false;
+            var track = Rect("Scrollbar", root, new Vector2(20, 120), new Vector2(200, 0));
+            var grip = Rect("Grip", track, new Vector2(20, 20), Vector2.zero);
+            var bar = track.gameObject.AddComponent<AuthoredScrollbar>();
+            bar.pane = pane;
+            bar.handleRect = grip;
+            pane.verticalScrollbar = bar;
+            foreach (var height in new[] { 300f, 0f, 240f })
+            {
+                child.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+                yield return null;
+                yield return null;
+                Assert.That(pane.contentSize.y, Is.EqualTo(height).Within(.01f));
+                Assert.That(grip.gameObject.activeSelf, Is.EqualTo(height > 120));
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Animated_scroll_uses_the_unscaled_engine_clock_with_manual_defaults()
+        {
+            DG.Tweening.DOTween.Init();
+            var update = DG.Tweening.DOTween.defaultUpdateType;
+            var timeScale = Time.timeScale;
+            var source = List();
+            source.SetVirtual();
+            source.Fill(20, (_, _) => { });
+            try
+            {
+                DG.Tweening.DOTween.defaultUpdateType = DG.Tweening.UpdateType.Manual;
+                Time.timeScale = 0;
+                source.scrollPane.SetPosition(new Vector2(0, 200), true);
+                yield return new WaitForSecondsRealtime(.4f);
+                Assert.That(source.scrollPane.position.y, Is.EqualTo(200).Within(.01f));
+                Assert.That(DG.Tweening.DOTween.defaultUpdateType, Is.EqualTo(DG.Tweening.UpdateType.Manual));
+            }
+            finally
+            {
+                source.scrollPane.StopMovement();
+                DG.Tweening.DOTween.defaultUpdateType = update;
+                Time.timeScale = timeScale;
+            }
+        }
+
+        [UnityTest]
         public IEnumerator Page_controller_and_native_position_update_in_both_directions_without_feedback()
         {
             var source = List();

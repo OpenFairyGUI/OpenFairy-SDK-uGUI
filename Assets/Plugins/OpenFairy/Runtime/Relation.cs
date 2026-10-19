@@ -16,6 +16,7 @@ namespace OpenFairy.UGUI
         public RelationBinding[] bindings = Array.Empty<RelationBinding>();
         [SerializeField, HideInInspector] private Vector2 _ownerSize;
         [SerializeField, HideInInspector] private Vector2 _referenceSize;
+        [SerializeField, HideInInspector] private bool _hasBaseline;
         private bool _recorded;
         private bool _applying;
         private bool _registered;
@@ -85,6 +86,7 @@ namespace OpenFairy.UGUI
                 binding.previous = ReadTarget(binding);
             _ownerSize = ((RectTransform)transform).rect.size;
             _referenceSize = reference.rect.size;
+            _hasBaseline = true;
             _recorded = true;
             Register();
         }
@@ -160,7 +162,12 @@ namespace OpenFairy.UGUI
                 foreach (var binding in bindings)
                     RestoreFittedSize(binding.target, binding.previous.size);
             }
-            Record();
+            if (_hasBaseline)
+            {
+                _recorded = true;
+                Register();
+            }
+            else Record();
         }
 
         private static void RestoreFittedSize(RectTransform rect, Vector2 size)

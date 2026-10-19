@@ -7,3 +7,6 @@ The component handles only pointer enter and exit. It does not register click, d
 This component does not create hit areas or change raycast settings. The authored object needs its existing raycastable Graphic, or a raycastable descendant whose EventSystem hover chain includes it. Use ordinary Button or ScrollRect for clicks and scrolling. A disabled button can still expose hover information while its click is rejected by the button.
 
 `PointerHoverTests` exercise the native PointerInputModule hover chain, button visual state and click handling, parent scroll routing, and pool disable/reuse. They require PlayMode and do not claim physical mouse or image verification.
+# Extending native button pointers
+
+`Button<T>.OnPointerEnter`, `OnPointerExit`, `OnPointerDown` and `OnPointerUp` are virtual, like `OnPointerClick`. Override them in a generated component's user partial and call the base implementation to preserve hover, pressed, selected and grayed visuals. No separate event relay component is required.

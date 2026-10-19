@@ -4,11 +4,13 @@
 
 当前能力以状态文档的最新日期为准，下文开发经验保留其历史背景。原 `ScrollPaneHost` 已删除，滚动交互由原生 `ScrollRect`/`Scrollbar` 承担；虚拟列表、循环索引与变高行已实现。输入框已有 Input System 撤销/重做与单行 Tab 实现；虚拟输入测试使用官方 `InputTestFixture` 隔离设备并恢复宿主状态，不能依赖 Editor 窗口焦点。按钮 `grayed` 只决定视觉，触摸/交互是独立通道，不再以灰显一律拦截点击。
 
+2026-10-19 独立 Builtin 包级完整验证为 Editor 157/157、PlayMode 169/169，无失败或跳过；下文旧数量保留历史上下文。Button<T> 原生 Enter/Exit/Down/Up 与 Click 一样可覆写；消费方在派生方法中调用 base，避免隐藏接口方法而丢失 SDK 视觉状态。停用按钮清除瞬时按下和悬浮状态，保留选中与灰显；ExecuteEvents 回归覆盖全部按钮模式、选中、灰显、左右键与停启复用。未据此扩大 TMP/golden 的验证范围。
+
 导入器的组件实例 `controller`、列表项 `controllers` 使用页ID而非序号，按原顺序应用后再结算最终布局。测试中需要挂在 GameObject/prefab 上的支持组件放运行时测试程序集，不能放 Editor 程序集；EditMode 测试经引用复用这些支持组件。
 
 对象捕获/模糊/容器颜色滤镜保留显式同步刷新，Play 自动刷新使用 `Application.onBeforeRender`，晚于关系的 `PostLateUpdate` 同步，不能改回普通 `LateUpdate` 或 `willRenderCanvases` 捕获。最外层滤镜负责内层逆序刷新。重复无域/场景重载 Play 的测试按当前原生组件重新取得托管支持对象，不能把旧托管包装器里的观察列表当成当前组件；这一测试已通过，无需为夹具引用问题改生产生命周期。
 
-当前包内测试在 Unity Editor/Mono 的实际结果为 Editor **152/152**、PlayMode **177/177**，对应同一正式源码的完整两套运行，均无跳过或失败。TMP/Builtin 两后端各四个程序集另有离线零错误编译；Builtin 不据此视为原生行为通过。灰显、原生 SingleRow 布局/滚动查询、Hidden 列表裁剪、fitter 关系初态、共享 Transition 声音及十三种混合捕获均有回归。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
+当前 TMP 包内测试在 Unity Editor/Mono 的实际结果为 Editor **193/193**、PlayMode **197/197**，对应同一正式源码的完整两套运行，均无跳过或失败。TMP/Builtin 两后端各四个程序集另有离线零错误编译；Builtin 不据此视为原生行为通过。灰显、原生 SingleRow 布局/滚动查询、Hidden 列表裁剪、fitter 关系初态、共享 Transition 声音及十三种混合捕获均有回归。这不包含重新运行传统 Basics/Transition 全部 golden，也不代表稀疏工作树之外的 Demo 已通过。
 
 静态文本与本地化由普通导出器生成 typed 方法、直接原生引用和语言资产；按钮 selected icon、声音和实例控制器覆盖在导入期烘焙。位图字体同域重导会失效查找缓存。Canvas overlay 使用 native anchors；非 Canvas 的兄弟 overlay 复制 anchors/pivot/rect/pose，并在 `LateUpdate` 检查矩形和变换矩阵变化，公开坐标仍从左上起算。
 
@@ -16,11 +18,15 @@
 
 原生 Window/popup 已采用组件与预烘焙 WindowBuilder，关闭等待 Transition、重开取消旧 session，外点由显式选择的 PopupInputModule 在原生派发前检查，不用透明拦截层重发事件。Root 必须继承设计根的 layer；两种相机模式的真实 GPU 对照已确认差异，永久回归通过。十项 popup 首轮失败来自夹具向不接受 null 的 EventSystem.current 赋空；清理仅恢复已有宿主，未给生产逻辑加兜底。
 
-Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事件整体缩放，不运行时解析 URL。image/movie/empty/content 切换与 mask/alpha GPU 检查通过。六项几何测试首轮把 height=60、pivot.y=.7 的顶边写成42，实际应为18；仅修独立测试数值。当前152/177包含所有新增包内回归，不与历史总数累加，消费端和完整Demo/golden仍须单独验证。
+Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事件整体缩放，不运行时解析 URL。image/movie/empty/content 切换与 mask/alpha GPU 检查通过。六项几何测试首轮把 height=60、pivot.y=.7 的顶边写成42，实际应为18；仅修独立测试数值。当前193/197包含所有新增包内回归，不与历史总数累加，消费端和完整Demo/golden仍须单独验证。
 
 整根 Overlay Canvas 停启保留已有 Relation 基线，避免 CanvasScaler 恢复期间的临时尺寸被重复累计；隐藏期间真实父尺寸和内容变化仍在恢复后同步。原生锚点只消化 anchor span 对应的尺寸差，fitter 自身改宽仍保持对齐。新增三项真实 prefab/Canvas 回归覆盖原生父缩放、同帧和隔帧内容变化及三种水平 pivot。
 
-ContentSizeFitter 的 driven 尺寸不会完整序列化；Relation 首次启用时先恢复已有烘焙基线，再 Record 和接受真实重排，不能拿刚反序列化的零尺寸当原始几何。首次活动实例化时，父组件 OnEnable 可能早于子 fitter 原生启用；恢复已保存基线按 enabled 配置判断。self 坐标关系只叠加变化量，不能把自身 pivot 原点当绝对位移。动态修改 MaskableGraphic.maskable 的测试正控还须调用公开 RecalculateClipping，不能将未更新的 clip parent 当渲染结论。声音夹具在首次启用前配置 AudioSource，并为自身提供 AudioListener；不要因宿主无 listener 或不确定的构造时序给生产声音代码加兼容分支。
+ContentSizeFitter 的 driven 尺寸不会完整序列化；Relation 首次启用时恢复并保留已烘焙的关系基准，随后接受真实重排；没有烘焙基准才 Record。不能用反序列化的零尺寸或 CanvasScaler 的临时尺寸覆盖作者基准。首次活动实例化时，父组件 OnEnable 可能早于子 fitter 原生启用；恢复已保存基线按 enabled 配置判断。self 坐标关系只叠加变化量，不能把自身 pivot 原点当绝对位移。动态修改 MaskableGraphic.maskable 的测试正控还须调用公开 RecalculateClipping，不能将未更新的 clip parent 当渲染结论。声音夹具在首次启用前配置 AudioSource，并为自身提供 AudioListener；不要因宿主无 listener 或不确定的构造时序给生产声音代码加兼容分支。
+
+导入的普通 Image/MovieClip 是装饰面，不参与原生射线检测；Loader 保留自己的命中面，按钮使用根节点的命中 Graphic。ListSource 回收不能清除业务 Awake 注册的 UnityEvent；消费端 Fill 回调自行替换其每次绑定的业务监听。SDK 的选择中继只移除自己拥有的监听，并用绑定版本取消点击派发期间重填留下的在途回调。
+
+Builtin InputField 在聚焦时会消费 EventSystem 的 updateSelected 导航事件；InputSubmit 必须在导入期持久绑定原生 onSubmit，不能把 ISubmitHandler 或 onEndEdit 当回车文字提交。测试保存并重新实例化 Prefab，再分别检查聚焦、失焦和提交的行为。
 
 捕获必须按原生顺序运行完整材质 modifier 链，只跳过源隐藏 modifier。不能向 ColorAdjust/BlendModeEffect 的同一缓存传入去掉原生 Stencil 的不同输入，否则会释放源 CanvasRenderer 仍在使用的材质。源蒙版参数只在 owned 副本上恢复到 base 值，再由代理树重算本地遮罩；新增两项跨帧 GPU 回归及增强 TMP 图文混排覆盖源材质、pop、图集、外罩排除与内部蒙版。
 
