@@ -4,7 +4,7 @@
     "displayName": "OpenFairy SDK for uGUI",
     "description": "基于 uGUI 的 FairyGUI Runtime SDK：继续用 FairyGUI Editor 编辑 UI，将 FairyGUI 工程转换成 uGUI prefab 和 C# 代码，并尽量还原 FairyGUI 的渲染、动效和交互表现。",
     "unity": "6000.0",
-    "documentationUrl": "https://github.com/nanamicat/OpenFairy-SDK-uGUI",
+    "documentationUrl": "https://github.com/OpenFairyGUI/OpenFairy-SDK-uGUI",
     "keywords": [
         "fairygui",
         "ugui",
