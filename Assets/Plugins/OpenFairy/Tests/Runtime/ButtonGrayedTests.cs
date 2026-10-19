@@ -10,9 +10,9 @@ namespace OpenFairy.UGUI.Tests
 {
     public enum GrayedTestPage { up, down, over, selectedOver, disabled, selectedDisabled }
     public enum GrayedBasicTestPage { up, down, over, selectedOver }
-    public sealed class GrayedTestButton : Button<GrayedTestPage> { }
-    public sealed class GrayedBasicTestButton : Button<GrayedBasicTestPage> { }
-    public sealed class GrayedTestCombo : ComboBox<GrayedTestPage> { }
+    public sealed class GrayedTestButton : NamedStateButton<GrayedTestPage> { }
+    public sealed class GrayedBasicTestButton : NamedStateButton<GrayedBasicTestPage> { }
+    public sealed class GrayedTestCombo : NamedStateCombo<GrayedTestPage> { }
 
     public class ButtonGrayedTests
     {

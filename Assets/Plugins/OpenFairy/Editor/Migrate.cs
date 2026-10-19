@@ -511,6 +511,8 @@ namespace OpenFairy.UGUI.Editor
                     "        }",
                 });
             var stateEnum = names.buttonEnum;
+            if (isButtonFamily && buttonController != null)
+                fields.AddRange(StatePageCode(buttonController, stateEnum));
             var baseType = xml.Extension switch
             {
                 Schema.ComponentExtension.Button => $"global::OpenFairy.UGUI.Button<{name}.{stateEnum}>",
@@ -547,6 +549,24 @@ namespace OpenFairy.UGUI.Editor
             code.AppendLine("}");
 
             return code.ToString();
+        }
+
+        // 复刻 GButton.SetState 按页名选页：生成期把各视觉状态静态映射到 "button" 控制器的首个同名页。
+        private static IEnumerable<string> StatePageCode(Schema.Controller controller, string stateEnum)
+        {
+            var members = PageMembers(controller).AsValueEnumerable().Select(page => page.Member).ToArray();
+            yield return "";
+            yield return $"        protected override {stateEnum}? StatePage(VisualState state) => state switch";
+            yield return "        {";
+            foreach (var (state, page) in new[] { ("Up", "up"), ("Down", "down"), ("Over", "over"),
+                ("SelectedOver", "selectedOver"), ("Disabled", "disabled"), ("SelectedDisabled", "selectedDisabled") })
+            {
+                var index = Array.FindIndex(controller.Pages, authored => authored.Name == page);
+                if (index >= 0)
+                    yield return $"            VisualState.{state} => {stateEnum}.{members[index]},";
+            }
+            yield return "            _ => null,";
+            yield return "        };";
         }
 
         // GeneratedMembers 已避开基类成员名，生成的 enum 不会遮蔽 runtime 成员。

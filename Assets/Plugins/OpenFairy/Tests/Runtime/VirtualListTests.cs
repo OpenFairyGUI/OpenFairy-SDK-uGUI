@@ -10,7 +10,7 @@ using UnityEngine.UI;
 namespace OpenFairy.UGUI.Tests.PlayMode
 {
     public enum ListTestState { up, down, over, selectedOver, disabled, selectedDisabled }
-    public sealed class ListTestButton : Button<ListTestState> { }
+    public sealed class ListTestButton : NamedStateButton<ListTestState> { }
 
     public class VirtualListTests
     {

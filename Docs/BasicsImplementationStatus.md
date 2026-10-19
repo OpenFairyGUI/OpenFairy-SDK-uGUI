@@ -6,7 +6,7 @@
 
 ### 2026-10-20 FairyGUI 一致性与精简复审
 
-- 第二轮：组件按 opaque（缺省 true）在根节点烘焙透明命中面，Image/MovieClip 与 FairyGUI 一样可命中并挡住下层；列表 renderOrder（descent/arch）只改兄弟序，项索引、位置与选择不变，原生行布局用 reverseArrangement 保持位置。Builtin 省略号按 _ellipsisCharIndex 规则落在最后一条完整容纳行的倒数第二字（不换行时为首个越界字前两字），裁剪模式下越界后续行与越过右边的字形不绘制；换行符占零宽字符位。restrictSize 的最小尺寸经 LayoutElement 约束自适应，文字按最大宽度换行；按钮/标签实例 titleFontSize、Icon 动效已导入。反向遮罩 reversedMask 需要自定义模板着色器，仍是明确边界。
+- 第二轮：组件按 opaque（缺省 true）在根节点烘焙透明命中面，Image/MovieClip 与 FairyGUI 一样可命中并挡住下层；列表 renderOrder（descent/arch）只改兄弟序，项索引、位置与选择不变，原生行布局用 reverseArrangement 保持位置。Builtin 省略号按 _ellipsisCharIndex 规则落在最后一条完整容纳行的倒数第二字（不换行时为首个越界字前两字），裁剪模式下越界后续行与越过右边的字形不绘制；换行符占零宽字符位。restrictSize 的最小尺寸经 LayoutElement 约束自适应，文字按最大宽度换行；按钮/标签实例 titleFontSize、Icon 动效已导入。反向遮罩 reversedMask 需要自定义模板着色器，仍是明确边界。按钮/下拉的视觉状态页改为生成代码按 "button" 控制器页名静态给出（`StatePage` switch），运行时不再按字符串解析枚举；旧生成脚本仍可编译，重新 Migrate 后恢复状态页。
 - 动效目标改为导入期烘焙的组件引用，嵌套动效先建齐同组件全部动效再解析，失效嵌套项保留序号但不生效；运行时不再 GetComponent 或按名称查找。Builtin 投影改用 uGUI Shadow，描边改为 Shadow 派生的四轴复制。TMP 后端补齐描边（SDF outline 加同宽 face dilate，外扩宽度经真实渲染测得与作者宽度一致）、HTML font/strike、UBB align/font 与链接保留外层颜色。
 
 - 按钮状态逐条对齐 GButton：缺页回落首页、无 over 页不跟踪悬浮、拖出后松开回到当前态；新增 `downEffect`（dark/scale）导入与运行时效果，scale 绕中心缩放且实例默认中心轴心。ComboBox 对齐 GComboBox：按下开关下拉、打开期间保持 down 页、下拉宽度跟随组件、高度按 visibleItemCount 与行距并保持作者高度差。

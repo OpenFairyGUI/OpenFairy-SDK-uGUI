@@ -4,6 +4,14 @@ namespace OpenFairy.UGUI.Tests
 {
 public sealed class TemplateGeneratedButton : Button<TemplateGeneratedButton.Mode>
 {
+        protected override Mode? StatePage(VisualState state) => state switch
+        {
+            VisualState.Up => Mode.up,
+            VisualState.Down => Mode.down,
+            VisualState.Over => Mode.over,
+            VisualState.SelectedOver => Mode.selectedOver,
+            _ => null,
+        };
 public enum Mode { up, down, over, selectedOver }
 [System.Serializable]
 public sealed class ButtonTexts

@@ -196,22 +196,10 @@ namespace OpenFairy.UGUI
             SelectedDisabled,
         }
 
-        // 复刻 Controller.selectedPage：按页名选页，缺页回落到首页（default(T)）。
-        private protected static class StatePages
-        {
-            public static readonly T Up, Down, Over, SelectedOver, Disabled, SelectedDisabled;
-            public static readonly bool HasOver, HasDisabled;
+        // 各视觉状态对应的 "button" 控制器页，由生成代码按页名静态给出；作者没建的页为 null。
+        protected virtual T? StatePage(VisualState state) => null;
 
-            static StatePages()
-            {
-                Enum.TryParse("up", out Up);
-                Enum.TryParse("down", out Down);
-                HasOver = Enum.TryParse("over", out Over);
-                Enum.TryParse("selectedOver", out SelectedOver);
-                HasDisabled = Enum.TryParse("disabled", out Disabled);
-                Enum.TryParse("selectedDisabled", out SelectedDisabled);
-            }
-        }
+        private protected bool HasPage(VisualState state) => StatePage(state).HasValue;
 
         public Controller<T> controller;
 
@@ -237,7 +225,7 @@ namespace OpenFairy.UGUI
                 return;
             _down = true;
             if (mode == ButtonMode.Common)
-                SetState(grayed && StatePages.HasDisabled ? VisualState.SelectedDisabled : VisualState.Down);
+                SetState(grayed && HasPage(VisualState.Disabled) ? VisualState.SelectedDisabled : VisualState.Down);
         }
 
         // 复刻 GButton.__touchEnd：含拖出按钮后在外松开，回到当前逻辑态。
@@ -256,7 +244,7 @@ namespace OpenFairy.UGUI
         // 复刻 GButton.__rollover/__rollout：没有 over 页的按钮不跟踪悬浮。
         private void SetOver(bool over)
         {
-            if (!StatePages.HasOver)
+            if (!HasPage(VisualState.Over))
                 return;
             _over = over;
             if (!_down)
@@ -310,7 +298,7 @@ namespace OpenFairy.UGUI
         public override void RefreshState()
         {
             RefreshTitle();
-            if (grayed && StatePages.HasDisabled)
+            if (grayed && HasPage(VisualState.Disabled))
                 SetState(selected ? VisualState.SelectedDisabled : VisualState.Disabled);
             else if (selected)
                 SetState(_over ? VisualState.SelectedOver : VisualState.Down);
@@ -318,17 +306,10 @@ namespace OpenFairy.UGUI
                 SetState(_over ? VisualState.Over : VisualState.Up);
         }
 
+        // 复刻 Controller.selectedPage：缺页回落到首页（default(T)）。
         protected void SetState(VisualState state)
         {
-            controller.page = state switch
-            {
-                VisualState.Up => StatePages.Up,
-                VisualState.Down => StatePages.Down,
-                VisualState.Over => StatePages.Over,
-                VisualState.SelectedOver => StatePages.SelectedOver,
-                VisualState.Disabled => StatePages.Disabled,
-                _ => StatePages.SelectedDisabled,
-            };
+            controller.page = StatePage(state) ?? default;
             ApplyDownEffect(state is VisualState.Down or VisualState.SelectedOver or VisualState.SelectedDisabled);
         }
     }

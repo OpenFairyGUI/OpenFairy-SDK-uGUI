@@ -2,7 +2,7 @@ using UnityEngine.EventSystems;
 
 namespace OpenFairy.UGUI.Tests
 {
-    public sealed class PointerOverrideButton : Button<PointerOverrideButton.State>
+    public sealed class PointerOverrideButton : NamedStateButton<PointerOverrideButton.State>
     {
         public enum State { up, down, over, selectedOver, disabled, selectedDisabled }
         public int enters, exits, presses, releases;

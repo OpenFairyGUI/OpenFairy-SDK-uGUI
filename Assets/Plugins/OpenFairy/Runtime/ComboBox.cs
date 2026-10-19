@@ -142,7 +142,7 @@ namespace OpenFairy.UGUI
         public override void RefreshState()
         {
             RefreshTitle();
-            SetState(grayed && StatePages.HasDisabled ? VisualState.Disabled
+            SetState(grayed && HasPage(VisualState.Disabled) ? VisualState.Disabled
                 : DropdownOpen ? VisualState.Down
                 : _over ? VisualState.Over : VisualState.Up);
         }

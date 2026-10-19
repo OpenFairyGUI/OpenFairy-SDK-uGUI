@@ -13,6 +13,12 @@ namespace OpenFairy.UGUI.Tests
 {
     public partial class ContentSizeTestButton : global::OpenFairy.UGUI.Button<ContentSizeTestButton.button>
     {
+        protected override button? StatePage(VisualState state) => state switch
+        {
+            VisualState.Up => button.up,
+            VisualState.Down => button.down,
+            _ => null,
+        };
         public enum button
         {
             up,

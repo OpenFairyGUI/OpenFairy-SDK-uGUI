@@ -42,6 +42,17 @@ namespace OpenFairy.UGUI.Tests
             m_button.Initialize();
         }
         public global::OpenFairy.UGUI.Loader m_icon;
+
+        protected override button? StatePage(VisualState state) => state switch
+        {
+            VisualState.Up => button.up,
+            VisualState.Down => button.down,
+            VisualState.Over => button.over,
+            VisualState.SelectedOver => button.selectedOver,
+            VisualState.Disabled => button.disabled,
+            VisualState.SelectedDisabled => button.selectedDisabled,
+            _ => null,
+        };
 [global::System.Serializable] public sealed class LocalizedTexts
 {
 }

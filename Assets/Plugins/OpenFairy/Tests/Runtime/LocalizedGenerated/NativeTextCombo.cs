@@ -13,6 +13,12 @@ namespace OpenFairyTextFixtures.NativeTextFixture
 {
     public partial class NativeTextCombo : global::OpenFairy.UGUI.ComboBox<NativeTextCombo.button>
     {
+        protected override button? StatePage(VisualState state) => state switch
+        {
+            VisualState.Up => button.up,
+            VisualState.Over => button.over,
+            _ => null,
+        };
         public enum button
         {
             up,

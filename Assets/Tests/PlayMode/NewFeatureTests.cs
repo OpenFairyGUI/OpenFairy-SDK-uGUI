@@ -16,8 +16,8 @@ namespace OpenFairy.UGUI.Tests
     public class NewFeatureTests
     {
         private enum RadioPage { up, down, over, selectedOver }
-        private class TestButton : Button<RadioPage> { }
-        private class TestCombo : ComboBox<RadioPage> { }
+        private class TestButton : Button<RadioPage> { protected override RadioPage? StatePage(VisualState state) => state switch { VisualState.Up => RadioPage.up, VisualState.Down => RadioPage.down, VisualState.Over => RadioPage.over, VisualState.SelectedOver => RadioPage.selectedOver, _ => null }; }
+        private class TestCombo : ComboBox<RadioPage> { protected override RadioPage? StatePage(VisualState state) => state switch { VisualState.Up => RadioPage.up, VisualState.Down => RadioPage.down, VisualState.Over => RadioPage.over, VisualState.SelectedOver => RadioPage.selectedOver, _ => null }; }
         private class TestOwner : OpenFairy.UGUI.Component
         {
             public Controller<RadioPage> m_ctrl;
