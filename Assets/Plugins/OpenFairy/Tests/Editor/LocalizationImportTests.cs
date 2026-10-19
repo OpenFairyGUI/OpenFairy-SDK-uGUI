@@ -117,6 +117,22 @@ namespace OpenFairy.UGUI.Tests
             AssetDatabase.SaveAssets();
         }
 
+        [Test]
+        public void New_language_assets_have_content_on_their_first_serialization()
+        {
+            var folder = "Assets/__LocaleFirstWrite_" + Guid.NewGuid().ToString("N");
+            try
+            {
+                Call("SaveLocaleAssets", folder);
+                var path = folder + "/French.asset";
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+                var table = AssetDatabase.LoadAssetAtPath<LocaleTable>(path);
+                var template = table.NativeTextFixture_NativeTextPanel.Override0.Text;
+                Assert.That(new TextTemplateState(2).Format(template), Is.EqualTo("Bonjour Auteur"));
+            }
+            finally { AssetDatabase.DeleteAsset(folder); }
+        }
+
         private static GameObject Open() => PrefabUtility.LoadPrefabContents(Output + "/NativeTextPanel.prefab");
         private static LocaleTable French => AssetDatabase.LoadAssetAtPath<LocaleTable>(LocaleOutput + "/French.asset");
 

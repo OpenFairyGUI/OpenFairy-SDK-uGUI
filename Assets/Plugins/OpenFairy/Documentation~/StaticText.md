@@ -1,5 +1,13 @@
 # Compiled text and static localization
 
+## Builtin text fitting
+
+The Builtin `TextField` renderer preserves authored text and `fontSize`. Its `overflowMode` is `Default`, `Shrink` or `Ellipsis`; Migrate saves the mode from the authored `autoSize` setting. `Default` retains native wrapping and overflow flags. `Both` and `Height` continue to use the baked ContentSizeFitter.
+
+`Shrink` chooses the largest fitting point-size scale up to the authored size, remeasuring wrapped lines and dynamic-font rich-text sizes. Dynamic and bitmap glyphs participate; inline images retain their authored size. Changing text, font size, alignment or the rectangle recalculates the result, so short text and larger rectangles restore the authored size. The rectangle itself is unchanged.
+
+`Ellipsis` keeps the authored size and replaces the last visible tail with U+2026 when the fixed rectangle cannot show the full content. Hidden glyphs and image placements are excluded from the output. Inline Image nodes are baked once with serialized references, including initially hidden images; fitting updates their placement and visibility without rebuilding them. Rerun Migrate after updating to persist these references and overflow settings.
+
 The converter compiles authored templates and configured translations into typed view methods, native references and direct language assets. Runtime template state formats already compiled literal/slot programs. Generated assignments target existing TMP, Label, Button, Tooltip, ComboBox and gear fields; there is no alternate UI object model. See [Static localization export](LocalizationExport.md) for configuration and asset flow.
 
 ## Runtime surface

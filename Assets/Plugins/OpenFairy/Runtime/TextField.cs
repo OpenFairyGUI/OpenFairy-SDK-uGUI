@@ -14,6 +14,21 @@ namespace OpenFairy.UGUI
     // 支持 UBB（color/渐变/b/i/u/size/img）与 richtext 的 img/a 标签，以及位图字体。
     public class TextField : UnityEngine.UI.Text, IPointerClickHandler
     {
+        public enum OverflowMode { Default, Shrink, Ellipsis }
+
+        [SerializeField] private OverflowMode _overflowMode;
+        public OverflowMode overflowMode
+        {
+            get => _overflowMode;
+            set
+            {
+                if (_overflowMode == value) return;
+                _overflowMode = value;
+                SetVerticesDirty();
+                SetLayoutDirty();
+            }
+        }
+
         public static string defaultFont = "Arial";
 
         public string fontNames;
@@ -24,6 +39,7 @@ namespace OpenFairy.UGUI
         public bool underlined;
         public BitmapFont bitmapFont;
         public Sprite[] imageSprites;
+        [SerializeField] private RectTransform[] _images = Array.Empty<RectTransform>();
 
         [NonSerialized] private Action<string> _onClickLink;
 
@@ -201,6 +217,9 @@ namespace OpenFairy.UGUI
         private HorizontalWrapMode _layoutHOverflow;
         private VerticalWrapMode _layoutVOverflow;
         private Font _layoutFont;
+        private BitmapFont _layoutBitmapFont;
+        private OverflowMode _layoutOverflowMode;
+        private float _fontSizeScale = 1;
         private bool _layoutInProgress;
         private bool _fontRebuiltDuringLayout;
         private bool _fontRebuildPending;
@@ -212,7 +231,8 @@ namespace OpenFairy.UGUI
                 && _layoutFontSize == fontSize && _layoutStyle == fontStyle && _layoutAlignment == alignment
                 && _layoutHOverflow == horizontalOverflow && _layoutVOverflow == verticalOverflow
                 && _layoutLeading == leading && _layoutLetterSpacing == letterSpacing
-                && ReferenceEquals(_layoutFont, font))
+                && ReferenceEquals(_layoutFont, font) && ReferenceEquals(_layoutBitmapFont, bitmapFont)
+                && _layoutOverflowMode == overflowMode)
             {
                 if (_layoutColor == color)
                     return;
@@ -246,7 +266,13 @@ namespace OpenFairy.UGUI
             // mutate the reused run list, so iterate over a stable snapshot.
             foreach (var run in runs.ToArray())
                 if (run.Text != null)
-                    font.RequestCharactersInTexture(run.Text, run.Size, run.Style);
+                {
+                    font.RequestCharactersInTexture(run.Text, ScaledSize(run.Size), run.Style);
+                    if (overflowMode == OverflowMode.Ellipsis)
+                        font.RequestCharactersInTexture("…", ScaledSize(run.Size), run.Style);
+                }
+            if (overflowMode == OverflowMode.Ellipsis)
+                font.RequestCharactersInTexture("…", ScaledSize(fontSize), fontStyle);
             font.RequestCharactersInTexture("_", 50, FontStyle.Normal);
         }
 
@@ -265,18 +291,39 @@ namespace OpenFairy.UGUI
                         DestroyImmediate(child.gameObject);
                 }
             }
-            foreach (var (image, position) in _placements)
+            _images = new RectTransform[imageSprites?.Length ?? 0];
+            for (var image = 0; image < _images.Length; image++)
             {
+                var sprite = imageSprites[image];
+                if (sprite == null) continue;
                 var go = new GameObject("img" + image, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
                 go.transform.SetParent(transform, false);
                 var rt = (RectTransform)go.transform;
                 rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
-                rt.anchoredPosition = new Vector2(position.x, -position.y);
-                var sprite = imageSprites[image];
+                _images[image] = rt;
                 rt.sizeDelta = sprite.rect.size;
                 var imageComponent = go.GetComponent<UnityEngine.UI.Image>();
                 imageComponent.sprite = sprite;
                 imageComponent.raycastTarget = false;
+            }
+            UpdateImages();
+        }
+
+        private void UpdateImages()
+        {
+            for (var index = 0; index < _images.Length; index++)
+            {
+                var image = _images[index];
+                if (image == null) continue;
+                var visible = false;
+                foreach (var placement in _placements)
+                    if (placement.Image == index)
+                    {
+                        image.anchoredPosition = new Vector2(placement.Position.x, -placement.Position.y);
+                        visible = true;
+                        break;
+                    }
+                image.gameObject.SetActive(visible);
             }
         }
 
@@ -557,6 +604,8 @@ namespace OpenFairy.UGUI
             _layoutHOverflow = horizontalOverflow;
             _layoutVOverflow = verticalOverflow;
             _layoutFont = font;
+            _layoutBitmapFont = bitmapFont;
+            _layoutOverflowMode = overflowMode;
 
             _quads.Clear();
             _placements.Clear();
@@ -569,27 +618,81 @@ namespace OpenFairy.UGUI
                     _layoutValid = true;
                     return;
                 }
-                RequestChars(runs);
             }
 
             var rect = rectTransform.rect;
             var wrap = horizontalOverflow == HorizontalWrapMode.Wrap;
             var rectWidth = rect.width - 4;
-            BreakLines(runs, wrap, rectWidth);
+            LayoutLines(runs, wrap, rectWidth, 1);
+            if (overflowMode == OverflowMode.Shrink && !Fits(rect))
+            {
+                var low = 1;
+                var high = fontSize - 1;
+                while (low < high)
+                {
+                    var size = low + (high - low + 1) / 2;
+                    LayoutLines(runs, wrap, rectWidth, (float)size / fontSize);
+                    if (Fits(rect)) low = size;
+                    else high = size - 1;
+                }
+                LayoutLines(runs, wrap, rectWidth, (float)low / fontSize);
+            }
 
             var hAlign = (int)alignment % 3;
             var vAlign = (int)alignment / 3;
             var lineSpacing = leading - 1; // TextField: 实际行距 = lineSpacing - 1
-            var textHeight = 4f + _lines.AsValueEnumerable().Sum(line => line.Height) + (_lines.Count - 1) * lineSpacing;
+            var textHeight = TextHeight;
+            var visibleLines = _lines.Count;
+            if (overflowMode == OverflowMode.Ellipsis)
+            {
+                visibleLines = 0;
+                var height = 2f;
+                foreach (var line in _lines)
+                {
+                    if (height + line.Height > rect.height - 2) break;
+                    visibleLines++;
+                    if (line.Width > rectWidth) break;
+                    height += line.Height + lineSpacing;
+                }
+            }
+            if (overflowMode != OverflowMode.Default && (rect.width <= 4 || rect.height <= 4))
+                visibleLines = 0;
 
             var y = 2f + (vAlign == 1 ? (int)(Mathf.Max(0, rect.height - textHeight) / 2)
                 : vAlign == 2 ? Mathf.Max(0, rect.height - textHeight) : 0);
 
-            for (var lineIndex = 0; lineIndex < _lines.Count; lineIndex++)
+            for (var lineIndex = 0; lineIndex < visibleLines; lineIndex++)
             {
                 var line = _lines[lineIndex];
                 if (verticalOverflow == VerticalWrapMode.Truncate && lineIndex > 0 && y + line.Height > rect.height - 2)
                     break;
+
+                var ellipsis = overflowMode == OverflowMode.Ellipsis && lineIndex == visibleLines - 1
+                    && (visibleLines < _lines.Count || line.Width > rectWidth);
+                var ellipsisRun = default(Run);
+                if (ellipsis)
+                {
+                    ellipsisRun = new Run { Size = fontSize, Style = fontStyle, Image = -1 };
+                    SetColor(ref ellipsisRun, color);
+                    while (true)
+                    {
+                        if (line.Count > 0) ellipsisRun = runs[_characters[line.Start + line.Count - 1].Run];
+                        if (ellipsisRun.Image >= 0)
+                        {
+                            ellipsisRun = new Run { Size = fontSize, Style = fontStyle, Image = -1 };
+                            SetColor(ref ellipsisRun, color);
+                        }
+                        var width = CharWidth('…', ellipsisRun);
+                        if (line.Width + width <= rectWidth || line.Count == 0)
+                        {
+                            line.Width += width;
+                            break;
+                        }
+                        line.Count--;
+                        line.Width -= _characters[line.Start + line.Count].Width;
+                    }
+                    if (line.Width > rectWidth) break;
+                }
 
                 var indent = hAlign == 1 ? (int)((rectWidth - line.Width) / 2) : hAlign == 2 ? rectWidth - line.Width : 0;
                 var x = 2f + Mathf.Max(0, indent);
@@ -625,10 +728,36 @@ namespace OpenFairy.UGUI
                 }
                 if (activeRun >= 0)
                     FinishRun(runs[activeRun], runStart, x, y, line.Height, baselineY);
+                if (ellipsis)
+                {
+                    var width = DrawChar('…', ellipsisRun, x, baselineY);
+                    FinishRun(ellipsisRun, x, x + width, y, line.Height, baselineY);
+                }
                 y += line.Height + lineSpacing;
             }
 
+            UpdateImages();
             _layoutValid = true;
+        }
+
+        private int ScaledSize(int size) => Mathf.Max(1, Mathf.FloorToInt(size * _fontSizeScale));
+
+        private float TextHeight => 4f + _lines.AsValueEnumerable().Sum(line => line.Height)
+            + Mathf.Max(0, _lines.Count - 1) * (leading - 1);
+
+        private bool Fits(Rect rect)
+        {
+            if (TextHeight > rect.height) return false;
+            foreach (var line in _lines)
+                if (line.Width + 4 > rect.width) return false;
+            return true;
+        }
+
+        private void LayoutLines(List<Run> runs, bool wrap, float width, float scale)
+        {
+            _fontSizeScale = scale;
+            if (bitmapFont == null) RequestChars(runs);
+            BreakLines(runs, wrap, width);
         }
 
         private void FinishRun(Run run, float from, float to, float lineY, float lineHeight, float baselineY)
@@ -644,25 +773,25 @@ namespace OpenFairy.UGUI
             if (bitmapFont != null)
             {
                 if (ch == ' ')
-                    return Mathf.RoundToInt(bitmapFont.size / 2f) + letterSpacing;
+                    return Mathf.RoundToInt(bitmapFont.size / 2f) * _fontSizeScale + letterSpacing;
                 if (!bitmapFont.TryGetGlyph(ch, out var glyph))
                     return 0;
-                var top = baselineY - glyph.lineHeight + glyph.y;
+                var top = baselineY + (glyph.y - glyph.lineHeight) * _fontSizeScale;
                 var tint = bitmapFont.canTint;
                 Color32 white = Color.white;
                 _quads.Add(new Quad
                 {
-                    Rect = new Rect(x + glyph.x, top, glyph.width, glyph.height),
+                    Rect = new Rect(x + glyph.x * _fontSizeScale, top, glyph.width * _fontSizeScale, glyph.height * _fontSizeScale),
                     TL = tint ? run.TL : white, BL = tint ? run.BL : white, TR = tint ? run.TR : white, BR = tint ? run.BR : white,
                     UvBL = new Vector2(glyph.uv.xMin, glyph.uv.yMin),
                     UvTL = new Vector2(glyph.uv.xMin, glyph.uv.yMax),
                     UvTR = new Vector2(glyph.uv.xMax, glyph.uv.yMax),
                     UvBR = new Vector2(glyph.uv.xMax, glyph.uv.yMin),
                 });
-                return glyph.advance + letterSpacing;
+                return glyph.advance * _fontSizeScale + letterSpacing;
             }
 
-            if (!font.GetCharacterInfo(ch, out var info, run.Size, run.Style))
+            if (!font.GetCharacterInfo(ch, out var info, ScaledSize(run.Size), run.Style))
                 return 0;
             if (info.glyphWidth > 0)
                 _quads.Add(new Quad
@@ -682,8 +811,9 @@ namespace OpenFairy.UGUI
             if (to <= from || bitmapFont != null)
                 return;
             font.GetCharacterInfo('_', out var info, 50, FontStyle.Normal);
-            var thickness = Mathf.Max(1, run.Size / 16f);
-            var offset = Mathf.RoundToInt(info.minY * run.Size / 50f + thickness);
+            var size = ScaledSize(run.Size);
+            var thickness = Mathf.Max(1, size / 16f);
+            var offset = Mathf.RoundToInt(info.minY * size / 50f + thickness);
             var uv = (info.uvBottomLeft + info.uvTopRight) / 2;
             _quads.Add(new Quad
             {
@@ -698,9 +828,9 @@ namespace OpenFairy.UGUI
             if (run.Image >= 0)
                 return imageSprites[run.Image].rect.width + 2 + letterSpacing;
             if (bitmapFont != null)
-                return ch == ' ' ? Mathf.RoundToInt(bitmapFont.size / 2f) + letterSpacing
-                    : bitmapFont.TryGetGlyph(ch, out var glyph) ? glyph.advance + letterSpacing : 0;
-            return font.GetCharacterInfo(ch, out var info, run.Size, run.Style) ? info.advance + letterSpacing : 0;
+                return ch == ' ' ? Mathf.RoundToInt(bitmapFont.size / 2f) * _fontSizeScale + letterSpacing
+                    : bitmapFont.TryGetGlyph(ch, out var glyph) ? glyph.advance * _fontSizeScale + letterSpacing : 0;
+            return font.GetCharacterInfo(ch, out var info, ScaledSize(run.Size), run.Style) ? info.advance + letterSpacing : 0;
         }
 
         private (float Baseline, float Height, float Width) MeasureLine(int start, int count)
@@ -724,12 +854,13 @@ namespace OpenFairy.UGUI
                     glyphHeight = bitmapFont.TryGetGlyph(character.Value, out var glyph)
                         ? Mathf.Max(bitmapFont.size, glyph.lineHeight)
                         : bitmapFont.size;
+                    glyphHeight *= _fontSizeScale;
                     glyphBaseline = glyphHeight;
                 }
                 else
                 {
-                    glyphBaseline = Mathf.RoundToInt(run.Size);
-                    glyphHeight = Mathf.RoundToInt(run.Size * 1.25f);
+                    glyphBaseline = ScaledSize(run.Size);
+                    glyphHeight = Mathf.RoundToInt(ScaledSize(run.Size) * 1.25f);
                 }
                 baseline = Mathf.Max(baseline, glyphBaseline);
                 descent = Mathf.Max(descent, glyphHeight - glyphBaseline);
@@ -737,8 +868,8 @@ namespace OpenFairy.UGUI
             }
             if (baseline == 0)
             {
-                baseline = bitmapFont != null ? bitmapFont.size : Mathf.RoundToInt(fontSize);
-                descent = bitmapFont != null ? 0 : Mathf.RoundToInt(fontSize * 1.25f) - baseline;
+                baseline = bitmapFont != null ? bitmapFont.size * _fontSizeScale : ScaledSize(fontSize);
+                descent = bitmapFont != null ? 0 : Mathf.RoundToInt(ScaledSize(fontSize) * 1.25f) - baseline;
             }
             return (baseline, baseline + descent, width);
         }

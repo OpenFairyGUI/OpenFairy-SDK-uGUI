@@ -121,7 +121,7 @@ namespace OpenFairy.UGUI.Editor
             var tableNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (var resource in components)
             {
-                var view = new LocalView { resource = resource, xml = XDocument.Load(resource.File).Root };
+                var view = new LocalView { resource = resource, xml = FairyXml.LoadPublishedComponentXml(resource.File) };
                 view.tableField = LocalName(tableNames, resource.Package + "_" + ClassName(resource));
                 view.names.Add(ClassName(resource));
                 view.names.Add("LocalizedTexts");
@@ -342,7 +342,7 @@ namespace OpenFairy.UGUI.Editor
                 AddCaptionOverride(owner, path, extension.Attribute("title"), suffix, "Text");
                 AddCaptionOverride(owner, path, extension.Attribute("selectedTitle"), suffix + "-0", "Selected");
                 AddCaptionOverride(owner, path, extension.Attribute("prompt"), suffix + "-prompt", "Prompt");
-                if (extension.Element("item") != null)
+                if (extension.Element("item") != null || (string)extension.Attribute("autoClearItems") == "true")
                 {
                     var family = target.families.Find(value => value.combo);
                     var row = OverrideRow(owner, path, family);
@@ -352,7 +352,7 @@ namespace OpenFairy.UGUI.Editor
                         choices.Add(Choice(owner, "Item" + index, suffix + "-" + index++, (string)item.Attribute("title")));
                     row.choices = choices.ToArray();
                     var title = (string)extension.Attribute("title");
-                    row.initialIndex = title == null ? 0 : Array.FindIndex(row.choices, value => value.text == title);
+                    row.initialIndex = title == null ? row.choices.Length == 0 ? -1 : 0 : Array.FindIndex(row.choices, value => value.text == title);
                 }
             }
             foreach (var property in instance.Elements("property"))
@@ -699,7 +699,8 @@ namespace OpenFairy.UGUI.Editor
             {
                 var path = directory + "/" + names[language] + ".asset";
                 var table = AssetDatabase.LoadAssetAtPath(path, type);
-                if (table == null) { table = ScriptableObject.CreateInstance(type); AssetDatabase.CreateAsset(table, path); }
+                var createTable = table == null;
+                if (createTable) table = ScriptableObject.CreateInstance(type);
                 foreach (var view in LocalViews.Values)
                 {
                     var rowType = type.GetField(view.tableField).FieldType;
@@ -716,14 +717,17 @@ namespace OpenFairy.UGUI.Editor
                     }
                     type.GetField(view.tableField).SetValue(table, row);
                 }
+                if (createTable) AssetDatabase.CreateAsset(table, path);
                 EditorUtility.SetDirty(table);
                 tables.SetValue(table, language);
             }
             var setType = LocaleAssetType("LocaleSet");
             var setPath = directory + "/Languages.asset";
             var set = AssetDatabase.LoadAssetAtPath(setPath, setType);
-            if (set == null) { set = ScriptableObject.CreateInstance(setType); AssetDatabase.CreateAsset(set, setPath); }
+            var createSet = set == null;
+            if (createSet) set = ScriptableObject.CreateInstance(setType);
             setType.GetField("tables", LocalFields).SetValue(set, tables);
+            if (createSet) AssetDatabase.CreateAsset(set, setPath);
             EditorUtility.SetDirty(set);
         }
 

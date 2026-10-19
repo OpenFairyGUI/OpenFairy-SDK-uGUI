@@ -195,8 +195,8 @@ namespace OpenFairy.UGUI.Editor
 
         private static MatchCollection RuntimeResourceReferences(string file)
         {
-            var xml = XDocument.Load(file, LoadOptions.PreserveWhitespace);
-            xml.Root.Attribute("designImage")?.Remove();
+            var xml = FairyXml.LoadPublishedComponentXml(file);
+            xml.Attribute("designImage")?.Remove();
             return Regex.Matches(xml.ToString(SaveOptions.DisableFormatting), @"ui://[\w/]+");
         }
 
@@ -1335,9 +1335,50 @@ namespace OpenFairy.UGUI.Editor
                 button.mode = mode;
             if (buttonXml.Sound is { } sound) button.sound = LoadButtonSound(sound, packageId);
             if (buttonXml.SoundVolume is { } volume) button.soundVolumeScale = volume;
+            if (buttonXml.TitleColor is { } titleColor)
+                ConfigureTitleColor(button, ParseColor(titleColor));
             button._selected = buttonXml.Checked && button.mode != ButtonMode.Common; // 烘焙直写（复刻 GButton.selected：Common 忽略选中态），不触发关联控制器
             button.RefreshState();
             if (button.useSelectedIcon) button.RefreshIcon();
+        }
+
+        private static void ConfigureTitleColor(ButtonBase button, Color color)
+        {
+            var text = button.titleText;
+            if (text == null) return; // A button without a text title has no title color.
+            text.color = color;
+            foreach (var field in button.GetType().GetFields())
+            {
+                var type = field.FieldType;
+                if (!type.IsGenericType || type.GetGenericTypeDefinition() != typeof(Controller<>)) continue;
+                var controller = field.GetValue(button);
+                if (type.GetField("gears").GetValue(controller) is not Array gears) continue;
+                var page = type.GetProperty("page").GetValue(controller);
+                foreach (var gear in gears)
+                {
+                    var gearType = gear.GetType();
+                    if (!gearType.IsGenericType || gearType.GetGenericTypeDefinition() != typeof(GearColor<>)
+                        || (GameObject)gearType.GetField("target").GetValue(gear) != text.gameObject) continue;
+                    var pagesField = gearType.GetField("pages");
+                    var pages = (Array)pagesField.GetValue(gear);
+                    var index = Array.IndexOf(pages, page);
+                    var valuesField = gearType.GetField("values");
+                    var values = (Color[])valuesField.GetValue(gear);
+                    if (index < 0)
+                    {
+                        index = pages.Length;
+                        var expanded = Array.CreateInstance(type.GetGenericArguments()[0], index + 1);
+                        Array.Copy(pages, expanded, index); expanded.SetValue(page, index); pagesField.SetValue(gear, expanded);
+                        Array.Resize(ref values, index + 1); valuesField.SetValue(gear, values);
+                        var strokesField = gearType.GetField("strokeValues");
+                        if (strokesField.GetValue(gear) is Color[] strokes)
+                        {
+                            Array.Resize(ref strokes, index + 1); strokes[index] = text.GetOutlineColor(); strokesField.SetValue(gear, strokes);
+                        }
+                    }
+                    values[index] = color;
+                }
+            }
         }
 
         private static void BindLabelTitle(Label label, Transform title)
@@ -1529,12 +1570,12 @@ namespace OpenFairy.UGUI.Editor
                 type.GetField("dropdownPrefab", Any).SetValue(combo, LoadPrefab(dropRes));
             type.GetField("visibleItemCount", Any).SetValue(combo, xml.VisibleItemCount);
             var items = xml.Items;
-            if (items.Length > 0)
+            if (xml.AutoClearItems || items.Length > 0)
             {
                 type.GetField("_items", Any).SetValue(combo, items);
-                if (xml.Values.Length > 0)
+                if (xml.AutoClearItems || xml.Values.Length > 0)
                     type.GetField("_values", Any).SetValue(combo, xml.Values);
-                combo.title = items[0]; // 默认选中项 0
+                if (items.Length > 0) combo.title = items[0]; // 默认选中项 0
             }
         }
 
@@ -2599,11 +2640,17 @@ namespace OpenFairy.UGUI.Editor
             var bold = element.Bold;
             var italic = element.Italic;
             text.fontStyle = bold && italic ? FontStyle.BoldAndItalic : bold ? FontStyle.Bold : italic ? FontStyle.Italic : FontStyle.Normal;
-            // Shrink/Ellipsis 未实现，按 Height（竖向撑开）处理。
+            text.overflowMode = element.AutoSize switch
+            {
+                Schema.TextAutoSize.Shrink => TextField.OverflowMode.Shrink,
+                Schema.TextAutoSize.Ellipsis => TextField.OverflowMode.Ellipsis,
+                _ => TextField.OverflowMode.Default,
+            };
             text.horizontalOverflow = element.AutoSize == Schema.TextAutoSize.Both || element.SingleLine
                 ? HorizontalWrapMode.Overflow
                 : HorizontalWrapMode.Wrap;
-            text.verticalOverflow = element.AutoSize == Schema.TextAutoSize.None ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow;
+            text.verticalOverflow = element.AutoSize is Schema.TextAutoSize.None or Schema.TextAutoSize.Ellipsis
+                ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow;
             text.alignment = (element.VAlign, element.Align) switch
             {
                 (Schema.VAlign.Middle, Schema.Align.Center) => TextAnchor.MiddleCenter,
