@@ -6,6 +6,9 @@ namespace OpenFairy.UGUI
     [ExecuteAlways, DisallowMultipleComponent]
     public sealed class ColorAdjust : ObjectFilter, IMaterialModifier
     {
+        private static readonly int ColorMatrixId = Shader.PropertyToID("_ColorMatrix");
+        private static readonly int ColorOffsetId = Shader.PropertyToID("_ColorOffset");
+
         public float brightness, contrast, saturation, hue;
         [SerializeField] internal Shader shader;
         // Only image primitives use the direct path; text and containers are captured.
@@ -78,8 +81,8 @@ namespace OpenFairy.UGUI
                 var i = row * 5;
                 matrix.SetRow(row, new Vector4(values[i], values[i + 1], values[i + 2], values[i + 3]));
             }
-            _material.SetMatrix("_ColorMatrix", matrix);
-            _material.SetVector("_ColorOffset", new Vector4(values[4], values[9], values[14], values[19]));
+            _material.SetMatrix(ColorMatrixId, matrix);
+            _material.SetVector(ColorOffsetId, new Vector4(values[4], values[9], values[14], values[19]));
         }
 
         protected override void OnEnable()
@@ -113,11 +116,7 @@ namespace OpenFairy.UGUI
         }
         private void ReleaseMaterial()
         {
-            if (_material != null)
-            {
-                if (Application.isPlaying) Destroy(_material);
-                else DestroyImmediate(_material);
-            }
+            OwnedObject.Destroy(_material);
             _material = null;
             _original = null;
         }

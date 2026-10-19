@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 #if FAIRYGUI_TMPRO
 using TextComponent = TMPro.TextMeshProUGUI;
@@ -18,6 +19,14 @@ namespace OpenFairy.UGUI
         Radio,
     }
 
+    // 复刻 FairyGUI GButton.downEffect：按下态压暗直接子图形或绕中心缩放。
+    public enum ButtonDownEffect
+    {
+        None,
+        Dark,
+        Scale,
+    }
+
     // 非泛型按钮基类（复刻 FairyGUI GButton 面）：让 Root/Window/PopupMenu/Migrate 不必知道 T 就能设标题/图标/选中态。
     // 关联控制器（FairyGUI relatedController/relatedPageId）由 Migrate 从 <Button controller=.. page=..> 烘焙；
     // 换页→选中态的反向同步由烘焙进控制器的 GearButton 完成（复刻 GButton.HandleControllerChanged）。
@@ -30,6 +39,10 @@ namespace OpenFairy.UGUI
         public ButtonMode mode;
         public string selectedTitle;
         public bool changeStateOnClick = true; // 复刻 GButton：列表项交给 ListSelection 管选择时置 false，禁本体自翻 selected
+        public ButtonDownEffect downEffect;
+        public float downEffectValue = .8f;
+        [SerializeField] internal Graphic[] downEffectTargets = Array.Empty<Graphic>(); // Dark：烘焙的直接子图形（不含文本）
+        [SerializeField, HideInInspector] private bool _downScaled;
 
         [SerializeField] internal AudioClip clickSound;
         [SerializeField] internal float clickSoundVolume = 1;
@@ -38,10 +51,8 @@ namespace OpenFairy.UGUI
 
         protected void PlayClickSound()
         {
-            if (clickSound == null) return;
-            var root = Root.inst;
-            if (root == null) root = Root.Create((RectTransform)GetComponentInParent<Canvas>().rootCanvas.transform);
-            root.soundSource.PlayOneShot(clickSound, clickSoundVolume);
+            if (clickSound != null)
+                Root.Ensure(this).soundSource.PlayOneShot(clickSound, clickSoundVolume);
         }
 
         // 烘焙接线（Migrate 写入），不属用户 API 面。
@@ -118,9 +129,9 @@ namespace OpenFairy.UGUI
                 if (HasRelatedController && Application.isPlaying) // 烘焙期选中态由控制器初始页经 GearButton 驱动，不反向写页
                 {
                     if (_selected)
-                        ControllerBinding.SetPage(relatedOwner, relatedController, relatedPage);
-                    else if (mode == ButtonMode.Check && ControllerBinding.GetPage(relatedOwner, relatedController) == relatedPage)
-                        ControllerBinding.SetPage(relatedOwner, relatedController, relatedPage == 0 ? 1 : 0);
+                        relatedOwner.SetControllerPage(relatedController, relatedPage);
+                    else if (mode == ButtonMode.Check && relatedOwner.GetControllerPage(relatedController) == relatedPage)
+                        relatedOwner.SetControllerPage(relatedController, relatedPage == 0 ? 1 : 0);
                 }
             }
         }
@@ -148,6 +159,29 @@ namespace OpenFairy.UGUI
             _title ??= titleText.text;
             titleText.text = selected && !string.IsNullOrEmpty(selectedTitle) ? selectedTitle : _title;
         }
+
+        // 复刻 GButton.SetState 的 downEffect：按下态即 down/selectedOver/selectedDisabled 页，运行时生效。
+        private protected void ApplyDownEffect(bool pressed)
+        {
+            if (!Application.isPlaying)
+                return;
+            if (downEffect == ButtonDownEffect.Dark)
+            {
+                var color = pressed ? new Color(downEffectValue, downEffectValue, downEffectValue) : Color.white;
+                foreach (var graphic in downEffectTargets)
+                    graphic.color = color;
+            }
+            else if (downEffect == ButtonDownEffect.Scale && pressed != _downScaled)
+            {
+                // FairyGUI 把此类按钮的轴心设为中心；列表项等轴心不在中心时同样绕中心缩放。
+                _downScaled = pressed;
+                var rt = (RectTransform)transform;
+                var center = rt.TransformPoint(rt.rect.center);
+                var factor = pressed ? downEffectValue : 1 / downEffectValue;
+                rt.localScale = Vector3.Scale(rt.localScale, new Vector3(factor, factor, 1));
+                rt.position += center - rt.TransformPoint(rt.rect.center);
+            }
+        }
     }
 
     public abstract class Button<T> : ButtonBase, IPointerDownHandler, IPointerUpHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler where T : struct, Enum
@@ -162,35 +196,32 @@ namespace OpenFairy.UGUI
             SelectedDisabled,
         }
 
-        private static class StatePages
+        // 复刻 Controller.selectedPage：按页名选页，缺页回落到首页（default(T)）。
+        private protected static class StatePages
         {
-            public static readonly T Up;
-            public static readonly T Down;
-            public static readonly T Over;
-            public static readonly T SelectedOver;
-            public static readonly T Disabled;
-            public static readonly T SelectedDisabled;
-            public static readonly bool HasUp;
-            public static readonly bool HasDown;
-            public static readonly bool HasOver;
-            public static readonly bool HasSelectedOver;
-            public static readonly bool HasDisabled;
-            public static readonly bool HasSelectedDisabled;
+            public static readonly T Up, Down, Over, SelectedOver, Disabled, SelectedDisabled;
+            public static readonly bool HasOver, HasDisabled;
 
             static StatePages()
             {
-                HasUp = Enum.TryParse("up", out Up);
-                HasDown = Enum.TryParse("down", out Down);
+                Enum.TryParse("up", out Up);
+                Enum.TryParse("down", out Down);
                 HasOver = Enum.TryParse("over", out Over);
-                HasSelectedOver = Enum.TryParse("selectedOver", out SelectedOver);
+                Enum.TryParse("selectedOver", out SelectedOver);
                 HasDisabled = Enum.TryParse("disabled", out Disabled);
-                HasSelectedDisabled = Enum.TryParse("selectedDisabled", out SelectedDisabled);
+                Enum.TryParse("selectedDisabled", out SelectedDisabled);
             }
         }
 
         public Controller<T> controller;
 
-        private bool _down, _over;
+        private protected bool _down, _over;
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            ApplyDownEffect(mode == ButtonMode.Common ? _down : selected);
+        }
 
         protected override void OnDisable()
         {
@@ -209,25 +240,25 @@ namespace OpenFairy.UGUI
                 SetState(grayed && StatePages.HasDisabled ? VisualState.SelectedDisabled : VisualState.Down);
         }
 
+        // 复刻 GButton.__touchEnd：含拖出按钮后在外松开，回到当前逻辑态。
         public virtual void OnPointerUp(PointerEventData eventData)
         {
-            if (eventData.button != PointerEventData.InputButton.Left)
+            if (eventData.button != PointerEventData.InputButton.Left || !_down)
                 return;
             _down = false;
-            if (mode == ButtonMode.Common)
-                RefreshState();
+            RefreshState();
         }
 
-        public virtual void OnPointerEnter(PointerEventData eventData)
-        {
-            _over = true;
-            if (!_down)
-                RefreshState();
-        }
+        public virtual void OnPointerEnter(PointerEventData eventData) => SetOver(true);
 
-        public virtual void OnPointerExit(PointerEventData eventData)
+        public virtual void OnPointerExit(PointerEventData eventData) => SetOver(false);
+
+        // 复刻 GButton.__rollover/__rollout：没有 over 页的按钮不跟踪悬浮。
+        private void SetOver(bool over)
         {
-            _over = false;
+            if (!StatePages.HasOver)
+                return;
+            _over = over;
             if (!_down)
                 RefreshState();
         }
@@ -262,7 +293,7 @@ namespace OpenFairy.UGUI
                 }
             }
             else if (HasRelatedController)
-                ControllerBinding.SetPage(relatedOwner, relatedController, relatedPage);
+                relatedOwner.SetControllerPage(relatedController, relatedPage);
             onClick.Invoke();
         }
 
@@ -275,42 +306,30 @@ namespace OpenFairy.UGUI
                     sibling.selected = false;
         }
 
+        // 复刻 GButton.SetCurrentState：按 grayed/selected/over 择页，不含瞬时按下态（按下由 OnPointerDown 单独处理）。
         public override void RefreshState()
         {
             RefreshTitle();
-            // 复刻 GButton.SetCurrentState：按 grayed/selected/over 择页，不含瞬时按下态（按下由 OnPointerDown 单独处理）。
-            if (grayed && selected && SetState(VisualState.SelectedDisabled))
-                return;
-            if (grayed && SetState(VisualState.Disabled))
-                return;
-            if (selected)
-            {
-                if (_over)
-                {
-                    if (!SetState(VisualState.SelectedOver))
-                        SetState(VisualState.Down);
-                }
-                else
-                    SetState(VisualState.Down);
-            }
+            if (grayed && StatePages.HasDisabled)
+                SetState(selected ? VisualState.SelectedDisabled : VisualState.Disabled);
+            else if (selected)
+                SetState(_over ? VisualState.SelectedOver : VisualState.Down);
             else
                 SetState(_over ? VisualState.Over : VisualState.Up);
         }
 
-        protected bool SetState(VisualState state)
+        protected void SetState(VisualState state)
         {
-            var (exists, page) = state switch
+            controller.page = state switch
             {
-                VisualState.Up => (StatePages.HasUp, StatePages.Up),
-                VisualState.Down => (StatePages.HasDown, StatePages.Down),
-                VisualState.Over => (StatePages.HasOver, StatePages.Over),
-                VisualState.SelectedOver => (StatePages.HasSelectedOver, StatePages.SelectedOver),
-                VisualState.Disabled => (StatePages.HasDisabled, StatePages.Disabled),
-                _ => (StatePages.HasSelectedDisabled, StatePages.SelectedDisabled),
+                VisualState.Up => StatePages.Up,
+                VisualState.Down => StatePages.Down,
+                VisualState.Over => StatePages.Over,
+                VisualState.SelectedOver => StatePages.SelectedOver,
+                VisualState.Disabled => StatePages.Disabled,
+                _ => StatePages.SelectedDisabled,
             };
-            if (exists)
-                controller.page = page;
-            return exists;
+            ApplyDownEffect(state is VisualState.Down or VisualState.SelectedOver or VisualState.SelectedDisabled);
         }
     }
 }

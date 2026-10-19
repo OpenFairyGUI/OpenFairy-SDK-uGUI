@@ -15,23 +15,6 @@ using TextComponent = OpenFairy.UGUI.TextField;
 
 namespace OpenFairy.UGUI
 {
-    internal readonly struct TransitionValue
-    {
-        private readonly Vector4 _value;
-        public readonly int Count;
-
-        public TransitionValue(Vector4 value, int count)
-        {
-            _value = value;
-            Count = count;
-        }
-
-        public float this[int index] => _value[index];
-
-        public static TransitionValue Lerp(TransitionValue start, TransitionValue end, float ratio) =>
-            new(Vector4.LerpUnclamped(start._value, end._value, ratio), start.Count);
-    }
-
     public enum TransitionItemType
     {
         XY,
@@ -70,8 +53,6 @@ namespace OpenFairy.UGUI
         public float volume = 1;
         public Vector2 positionOffset;  // FairyGUI xy → anchoredPosition 的固定偏移（pivot/anchor/拉伸锚点修正）
         public float[] pathData;
-        public string label;
-        public string endLabel;
 
         [NonSerialized] internal TransitionPath Path;
         [NonSerialized] internal Action Hook;
@@ -80,8 +61,8 @@ namespace OpenFairy.UGUI
         [NonSerialized] internal bool HookEnded;
         [NonSerialized] internal bool Applied;
         [NonSerialized] internal bool Started;
-        [NonSerialized] internal TransitionValue ResolvedStart;
-        [NonSerialized] internal TransitionValue ResolvedEnd;
+        [NonSerialized] internal Vector4 ResolvedStart;
+        [NonSerialized] internal Vector4 ResolvedEnd;
         [NonSerialized] internal Vector2 ShakeBase;
         [NonSerialized] internal UnityEngine.Component RuntimeTarget;
     }
@@ -108,11 +89,14 @@ namespace OpenFairy.UGUI
 
         private static readonly List<Transition> NestedTransitions = new();
 
-        private void Start()
+        // 复刻 Transition.OnOwnerAddedToStage/OnOwnerRemovedFromStage：显示时自动播放，隐藏时原地停止。
+        private void OnEnable()
         {
             if (autoPlay && !playing)
                 Play(autoPlayTimes, autoPlayDelay).Forget();
         }
+
+        private void OnDisable() => Stop(false);
 
         // 倒放（复刻 FairyGUI PlayReverse）：时间轴翻转，各 item 由末态回到起态。用于窗口关闭等"进场倒放"。
         public UniTask PlayReverse(int times = 1, float delay = 0) => PlayFrom(true, times, delay);
@@ -122,6 +106,7 @@ namespace OpenFairy.UGUI
         // 播完、被 Stop/新播放打断或对象销毁后完成；无限循环需由后三者之一结束。
         private async UniTask PlayFrom(bool reversed, int times, float delay)
         {
+            Stop();
             _reversed = reversed;
             var version = ++_playVersion;
             _playing = true;
@@ -130,19 +115,13 @@ namespace OpenFairy.UGUI
             _time = -delay;
             _totalDuration = 0;
             _hasInfinite = false;
+            ResetItems();
             foreach (var item in items)
             {
-                item.Applied = false;
-                item.Started = false;
-                item.HookStarted = false;
-                item.HookEnded = false;
                 if (item.pathData is { Length: > 0 })
                     item.Path ??= new TransitionPath(item.pathData);
                 item.RuntimeTarget ??= ResolveTarget(item);
-                var tail = item.type == TransitionItemType.Shake ? item.start[1]
-                    : !item.tween ? 0
-                    : item.repeat < 0 ? float.PositiveInfinity
-                    : item.duration * (item.repeat + 1);
+                var tail = Tail(item);
                 if (float.IsPositiveInfinity(tail))
                     _hasInfinite = true;
                 else
@@ -169,7 +148,7 @@ namespace OpenFairy.UGUI
 
         public void ChangePlayTimes(int times) => _remainingTimes = times;
 
-        // Generated label enums call the index overload; the string overload binds once, not per frame.
+        // 生成代码的标签枚举经此按 item 序号绑定。
         public void SetHook(int itemIndex, bool tweenEnd, Action callback)
         {
             if (tweenEnd)
@@ -178,23 +157,6 @@ namespace OpenFairy.UGUI
                 items[itemIndex].Hook = callback;
         }
 
-        public void SetHook(string label, Action callback)
-        {
-            foreach (var item in items)
-            {
-                if (item.label == label)
-                {
-                    item.Hook = callback;
-                    return;
-                }
-                if (item.tween && item.endLabel == label)
-                {
-                    item.EndHook = callback;
-                    return;
-                }
-            }
-            throw new ArgumentException("Unknown transition label.", nameof(label));
-        }
 
         public void ClearHooks()
         {
@@ -202,9 +164,9 @@ namespace OpenFairy.UGUI
                 item.Hook = item.EndHook = null;
         }
 
-        // 复刻 FairyGUI Stop() 默认 setToComplete：未完成 item 落到终态（倒放落回起态）。
+        // 复刻 FairyGUI Stop(setToComplete)：完成时未完成 item 落到终态（倒放落回起态），否则原地停止。
         // Shake 必须归位——否则下次 Play 把偏移位当新基准，反复播放/停止位置越漂越远。
-        public void Stop()
+        public void Stop(bool setToComplete = true)
         {
             if (!_playing)
                 return;
@@ -214,9 +176,13 @@ namespace OpenFairy.UGUI
                 if (item.type is TransitionItemType.Sound or TransitionItemType.Nested)
                 {
                     if (item.Applied && item.type == TransitionItemType.Nested)
-                        ((Transition)item.RuntimeTarget).Stop();
+                        ((Transition)item.RuntimeTarget).Stop(setToComplete);
                     item.Applied = true; // 停止时不补播声音、不启动未到点的嵌套
                 }
+                else if (!setToComplete && item.type == TransitionItemType.Shake && item.Started && !item.Applied)
+                    Target(item).anchoredPosition = item.ShakeBase;
+            if (!setToComplete)
+                return;
             // 倒放逆序求值：终态以时间轴最早的 item 为准。无限循环 item 无终态（对齐 FairyGUI ToComplete）。
             var effectiveTime = _reversed ? 0 : _totalDuration;
             for (var i = 0; i < items.Length; i++)
@@ -252,34 +218,48 @@ namespace OpenFairy.UGUI
             if (_remainingTimes < 0 || --_remainingTimes > 0)
             {
                 _time = 0;
-                foreach (var item in items)
-                {
-                    item.Applied = false;
-                    item.Started = false;
-                    item.HookStarted = false;
-                    item.HookEnded = false;
-                }
+                ResetItems();
             }
             else
                 _playing = false;
         }
 
+        private void ResetItems()
+        {
+            foreach (var item in items)
+            {
+                item.Applied = false;
+                item.Started = false;
+                item.HookStarted = false;
+                item.HookEnded = false;
+            }
+        }
+
+        // item 自 time 起的活动时长。
+        private static float Tail(TransitionItem item) =>
+            item.type == TransitionItemType.Shake ? item.start[1]
+            : !item.tween ? 0
+            : item.repeat < 0 ? float.PositiveInfinity
+            : item.duration * (item.repeat + 1);
+
+        private void EnsureResolved(TransitionItem item)
+        {
+            if (item.Started)
+                return;
+            item.Started = true;
+            item.ResolvedStart = Resolve(item, item.start);
+            item.ResolvedEnd = Resolve(item, item.end);
+        }
+
         private void Evaluate(TransitionItem item, float local)
         {
-            var tail = item.type == TransitionItemType.Shake ? item.start[1]
-                : !item.tween ? 0 : item.repeat < 0 ? float.PositiveInfinity
-                : item.duration * (item.repeat + 1);
+            var tail = Tail(item);
             var reached = _reversed ? local <= tail : local >= 0;
             var version = _playVersion;
             if (item.tween && reached && !item.HookStarted)
             {
                 // Resolve unspecified values before the start hook, like the tween's OnStart.
-                if (!item.Started)
-                {
-                    item.Started = true;
-                    item.ResolvedStart = Resolve(item, item.start);
-                    item.ResolvedEnd = Resolve(item, item.end);
-                }
+                EnsureResolved(item);
                 item.HookStarted = true;
                 item.Hook?.Invoke();
                 if (version != _playVersion || !_playing)
@@ -336,48 +316,49 @@ namespace OpenFairy.UGUI
                 return;
             }
 
-            if (local < 0)
+            // 复刻 Transition.PlayItem：倒放交换起止值而缓动仍正向推进，elapsed 是该 tween 已走的时间。
+            var tail = Tail(item);
+            var elapsed = _reversed && !float.IsPositiveInfinity(tail) ? tail - local : local;
+            if (elapsed < 0)
+                return;
+            if (elapsed >= tail)
             {
-                if (!_reversed || !item.Started || item.Applied)
+                // 帧步长可能跳过终点，补一次精确终态。
+                if (item.Applied)
                     return;
-                // 倒放下穿 item 起点：帧步长可能跳过 local==0，补一次精确起态。
                 item.Applied = true;
-                local = 0;
+                elapsed = tail;
             }
-
-            if (!item.Started)
-            {
-                item.Started = true;
-                item.ResolvedStart = Resolve(item, item.start);
-                item.ResolvedEnd = Resolve(item, item.end);
-            }
+            EnsureResolved(item);
 
             float t;
             if (item.repeat != 0)
             {
-                var cycle = Mathf.FloorToInt(local / item.duration);
+                var cycle = Mathf.FloorToInt(elapsed / item.duration);
                 if (item.repeat > 0 && cycle > item.repeat)
                 {
                     cycle = item.repeat;
                     t = item.duration;
                 }
                 else
-                    t = local - cycle * item.duration;
+                    t = elapsed - cycle * item.duration;
                 if (item.yoyo && (cycle & 1) == 1)
                     t = item.duration - t;
             }
             else
-                t = Mathf.Min(local, item.duration);
+                t = Mathf.Min(elapsed, item.duration);
 
             var ratio = EaseManager.Evaluate(item.ease, null, t, item.duration, 1.70158f, 0);
+            var from = _reversed ? item.ResolvedEnd : item.ResolvedStart;
             if (item.Path != null)
             {
+                // GTweener 的路径点不随起止交换反向，只以交换后的起点为基准。
                 var point = item.Path.GetPointAt(ratio);
-                Target(item).anchoredPosition = new Vector2(item.ResolvedStart[0] + point.x, -(item.ResolvedStart[1] + point.y)) + item.positionOffset;
+                Target(item).anchoredPosition = new Vector2(from.x + point.x, -(from.y + point.y)) + item.positionOffset;
                 return;
             }
 
-            ApplyValue(item, TransitionValue.Lerp(item.ResolvedStart, item.ResolvedEnd, ratio));
+            ApplyValue(item, Vector4.LerpUnclamped(from, _reversed ? item.ResolvedStart : item.ResolvedEnd, ratio));
         }
 
         private void ApplyInstant(TransitionItem item)
@@ -407,7 +388,9 @@ namespace OpenFairy.UGUI
                 case TransitionItemType.Nested:
                 {
                     var nested = (Transition)item.RuntimeTarget;
-                    if (_reversed)
+                    if (item.playTimes == 0) // 复刻 FairyGUI：播放次数 0 是嵌套动效的停止点
+                        nested.Stop(false);
+                    else if (_reversed)
                         nested.PlayReverse(item.playTimes).Forget();
                     else
                         nested.Play(item.playTimes).Forget();
@@ -431,7 +414,7 @@ namespace OpenFairy.UGUI
             }
         }
 
-        private void ApplyValue(TransitionItem item, TransitionValue value)
+        private void ApplyValue(TransitionItem item, Vector4 value)
         {
             var rt = Target(item);
             switch (item.type)
@@ -458,7 +441,7 @@ namespace OpenFairy.UGUI
                     skewShape.SetVerticesDirty();
                     break;
                 case TransitionItemType.Color:
-                    ((Graphic)item.RuntimeTarget).color = new Color(value[0], value[1], value[2], value.Count > 3 ? value[3] : 1);
+                    ((Graphic)item.RuntimeTarget).color = new Color(value[0], value[1], value[2], value[3]);
                     break;
                 case TransitionItemType.ColorFilter:
                     // ColorAdjust 由 Migrate 烘焙在 ColorFilter 目标上。
@@ -467,12 +450,12 @@ namespace OpenFairy.UGUI
             }
         }
 
-        private TransitionValue Resolve(TransitionItem item, float[] values)
+        private Vector4 Resolve(TransitionItem item, float[] values)
         {
             var result = Vector4.zero;
             for (var i = 0; i < values.Length; i++)
                 result[i] = float.IsNaN(values[i]) ? Current(item, i) : values[i];
-            return new TransitionValue(result, values.Length);
+            return result;
         }
 
         private float Current(TransitionItem item, int index)

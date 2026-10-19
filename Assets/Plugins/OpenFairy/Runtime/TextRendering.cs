@@ -76,17 +76,6 @@ namespace OpenFairy.UGUI
             ((UnityEngine.UI.Text)text).verticalOverflow = mode;
         }
 
-        public static void SetBestFit(this Graphic text, bool enabled)
-        {
-#if FAIRYGUI_TMPRO
-            if (text is TMP_Text tmp)
-            {
-                tmp.enableAutoSizing = enabled;
-                return;
-            }
-#endif
-            ((UnityEngine.UI.Text)text).resizeTextForBestFit = enabled;
-        }
 
         public static void SetUbb(this Graphic text, bool enabled)
         {
@@ -108,8 +97,6 @@ namespace OpenFairy.UGUI
 
         public static void RefreshText(this Graphic text)
         {
-            if (text == null)
-                return;
 #if FAIRYGUI_TMPRO
             if (text is TMP_Text tmp)
             {

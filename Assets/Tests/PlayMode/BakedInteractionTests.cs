@@ -201,7 +201,7 @@ namespace OpenFairy.UGUI.Tests
             Assert.IsNotNull(combo, "页面应有烘焙的 ComboBox");
             yield return null;
 
-            ((IPointerClickHandler)combo).OnPointerClick(new PointerEventData(EventSystem.current));
+            ((IPointerDownHandler)combo).OnPointerDown(new PointerEventData(EventSystem.current));
             yield return null;
             Assert.IsTrue(OpenFairy.UGUI.Root.inst != null, "点下拉应自建 Root 覆盖层");
             Assert.IsTrue(OpenFairy.UGUI.Root.inst.hasAnyPopup, "下拉应作为 popup 打开");

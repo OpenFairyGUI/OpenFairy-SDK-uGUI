@@ -55,7 +55,6 @@ namespace OpenFairy.UGUI.Editor
         private class ControllerData
         {
             public int Index;
-            public string Name;
             public Type PageType;
             public string[] PageIds;
             public Schema.Controller Source;
@@ -427,7 +426,7 @@ namespace OpenFairy.UGUI.Editor
                 var controller = xml.Controllers[controllerIndex];
                 var cname = names.controllerEnums[controller];
                 var field = names.controllerFields[controller];
-                fields.Add(EnumDeclaration(cname, xml.Extension));
+                fields.Add(EnumDeclaration(cname));
                 fields.Add("        {");
                 foreach (var page in PageMembers(controller))
                     fields.Add($"            {page.Member},");
@@ -506,7 +505,7 @@ namespace OpenFairy.UGUI.Editor
             if (isButtonFamily && buttonController == null)
                 fields.InsertRange(0, new[]
                 {
-                    EnumDeclaration(names.buttonEnum, xml.Extension),
+                    EnumDeclaration(names.buttonEnum),
                     "        {",
                     "            up,",
                     "        }",
@@ -550,22 +549,8 @@ namespace OpenFairy.UGUI.Editor
             return code.ToString();
         }
 
-        private static string EnumDeclaration(string name, Schema.ComponentExtension extension) =>
-            $"        public {(HidesRuntimeMember(name, extension) ? "new " : "")}enum {name}";
-
-        private static bool HidesRuntimeMember(string name, Schema.ComponentExtension extension)
-        {
-            var type = extension switch
-            {
-                Schema.ComponentExtension.Button => typeof(Button<>),
-                Schema.ComponentExtension.ComboBox => typeof(ComboBox<>),
-                Schema.ComponentExtension.ProgressBar => typeof(ProgressBar),
-                Schema.ComponentExtension.Slider => typeof(Slider),
-                Schema.ComponentExtension.Label => typeof(Label),
-                _ => typeof(Component),
-            };
-            return type.GetMember(name).Length > 0;
-        }
+        // GeneratedMembers 已避开基类成员名，生成的 enum 不会遮蔽 runtime 成员。
+        private static string EnumDeclaration(string name) => $"        public enum {name}";
 
         private static bool _scriptsChanged;
 
@@ -656,7 +641,6 @@ namespace OpenFairy.UGUI.Editor
                     controllers[element.Name] = new ControllerData
                     {
                         Index = controllers.Count,
-                        Name = name,
                         FieldName = names.controllerFields[element],
                         PageType = pageType,
                         PageIds = pages.AsValueEnumerable().Select(page => page.Id).ToArray(),
@@ -746,6 +730,7 @@ namespace OpenFairy.UGUI.Editor
                             var gearType = typeof(GearButton<>).MakeGenericType(ctrlData.PageType);
                             var gear = Activator.CreateInstance(gearType);
                             gearType.GetField("target").SetValue(gear, go);
+                            gearType.GetField("button", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(gear, relatedButton);
                             var pages = Array.CreateInstance(ctrlData.PageType, 1);
                             pages.SetValue(ctrlData.PageValues[relatedButton.relatedPage], 0);
                             gearType.GetField("pages").SetValue(gear, pages);
@@ -776,6 +761,12 @@ namespace OpenFairy.UGUI.Editor
                         buttonComp.icon = buttonComp.iconLoader.sprite;
                     if (xml.Button is { } buttonEl)
                         ConfigureButton(root, buttonEl, component.PackageId);
+                    // 复刻 GButton.SetState 的 Dark 效果：作用于直接子级里非文本的可着色对象。
+                    if (buttonComp.downEffect == ButtonDownEffect.Dark)
+                        buttonComp.downEffectTargets = children.AsValueEnumerable()
+                            .Where(child => child.Xml.Kind is Schema.DisplayKind.Image or Schema.DisplayKind.MovieClip
+                                or Schema.DisplayKind.Graph or Schema.DisplayKind.Loader)
+                            .Select(child => child.Go.GetComponent<Graphic>()).Where(graphic => graphic != null).ToArray();
                     if (xml.ComboBox is { } comboEl) // 组件定义级：烘焙 dropdown 资源
                         ConfigureComboBox(root, comboEl, component.PackageId);
                     if (xml.Extension == Schema.ComponentExtension.ComboBox)
@@ -946,6 +937,9 @@ namespace OpenFairy.UGUI.Editor
                 case Schema.DisplayKind.Component:
                 {
                     var dep = Resolve(element.Source, owner.PackageId);
+                    // GButton 的 Scale 按下效果在构造时把轴心设为中心，实例未写 pivot 时保留该轴心。
+                    if (dep.ComponentXml.Button?.DownEffect == ButtonDownEffect.Scale)
+                        element.Pivot ??= new Vector2(.5f, .5f);
                     go = (GameObject)PrefabUtility.InstantiatePrefab(LoadPrefab(dep), parent);
                     go.name = name;
                     size ??= ((RectTransform)go.transform).sizeDelta;
@@ -1269,8 +1263,19 @@ namespace OpenFairy.UGUI.Editor
                     Schema.ImageFillMethod.Radial180 => UnityEngine.UI.Image.FillMethod.Radial180,
                     _ => UnityEngine.UI.Image.FillMethod.Radial360,
                 };
-                if (image.fillMethod == UnityEngine.UI.Image.FillMethod.Radial360)
-                    image.fillOrigin = (int)UnityEngine.UI.Image.Origin360.Top;
+                // FairyGUI 的 Origin 枚举顺序与 uGUI 不同，按语义逐一映射。
+                var origin = element.FillOrigin;
+                image.fillOrigin = image.fillMethod switch
+                {
+                    UnityEngine.UI.Image.FillMethod.Vertical => (int)(origin == 0 ? UnityEngine.UI.Image.OriginVertical.Top : UnityEngine.UI.Image.OriginVertical.Bottom),
+                    UnityEngine.UI.Image.FillMethod.Radial90 => (int)new[] { UnityEngine.UI.Image.Origin90.TopLeft, UnityEngine.UI.Image.Origin90.TopRight,
+                        UnityEngine.UI.Image.Origin90.BottomLeft, UnityEngine.UI.Image.Origin90.BottomRight }[origin],
+                    UnityEngine.UI.Image.FillMethod.Radial180 => (int)new[] { UnityEngine.UI.Image.Origin180.Top, UnityEngine.UI.Image.Origin180.Bottom,
+                        UnityEngine.UI.Image.Origin180.Left, UnityEngine.UI.Image.Origin180.Right }[origin],
+                    UnityEngine.UI.Image.FillMethod.Radial360 => (int)new[] { UnityEngine.UI.Image.Origin360.Top, UnityEngine.UI.Image.Origin360.Bottom,
+                        UnityEngine.UI.Image.Origin360.Left, UnityEngine.UI.Image.Origin360.Right }[origin],
+                    _ => origin,
+                };
                 image.fillClockwise = element.FillClockwise;
                 image.fillAmount = element.FillAmount / 100;
             }
@@ -1325,6 +1330,8 @@ namespace OpenFairy.UGUI.Editor
                 button.mode = mode;
             if (buttonXml.Sound is { } sound) button.sound = LoadButtonSound(sound, packageId);
             if (buttonXml.SoundVolume is { } volume) button.soundVolumeScale = volume;
+            if (buttonXml.DownEffect is { } downEffect) button.downEffect = downEffect;
+            if (buttonXml.DownEffectValue is { } downEffectValue) button.downEffectValue = downEffectValue;
             if (buttonXml.TitleColor is { } titleColor)
                 ConfigureTitleColor(button, ParseColor(titleColor));
             button._selected = buttonXml.Checked && button.mode != ButtonMode.Common; // 烘焙直写（复刻 GButton.selected：Common 忽略选中态），不触发关联控制器
@@ -1630,23 +1637,20 @@ namespace OpenFairy.UGUI.Editor
             }
             if (element.Grayed)
             {
+                // 复刻 GButton/GComponent.HandleGrayedChanged：按钮有 disabled 页只换页；
+                // 否则存在名为 grayed 的控制器时切到其页 1；都没有才套灰度滤镜。
                 var button = go.GetComponent<ButtonBase>();
-                // FairyGUI 约定：存在名为 grayed 的控制器时，置灰只切换其页面 1，不套灰度材质。
-                var source = element.Kind == Schema.DisplayKind.Component ? Resolve(element.Source, owner.PackageId) : null;
-                var gray = source != null ? Array.Find(source.ComponentXml.Controllers, controller => controller.Name == "grayed") : null;
-                if (button != null && gray != null && button.GetType().GetField(new GeneratedMembers(source.ComponentXml, ClassName(source)).controllerFields[gray]) is { } grayedController)
-                {
-                    var controller = grayedController.GetValue(button);
-                    var pageProperty = controller.GetType().GetProperty("page");
-                    pageProperty.SetValue(controller, Enum.GetValues(pageProperty.PropertyType).GetValue(1));
-                    grayedController.SetValue(button, controller);
-                }
-                else
-                {
+                var controllers = element.Kind == Schema.DisplayKind.Component
+                    ? Resolve(element.Source, owner.PackageId).ComponentXml.Controllers : Array.Empty<Schema.Controller>();
+                var gray = Array.FindIndex(controllers, controller => controller.Name == "grayed");
+                var disabledPage = button != null && controllers.AsValueEnumerable().Any(controller => controller.Name == "button"
+                    && controller.Pages.AsValueEnumerable().Any(page => page.Name == "disabled"));
+                if (button != null)
+                    button.grayed = true;
+                if (!disabledPage && gray >= 0)
+                    go.GetComponent<Component>().SetControllerPage(gray, 1);
+                else if (!disabledPage)
                     ConfigureGrayed(go, true);
-                    if (button != null)
-                        button.grayed = true;
-                }
             }
         }
 
@@ -2088,8 +2092,7 @@ namespace OpenFairy.UGUI.Editor
                         ease = ParseEase(itemXml.Ease),
                         repeat = itemXml.Repeat,
                         yoyo = itemXml.Yoyo,
-                        label = itemXml.Label,
-                        endLabel = itemXml.EndLabel,
+
                     };
 
                     if (item.tween)
@@ -2433,7 +2436,7 @@ namespace OpenFairy.UGUI.Editor
 
             var root = NewChild(name, parent);
             var background = root.AddComponent<UnityEngine.UI.Image>();
-            background.color = new Color32(31, 27, 24, 255);
+            background.color = Color.clear; // FairyGUI 输入文本没有底框，透明面只承接射线
 
             var field = root.AddComponent<TMP_InputField>();
             field.targetGraphic = background;
@@ -2448,10 +2451,7 @@ namespace OpenFairy.UGUI.Editor
             var textArea = NewChild("Text Area", (RectTransform)root.transform);
             textArea.AddComponent<RectMask2D>();
             var textAreaRect = (RectTransform)textArea.transform;
-            textAreaRect.anchorMin = Vector2.zero;
-            textAreaRect.anchorMax = Vector2.one;
-            textAreaRect.offsetMin = new Vector2(18, 8);
-            textAreaRect.offsetMax = new Vector2(-18, -8);
+            StretchFull(textAreaRect);
 
             var textGo = NewChild("Text", textAreaRect, typeof(TextMeshProUGUI));
             var text = textGo.GetComponent<TextMeshProUGUI>();
@@ -2521,8 +2521,12 @@ namespace OpenFairy.UGUI.Editor
                 markup.Bind();
             }
             text.extraPadding = true;
-            text.characterSpacing = element.LetterSpacing;
-            text.lineSpacing = element.Leading;
+            // TMP 的字距与行距以 em/100 为单位；FairyGUI 以像素计，行高为 round(1.25*size) + leading - 1。
+            var em = 100f / text.fontSize;
+            var face = text.font.faceInfo;
+            text.characterSpacing = element.LetterSpacing * em;
+            text.lineSpacing = (Mathf.Round(text.fontSize * 1.25f) + element.Leading - 1
+                - face.lineHeight * face.scale * text.fontSize / face.pointSize) * em;
             text.fontStyle = (element.Bold, element.Italic) switch
             {
                 (true, true) => FontStyles.Bold | FontStyles.Italic,
@@ -2624,11 +2628,19 @@ namespace OpenFairy.UGUI.Editor
                 text.text = prompt;
                 text.ubb = true;
             }
-            text.imageSprites = Regex.Matches(text.text, @"ui://\w+").AsValueEnumerable<Match>()
-                .Select(match => TryResolve(match.Value, owner.PackageId, out var res)
-                    ? AssetDatabase.LoadAssetAtPath<Sprite>(SpritePath(res))
-                    : null) // 陈旧/非图片的内嵌 img 标签解析不到 → null 占位，不抛
-                .ToArray();
+            // 与 TextField.Parse 相同的标签口径按出现序绑定图片；解析不到的陈旧图片标签在烘焙期移除。
+            var images = new List<Sprite>();
+            var pattern = (text.ubb ? @"\[img\](?<url>.*?)\[/img\]" : "(?!)") + "|"
+                + (text.html ? @"<img\b[^>]*?src\s*=\s*['""]?(?<url>[^'"" >]+)[^>]*>" : "(?!)");
+            text.text = Regex.Replace(text.text, pattern, match =>
+            {
+                if (!TryResolve(match.Groups["url"].Value, owner.PackageId, out var res)
+                    || AssetDatabase.LoadAssetAtPath<Sprite>(SpritePath(res)) is not { } sprite)
+                    return "";
+                images.Add(sprite);
+                return match.Value;
+            }, RegexOptions.IgnoreCase);
+            text.imageSprites = images.ToArray();
             var bold = element.Bold;
             var italic = element.Italic;
             text.fontStyle = bold && italic ? FontStyle.BoldAndItalic : bold ? FontStyle.Bold : italic ? FontStyle.Italic : FontStyle.Normal;

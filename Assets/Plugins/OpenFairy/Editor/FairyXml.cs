@@ -654,6 +654,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("type")] public ShapeType Type;
         [XmlAttribute("color")] public string Color;
         [XmlAttribute("fillMethod")] public ImageFillMethod FillMethod;
+        [XmlAttribute("fillOrigin")] public int FillOrigin;
         [XmlAttribute("fillClockwise")] public bool FillClockwise = true;
         [XmlAttribute("fillAmount")] public float FillAmount = 100;
         [XmlAttribute("flip")] public Flip Flip;
@@ -768,6 +769,8 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("selectedIcon")] public string SelectedIcon;
         [XmlAttribute("sound")] public string Sound;
         [XmlAttribute("volume")] public float? SoundVolume;
+        [XmlAttribute("downEffect")] public OpenFairy.UGUI.ButtonDownEffect? DownEffect; // 仅定义级
+        [XmlAttribute("downEffectValue")] public float? DownEffectValue;
         [XmlAttribute("icon")] public string Icon;
         [XmlAttribute("mode")] public OpenFairy.UGUI.ButtonMode? Mode; // 实例级缺省时不覆盖定义级
         [XmlAttribute("checked")] public bool Checked;

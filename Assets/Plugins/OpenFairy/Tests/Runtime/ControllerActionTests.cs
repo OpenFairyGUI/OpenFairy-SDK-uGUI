@@ -71,7 +71,6 @@ namespace OpenFairy.UGUI.Tests
             timeline.items = new[] { new TransitionItem {
                 type = TransitionItemType.Alpha, tween = true, duration = 1,
                 ease = Ease.Linear, start = new[] { 0f }, end = new[] { 1f },
-                label = "Begin", endLabel = "End",
             } };
             return timeline;
         }
@@ -209,7 +208,7 @@ namespace OpenFairy.UGUI.Tests
                 transition = timeline, toPages = new[] { Page.Second, Page.Third }, playTimes = -1, stopOnExit = true,
             } };
             var ended = 0;
-            timeline.SetHook("End", () => ended++);
+            timeline.SetHook(0, true, () => ended++);
             controller.page = Page.Second;
             timeline.Step(.5f);
             var alpha = timeline.GetComponent<CanvasGroup>().alpha;
@@ -250,8 +249,8 @@ namespace OpenFairy.UGUI.Tests
             timeline.items[0].repeat = 1;
             var starts = 0;
             var ends = 0;
-            timeline.SetHook("Begin", () => starts++);
-            timeline.SetHook("End", () => ends++);
+            timeline.SetHook(0, false, () => starts++);
+            timeline.SetHook(0, true, () => ends++);
             timeline.Play().Forget();
             timeline.Step(1.1f);
             Assert.AreEqual(1, starts);
@@ -271,9 +270,9 @@ namespace OpenFairy.UGUI.Tests
         {
             var timeline = Timeline();
             var ended = 0;
-            timeline.SetHook("End", () => ended++);
-            timeline.SetHook("Begin", () => {
-                timeline.SetHook("Begin", null);
+            timeline.SetHook(0, true, () => ended++);
+            timeline.SetHook(0, false, () => {
+                timeline.SetHook(0, false, null);
                 timeline.Play(-1, 1).Forget();
             });
             timeline.Play().Forget();

@@ -30,8 +30,8 @@ namespace OpenFairy.UGUI.Tests
             {
                 Kind.Position => new GearXY<State> { defaultValue = Vector2.zero, values = new[] { new Vector2(80, -40) } },
                 Kind.Size => new GearSize<State> { defaultSize = new Vector2(40, 20), defaultScale = Vector2.one, sizes = new[] { new Vector2(80, 60) }, scales = new[] { new Vector2(2, 3) } },
-                Kind.Look => new GearLook<State> { defaultAlpha = 1, alphas = new[] { .25f }, rotations = new[] { 45f }, grayed = new[] { false } },
-                _ => new GearColor<State> { defaultValue = Color.white, values = new[] { Color.black } },
+                Kind.Look => new GearLook<State> { defaultAlpha = 1, alphas = new[] { .25f }, rotations = new[] { 45f }, grayed = new[] { false }, touchables = new[] { true } },
+                _ => new GearColor<State> { defaultValue = Color.white, values = new[] { Color.black }, strokeValues = new[] { Color.clear } },
             };
             try
             {

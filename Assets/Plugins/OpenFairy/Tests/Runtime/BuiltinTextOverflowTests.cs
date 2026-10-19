@@ -171,6 +171,35 @@ namespace OpenFairy.UGUI.Tests
             Inside(text, Mesh(text));
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Letter_spacing_only_separates_glyphs_and_empty_text_has_no_size(bool bitmap)
+        {
+            var text = MakeText(bitmap, false, new Vector2(400, 60));
+            text.text = "ab";
+            var plain = text.preferredWidth;
+            text.letterSpacing = 10;
+            text.SetAllDirty();
+            Assert.That(text.preferredWidth, Is.EqualTo(plain + 10).Within(1f), "FairyGUI adds letter spacing between glyphs only.");
+            text.text = "";
+            Assert.That(text.preferredWidth, Is.Zero);
+            Assert.That(text.preferredHeight, Is.Zero);
+        }
+
+        [Test]
+        public void Ubb_tags_are_case_insensitive_and_escaped_brackets_stay_literal()
+        {
+            var text = MakeText(false, false, new Vector2(400, 60));
+            text.ubb = true;
+            text.text = @"\[b]x";
+            var escaped = text.preferredWidth;
+            text.text = "[B]x[/B]";
+            var tagged = text.preferredWidth;
+            text.text = "x";
+            Assert.That(tagged, Is.LessThan(escaped), "A recognised tag must not render as literal text.");
+            Assert.That(escaped, Is.GreaterThan(text.preferredWidth), "An escaped bracket renders literally.");
+        }
+
         [Test]
         public void Ellipsis_handles_empty_visible_lines_without_changing_newlines()
         {

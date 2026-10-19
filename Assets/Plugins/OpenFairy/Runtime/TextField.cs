@@ -63,9 +63,9 @@ namespace OpenFairy.UGUI
             public int Size;
             public FontStyle Style;
             public bool Underline;
+            public bool ColorChanged;
             public string Href;
             public Color32 TL, BL, TR, BR;
-
         }
 
         private struct Quad
@@ -100,10 +100,17 @@ namespace OpenFairy.UGUI
         // 从标签串里取属性值，支持带引号或裸值（如 font color='#fff' size=20）。
         private static string AttrValue(string tag, string name)
         {
-            var idx = tag.IndexOf(name + "=", StringComparison.Ordinal);
+            var idx = tag.IndexOf(name, StringComparison.Ordinal);
             if (idx < 0)
                 return null;
-            var start = idx + name.Length + 1;
+            var start = idx + name.Length;
+            while (start < tag.Length && tag[start] == ' ')
+                start++;
+            if (start >= tag.Length || tag[start] != '=')
+                return null;
+            start++;
+            while (start < tag.Length && tag[start] == ' ')
+                start++;
             if (start < tag.Length && (tag[start] == '\'' || tag[start] == '"'))
             {
                 var quote = tag[start];
@@ -114,20 +121,6 @@ namespace OpenFairy.UGUI
             while (stop < tag.Length && tag[stop] != ' ')
                 stop++;
             return tag[start..stop];
-        }
-
-        private static string ParseHref(string tag)
-        {
-            var idx = tag.IndexOf("href", StringComparison.Ordinal);
-            if (idx < 0)
-                return "";
-            var single = tag.IndexOf('\'', idx);
-            var doubleQuote = tag.IndexOf('"', idx);
-            var quote = single < 0 ? doubleQuote : doubleQuote < 0 ? single : Mathf.Min(single, doubleQuote);
-            if (quote < 0)
-                return "";
-            var end = tag.IndexOf(tag[quote], quote + 1);
-            return end > quote ? tag[(quote + 1)..end] : "";
         }
 
         public override Texture mainTexture => bitmapFont != null ? bitmapFont.texture : base.mainTexture;
@@ -239,12 +232,15 @@ namespace OpenFairy.UGUI
                 if (!_hasColorTags) // 全部 quad 都用基础色：原地回填颜色，免重排版
                 {
                     _layoutColor = color;
-                    Color32 c = color;
-                    for (var i = 0; i < _quads.Count; i++)
+                    if (bitmapFont == null || bitmapFont.canTint) // 不可着色的位图字保持原色
                     {
-                        var quad = _quads[i];
-                        quad.TL = quad.BL = quad.TR = quad.BR = c;
-                        _quads[i] = quad;
+                        Color32 c = color;
+                        for (var i = 0; i < _quads.Count; i++)
+                        {
+                            var quad = _quads[i];
+                            quad.TL = quad.BL = quad.TR = quad.BR = c;
+                            _quads[i] = quad;
+                        }
                     }
                     return;
                 }
@@ -284,12 +280,7 @@ namespace OpenFairy.UGUI
             {
                 var child = transform.GetChild(i);
                 if (child.name.StartsWith("img"))
-                {
-                    if (Application.isPlaying)
-                        Destroy(child.gameObject);
-                    else
-                        DestroyImmediate(child.gameObject);
-                }
+                    OwnedObject.Destroy(child.gameObject);
             }
             _images = new RectTransform[imageSprites?.Length ?? 0];
             for (var image = 0; image < _images.Length; image++)
@@ -352,11 +343,16 @@ namespace OpenFairy.UGUI
             for (var i = 0; i < value.Length; i++)
             {
                 var ch = value[i];
-                if (ubb && ch == '[')
+                if (ubb && ch == '\\' && i + 1 < value.Length && value[i + 1] == '[') // 复刻 UBBParser 的 \[ 转义
+                {
+                    _buffer.Append('[');
+                    i++;
+                }
+                else if (ubb && ch == '[')
                 {
                     var end = value.IndexOf(']', i);
                     var tag = end > i ? value[(i + 1)..end] : null;
-                    if (tag == "img")
+                    if (string.Equals(tag, "img", StringComparison.OrdinalIgnoreCase))
                     {
                         var close = value.IndexOf("[/img]", end, StringComparison.Ordinal);
                         if (close < 0) // 无闭合：按原文输出（复刻 UBBParser 对残缺标签的容错），不能让 i 倒退
@@ -391,15 +387,7 @@ namespace OpenFairy.UGUI
                         _runs.Add(new Run { Image = imageIndex++ });
                     }
                     else if (tag.StartsWith("a"))
-                    {
-                        // FairyGUI HtmlParseOptions 默认链接样式：#3A67CC + 下划线。
-                        Flush(current);
-                        _runStack.Push(current);
-                        _hasColorTags = true;
-                        SetColor(ref current, new Color32(0x3A, 0x67, 0xCC, 0xFF));
-                        current.Underline = true;
-                        current.Href = ParseHref(tag);
-                    }
+                        PushLink(ref current, AttrValue(tag, "href") ?? "");
                     else if (tag.StartsWith("font"))
                     {
                         Flush(current);
@@ -408,6 +396,7 @@ namespace OpenFairy.UGUI
                         {
                             _hasColorTags = true;
                             SetColor(ref current, ParseColor(col));
+                            current.ColorChanged = true;
                         }
                         if (AttrValue(tag, "size") is { } sz && int.TryParse(sz, out var size))
                             current.Size = size;
@@ -446,65 +435,70 @@ namespace OpenFairy.UGUI
             _buffer.Clear();
         }
 
+        // 复刻 HtmlParser 的 <a>：默认样式 #3A67CC + 下划线，外层已指定颜色时保留该颜色。
+        private void PushLink(ref Run current, string href)
+        {
+            Flush(current);
+            _runStack.Push(current);
+            if (!current.ColorChanged)
+            {
+                _hasColorTags = true;
+                SetColor(ref current, new Color32(0x3A, 0x67, 0xCC, 0xFF));
+            }
+            current.Underline = true;
+            current.Href = href;
+        }
+
+        // 复刻 UBBParser：标签名不分大小写；font/align/sup/sub/strike 被消费而非原样输出（其排版效果未实现）。
         private bool HandleTag(string tag, ref Run current)
         {
-            switch (tag)
+            var equals = tag.IndexOf('=');
+            var name = (equals < 0 ? tag : tag[..equals]).ToLowerInvariant();
+            var attr = equals < 0 ? null : tag[(equals + 1)..];
+            switch (name)
             {
-                case "b":
-                case "i":
-                    Flush(current);
-                    _runStack.Push(current);
-                    var italic = tag == "i" ? FontStyle.Italic : FontStyle.Normal;
-                    var bold = tag == "b" ? FontStyle.Bold : FontStyle.Normal;
-                    current.Style |= bold | italic;
-                    return true;
-                case "u":
-                    Flush(current);
-                    _runStack.Push(current);
-                    current.Underline = true;
-                    return true;
-                case "/b":
-                case "/i":
-                case "/u":
-                case "/size":
-                case "/color":
-                case "/url":
+                case "/b": case "/i": case "/u": case "/size": case "/color": case "/url":
+                case "/font": case "/align": case "/sup": case "/sub": case "/strike":
                     Flush(current);
                     if (_runStack.Count > 0)
                         current = _runStack.Pop();
                     return true;
+                case "url":
+                    PushLink(ref current, attr?.Trim('\'', '"') ?? "");
+                    return true;
+                case "b": case "i": case "u": case "size": case "color":
+                case "font": case "align": case "sup": case "sub": case "strike":
+                    Flush(current);
+                    _runStack.Push(current);
+                    break;
+                default:
+                    return false;
             }
-            if (tag.StartsWith("url"))
+            switch (name)
             {
-                // [url=href] 超链接（复刻 UBBParser）：默认样式 #3A67CC + 下划线，命中回调同 <a>。
-                Flush(current);
-                _runStack.Push(current);
-                _hasColorTags = true;
-                SetColor(ref current, new Color32(0x3A, 0x67, 0xCC, 0xFF));
-                current.Underline = true;
-                current.Href = tag.StartsWith("url=") ? tag[4..].Trim('\'', '"') : "";
-                return true;
+                case "b":
+                    current.Style |= FontStyle.Bold;
+                    break;
+                case "i":
+                    current.Style |= FontStyle.Italic;
+                    break;
+                case "u":
+                    current.Underline = true;
+                    break;
+                case "size" when int.TryParse(attr, out var size):
+                    current.Size = size;
+                    break;
+                case "color" when attr != null:
+                    _hasColorTags = true;
+                    current.ColorChanged = true;
+                    var parts = attr.Split(',');
+                    current.TL = ParseColor(parts[0]);
+                    current.BL = parts.Length > 1 ? ParseColor(parts[1]) : current.TL;
+                    current.TR = parts.Length > 2 ? ParseColor(parts[2]) : current.TL;
+                    current.BR = parts.Length > 3 ? ParseColor(parts[3]) : parts.Length > 2 ? current.TR : current.BL;
+                    break;
             }
-            if (tag.StartsWith("size="))
-            {
-                Flush(current);
-                _runStack.Push(current);
-                current.Size = int.Parse(tag[5..]);
-                return true;
-            }
-            if (tag.StartsWith("color="))
-            {
-                Flush(current);
-                _runStack.Push(current);
-                _hasColorTags = true;
-                var parts = tag[6..].Split(',');
-                current.TL = ParseColor(parts[0]);
-                current.BL = parts.Length > 1 ? ParseColor(parts[1]) : current.TL;
-                current.TR = parts.Length > 2 ? ParseColor(parts[2]) : current.TL;
-                current.BR = parts.Length > 3 ? ParseColor(parts[3]) : parts.Length > 2 ? current.TR : current.BL;
-                return true;
-            }
-            return false;
+            return true;
         }
 
         // FillVertexColors 语义：2 色为纵向渐变，4 色为四角 [左上,左下,右上,右下]。
@@ -541,14 +535,13 @@ namespace OpenFairy.UGUI
         private readonly List<Character> _characters = new();
         private readonly List<Line> _lines = new();
 
+        // 复刻 FairyGUI 自动尺寸：空文本为 0×0。
         public override float preferredWidth
         {
             get
             {
                 EnsureLayout();
-                var width = 0f;
-                foreach (var line in _lines) width = Mathf.Max(width, line.Width);
-                return width + 4;
+                return string.IsNullOrEmpty(text) ? 0 : TextWidth;
             }
         }
 
@@ -557,9 +550,7 @@ namespace OpenFairy.UGUI
             get
             {
                 EnsureLayout();
-                var height = 4f;
-                foreach (var line in _lines) height += line.Height;
-                return height + Mathf.Max(0, _lines.Count - 1) * (leading - 1);
+                return string.IsNullOrEmpty(text) ? 0 : TextHeight;
             }
         }
 
@@ -624,23 +615,11 @@ namespace OpenFairy.UGUI
             var wrap = horizontalOverflow == HorizontalWrapMode.Wrap;
             var rectWidth = rect.width - 4;
             LayoutLines(runs, wrap, rectWidth, 1);
-            if (overflowMode == OverflowMode.Shrink && !Fits(rect))
-            {
-                var low = 1;
-                var high = fontSize - 1;
-                while (low < high)
-                {
-                    var size = low + (high - low + 1) / 2;
-                    LayoutLines(runs, wrap, rectWidth, (float)size / fontSize);
-                    if (Fits(rect)) low = size;
-                    else high = size - 1;
-                }
-                LayoutLines(runs, wrap, rectWidth, (float)low / fontSize);
-            }
+            if (overflowMode == OverflowMode.Shrink && !string.IsNullOrEmpty(text))
+                Shrink(runs, wrap, rectWidth, rect);
 
             var hAlign = (int)alignment % 3;
             var vAlign = (int)alignment / 3;
-            var lineSpacing = leading - 1; // TextField: 实际行距 = lineSpacing - 1
             var textHeight = TextHeight;
             var visibleLines = _lines.Count;
             if (overflowMode == OverflowMode.Ellipsis)
@@ -649,10 +628,10 @@ namespace OpenFairy.UGUI
                 var height = 2f;
                 foreach (var line in _lines)
                 {
-                    if (height + line.Height > rect.height - 2) break;
+                    if (height + line.Height > rect.height) break;
                     visibleLines++;
                     if (line.Width > rectWidth) break;
-                    height += line.Height + lineSpacing;
+                    height += line.Height + LineSpacing;
                 }
             }
             if (overflowMode != OverflowMode.Default && (rect.width <= 4 || rect.height <= 4))
@@ -664,7 +643,7 @@ namespace OpenFairy.UGUI
             for (var lineIndex = 0; lineIndex < visibleLines; lineIndex++)
             {
                 var line = _lines[lineIndex];
-                if (verticalOverflow == VerticalWrapMode.Truncate && lineIndex > 0 && y + line.Height > rect.height - 2)
+                if (verticalOverflow == VerticalWrapMode.Truncate && lineIndex > 0 && y + line.Height > rect.height)
                     break;
 
                 var ellipsis = overflowMode == OverflowMode.Ellipsis && lineIndex == visibleLines - 1
@@ -683,13 +662,14 @@ namespace OpenFairy.UGUI
                             SetColor(ref ellipsisRun, color);
                         }
                         var width = CharWidth('…', ellipsisRun);
-                        if (line.Width + width <= rectWidth || line.Count == 0)
+                        var total = line.Width > 0 ? line.Width + LetterSpacing + width : width;
+                        if (total <= rectWidth || line.Count == 0)
                         {
-                            line.Width += width;
+                            line.Width = total;
                             break;
                         }
                         line.Count--;
-                        line.Width -= _characters[line.Start + line.Count].Width;
+                        line.Width = Span(_characters, line.Start, line.Count);
                     }
                     if (line.Width > rectWidth) break;
                 }
@@ -699,11 +679,19 @@ namespace OpenFairy.UGUI
                 var baselineY = y + line.Baseline;
                 var runStart = x;
                 var activeRun = -1;
+                var placed = false;
 
                 for (var i = line.Start; i < line.Start + line.Count; i++)
                 {
                     var character = _characters[i];
                     var run = runs[character.Run];
+                    // 复刻 BuildLines2：字距只加在两个有宽度的字形之间。
+                    if (character.Width != 0)
+                    {
+                        if (placed)
+                            x += LetterSpacing;
+                        placed = true;
+                    }
                     if (run.Image >= 0)
                     {
                         if (activeRun >= 0)
@@ -730,27 +718,80 @@ namespace OpenFairy.UGUI
                     FinishRun(runs[activeRun], runStart, x, y, line.Height, baselineY);
                 if (ellipsis)
                 {
+                    if (placed)
+                        x += LetterSpacing;
                     var width = DrawChar('…', ellipsisRun, x, baselineY);
                     FinishRun(ellipsisRun, x, x + width, y, line.Height, baselineY);
                 }
-                y += line.Height + lineSpacing;
+                y += line.Height + LineSpacing;
             }
 
             UpdateImages();
             _layoutValid = true;
         }
 
+        // 复刻 TextField.DoShrink：多行超高时按字号二分，否则按宽度比例缩小一次、仍超宽再减 1 号。
+        private void Shrink(List<Run> runs, bool wrap, float rectWidth, Rect rect)
+        {
+            if (_lines.Count > 1 && TextHeight > rect.height)
+            {
+                int low = 0, high = fontSize;
+                var current = Mathf.FloorToInt(Mathf.Sqrt(rect.height / TextHeight) * fontSize);
+                while (true)
+                {
+                    LayoutLines(runs, wrap, rectWidth, (float)current / fontSize);
+                    if (TextWidth > rect.width || TextHeight > rect.height)
+                        high = current;
+                    else
+                        low = current;
+                    if (high - low > 1 || high != low && current == high)
+                        current = low + (high - low) / 2;
+                    else
+                        break;
+                }
+            }
+            else if (TextWidth > rect.width)
+            {
+                var scale = rect.width / TextWidth;
+                LayoutLines(runs, wrap, rectWidth, scale);
+                if (TextWidth > rect.width)
+                    LayoutLines(runs, wrap, rectWidth, (float)(Mathf.FloorToInt(fontSize * scale) - 1) / fontSize);
+            }
+        }
+
         private int ScaledSize(int size) => Mathf.Max(1, Mathf.FloorToInt(size * _fontSizeScale));
 
-        private float TextHeight => 4f + _lines.AsValueEnumerable().Sum(line => line.Height)
-            + Mathf.Max(0, _lines.Count - 1) * (leading - 1);
+        private float LetterSpacing => letterSpacing * _fontSizeScale;
 
-        private bool Fits(Rect rect)
+        private float LineSpacing => (leading - 1) * _fontSizeScale;
+
+        // 复刻 BuildLines2 的 _textWidth/_textHeight：含四周 2px gutter，取整。
+        private float TextWidth
         {
-            if (TextHeight > rect.height) return false;
-            foreach (var line in _lines)
-                if (line.Width + 4 > rect.width) return false;
-            return true;
+            get
+            {
+                var width = _lines.AsValueEnumerable().Max(line => line.Width);
+                return Mathf.RoundToInt(width > 0 ? width + 4 : 0);
+            }
+        }
+
+        private float TextHeight => Mathf.RoundToInt(4f + _lines.AsValueEnumerable().Sum(line => line.Height)
+            + Mathf.Max(0, _lines.Count - 1) * LineSpacing);
+
+        // 有宽度的字形之间才计字距。
+        private float Span(List<Character> characters, int start, int count)
+        {
+            var width = 0f;
+            for (var i = start; i < start + count; i++)
+            {
+                var glyph = characters[i].Width;
+                if (glyph == 0)
+                    continue;
+                if (width != 0)
+                    width += LetterSpacing;
+                width += glyph;
+            }
+            return width;
         }
 
         private void LayoutLines(List<Run> runs, bool wrap, float width, float scale)
@@ -773,7 +814,7 @@ namespace OpenFairy.UGUI
             if (bitmapFont != null)
             {
                 if (ch == ' ')
-                    return Mathf.RoundToInt(bitmapFont.size / 2f) * _fontSizeScale + letterSpacing;
+                    return Mathf.RoundToInt(bitmapFont.size / 2f) * _fontSizeScale;
                 if (!bitmapFont.TryGetGlyph(ch, out var glyph))
                     return 0;
                 var top = baselineY + (glyph.y - glyph.lineHeight) * _fontSizeScale;
@@ -788,7 +829,7 @@ namespace OpenFairy.UGUI
                     UvTR = new Vector2(glyph.uv.xMax, glyph.uv.yMax),
                     UvBR = new Vector2(glyph.uv.xMax, glyph.uv.yMin),
                 });
-                return glyph.advance * _fontSizeScale + letterSpacing;
+                return glyph.advance * _fontSizeScale;
             }
 
             if (!font.GetCharacterInfo(ch, out var info, ScaledSize(run.Size), run.Style))
@@ -803,7 +844,7 @@ namespace OpenFairy.UGUI
                     UvTR = info.uvTopRight,
                     UvBR = info.uvBottomRight,
                 });
-            return info.advance + letterSpacing;
+            return info.advance;
         }
 
         private void DrawUnderline(Run run, float from, float to, float baselineY)
@@ -826,16 +867,16 @@ namespace OpenFairy.UGUI
         private float CharWidth(char ch, Run run)
         {
             if (run.Image >= 0)
-                return imageSprites[run.Image].rect.width + 2 + letterSpacing;
+                return imageSprites[run.Image].rect.width + 2;
             if (bitmapFont != null)
-                return ch == ' ' ? Mathf.RoundToInt(bitmapFont.size / 2f) * _fontSizeScale + letterSpacing
-                    : bitmapFont.TryGetGlyph(ch, out var glyph) ? glyph.advance * _fontSizeScale + letterSpacing : 0;
-            return font.GetCharacterInfo(ch, out var info, ScaledSize(run.Size), run.Style) ? info.advance + letterSpacing : 0;
+                return ch == ' ' ? Mathf.RoundToInt(bitmapFont.size / 2f) * _fontSizeScale
+                    : bitmapFont.TryGetGlyph(ch, out var glyph) ? glyph.advance * _fontSizeScale : 0;
+            return font.GetCharacterInfo(ch, out var info, ScaledSize(run.Size), run.Style) ? info.advance : 0;
         }
 
         private (float Baseline, float Height, float Width) MeasureLine(int start, int count)
         {
-            float baseline = 0, descent = 0, width = 0;
+            float baseline = 0, descent = 0;
             for (var i = start; i < start + count; i++)
             {
                 var character = _characters[i];
@@ -845,7 +886,6 @@ namespace OpenFairy.UGUI
                     var size = imageSprites[run.Image].rect.size;
                     baseline = Mathf.Max(baseline, size.y * 0.8f);
                     descent = Mathf.Max(descent, size.y * 0.2f);
-                    width += character.Width;
                     continue;
                 }
                 float glyphBaseline, glyphHeight;
@@ -864,14 +904,11 @@ namespace OpenFairy.UGUI
                 }
                 baseline = Mathf.Max(baseline, glyphBaseline);
                 descent = Mathf.Max(descent, glyphHeight - glyphBaseline);
-                width += character.Width;
             }
+            // 复刻 UpdateLineInfo：空行首行高取字号，其后沿用上一行高。
             if (baseline == 0)
-            {
-                baseline = bitmapFont != null ? bitmapFont.size * _fontSizeScale : ScaledSize(fontSize);
-                descent = bitmapFont != null ? 0 : Mathf.RoundToInt(ScaledSize(fontSize) * 1.25f) - baseline;
-            }
-            return (baseline, baseline + descent, width);
+                baseline = _lines.Count == 0 ? fontSize : _lines[^1].Height;
+            return (baseline, baseline + descent, Span(_characters, start, count));
         }
 
         // 复刻 TextField.BuildLines：字符加入后超宽才换行；仅空格后的词整体回退（wordLen<20），否则只移当前字符。
@@ -891,7 +928,7 @@ namespace OpenFairy.UGUI
                 {
                     var width = CharWidth('\0', run);
                     _pendingCharacters.Add(new Character { Run = runIndex, Width = width });
-                    x += width;
+                    x += x != 0 ? LetterSpacing + width : width;
                     wordPossible = false;
                     if (wrap && x > rectWidth && _pendingCharacters.Count > 1)
                         CommitLine(_pendingCharacters.Count - 1, ref x);
@@ -924,7 +961,8 @@ namespace OpenFairy.UGUI
 
                     var width = CharWidth(ch, run);
                     _pendingCharacters.Add(new Character { Run = runIndex, Value = ch, Width = width });
-                    x += width;
+                    if (width != 0)
+                        x += x != 0 ? LetterSpacing + width : width;
 
                     if (wrap && x > rectWidth)
                     {
@@ -954,7 +992,7 @@ namespace OpenFairy.UGUI
                 Width = metrics.Width,
             });
             _pendingCharacters.RemoveRange(0, count);
-            width = _pendingCharacters.AsValueEnumerable().Sum(character => character.Width);
+            width = Span(_pendingCharacters, 0, _pendingCharacters.Count);
         }
     }
 }

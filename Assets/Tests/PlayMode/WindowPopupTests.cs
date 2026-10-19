@@ -179,7 +179,7 @@ namespace OpenFairy.UGUI.Tests
 
             // 长列表（15 项，可见 5）：下拉裁到 5 项高并挂 ScrollPane。
             var combo = MakeCombo(15, 5);
-            combo.OnPointerClick(new PointerEventData(EventSystem.current));
+            combo.OnPointerDown(new PointerEventData(EventSystem.current));
             yield return null;
             var list = FindDeep(_gr.rect, "list");
             Assert.IsNotNull(list, "应实例化下拉 list");
@@ -193,7 +193,7 @@ namespace OpenFairy.UGUI.Tests
 
             // A short list displays every row and disables any baked native scrolling.
             var shortCombo = MakeCombo(3, 5);
-            shortCombo.OnPointerClick(new PointerEventData(EventSystem.current));
+            shortCombo.OnPointerDown(new PointerEventData(EventSystem.current));
             yield return null;
             var list2 = FindDeep(_gr.rect, "list");
             var source2 = list2.GetComponent<ListSource>();

@@ -35,9 +35,9 @@ namespace OpenFairy.UGUI.Tests
                 Assert.AreEqual(2f, timeline.items[0].duration);
                 Assert.AreEqual(3f, timeline.items[1].time);
                 int begin = 0, end = 0, shown = 0;
-                timeline.SetHook("Begin", () => begin++);
-                timeline.SetHook("End", () => end++);
-                timeline.SetHook("Shown", () => shown++);
+                timeline.SetHook(0, false, () => begin++);
+                timeline.SetHook(0, true, () => end++);
+                timeline.SetHook(1, false, () => shown++);
                 // Reflection avoids adding a UniTask compile reference to the Editor-test assembly.
                 typeof(Transition).GetMethod("Play").Invoke(timeline, new object[] { 1, 0f });
                 timeline.Step(.5f);

@@ -215,15 +215,8 @@ namespace OpenFairy.UGUI
         {
             if (_texture == null) return;
             _texture.Release();
-            DestroyOwned(_texture);
+            OwnedObject.Destroy(_texture);
             _texture = null;
-        }
-
-        private static void DestroyOwned(UnityEngine.Object value)
-        {
-            if (value == null) return;
-            if (Application.isPlaying) Destroy(value);
-            else DestroyImmediate(value);
         }
     }
 }

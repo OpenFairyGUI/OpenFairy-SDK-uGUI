@@ -759,6 +759,7 @@ namespace OpenFairy.UGUI.Tests
                 defaultRotation = 0f,
                 grayed = new[] { false, true },
                 defaultGrayed = false,
+                touchables = new[] { true, true },
             };
             gear.Apply(RadioPage.down);
             yield return null;

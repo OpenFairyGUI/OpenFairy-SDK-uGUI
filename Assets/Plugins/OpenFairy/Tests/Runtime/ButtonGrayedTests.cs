@@ -103,6 +103,44 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [UnityTest]
+        public IEnumerator Releasing_outside_a_check_button_leaves_its_hover_page()
+        {
+            var button = Make("Check").AddComponent<GrayedBasicTestButton>();
+            button.mode = ButtonMode.Check;
+            var pointer = Pointer();
+            button.OnPointerEnter(pointer);
+            button.OnPointerDown(pointer);
+            button.OnPointerExit(pointer);
+            Assert.That(button.controller.page, Is.EqualTo(GrayedBasicTestPage.over));
+            button.OnPointerUp(pointer);
+            Assert.That(button.controller.page, Is.EqualTo(GrayedBasicTestPage.up));
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator Scale_down_effect_shrinks_around_the_center_while_pressed()
+        {
+            var canvas = Make("Canvas");
+            canvas.AddComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+            var go = Make("Button", canvas.transform);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
+            rt.sizeDelta = new Vector2(100, 40);
+            var button = go.AddComponent<GrayedBasicTestButton>();
+            button.downEffect = ButtonDownEffect.Scale;
+            button.downEffectValue = .5f;
+            var center = rt.TransformPoint(rt.rect.center);
+            var pointer = Pointer();
+            button.OnPointerDown(pointer);
+            Assert.That(rt.localScale.x, Is.EqualTo(.5f).Within(1e-5f));
+            Assert.That(Vector3.Distance(rt.TransformPoint(rt.rect.center), center), Is.LessThan(1e-3f));
+            button.OnPointerUp(pointer);
+            Assert.That(rt.localScale.x, Is.EqualTo(1).Within(1e-5f));
+            Assert.That(Vector3.Distance(rt.TransformPoint(rt.rect.center), center), Is.LessThan(1e-3f));
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator Touchable_is_a_native_raycast_channel_separate_from_visual_graying()
         {
             var canvas = Make("Canvas");
@@ -165,7 +203,7 @@ namespace OpenFairy.UGUI.Tests
             combo.dropdownPrefab = dropdown;
             combo.items = new[] { "First", "Second" };
             combo.grayed = true;
-            combo.OnPointerClick(Pointer());
+            combo.OnPointerDown(Pointer());
             Assert.That(Root.inst.hasAnyPopup, Is.True);
             Root.inst.HidePopup();
             yield return null;

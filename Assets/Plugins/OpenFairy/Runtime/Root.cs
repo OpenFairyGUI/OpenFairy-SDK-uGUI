@@ -85,6 +85,10 @@ namespace OpenFairy.UGUI
             return _inst;
         }
 
+        // 烘焙 prefab 无需业务胶水：首次需要覆盖层时建到所在画布根上（复刻 GRoot.inst 惰性自建）。
+        internal static Root Ensure(UnityEngine.Component context) =>
+            _inst != null ? _inst : Create((RectTransform)context.GetComponentInParent<Canvas>().rootCanvas.transform);
+
         // 对象在 Root 内居中（复刻 GObject.Center on GRoot）。
         public void Center(RectTransform obj)
         {

@@ -34,11 +34,7 @@ namespace OpenFairy.UGUI
 
         private void ReleaseMaterial()
         {
-            if (_material != null)
-            {
-                if (Application.isPlaying) Destroy(_material);
-                else DestroyImmediate(_material);
-            }
+            OwnedObject.Destroy(_material);
             _material = null;
         }
     }

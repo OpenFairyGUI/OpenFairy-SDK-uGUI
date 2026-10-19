@@ -16,8 +16,7 @@ namespace OpenFairy.UGUI
         {
             if (template == null || string.IsNullOrEmpty(text))
                 return;
-            _root = Root.inst != null ? Root.inst
-                : Root.Create((RectTransform)GetComponentInParent<Canvas>().rootCanvas.transform);
+            _root = Root.Ensure(this);
             _root.ShowTooltip(this, eventData);
         }
 

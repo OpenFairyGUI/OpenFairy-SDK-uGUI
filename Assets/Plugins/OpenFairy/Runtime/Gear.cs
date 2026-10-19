@@ -30,6 +30,19 @@ namespace OpenFairy.UGUI
             ReleaseLock();
         }
 
+        // 复刻 FairyGUI 各 gear 的 Apply：进行中的 tween 终点不变则继续，否则先完成到原终点再重起。
+        protected bool ContinueTween(bool sameEnd)
+        {
+            if (_tweener == null)
+                return false;
+            if (sameEnd)
+                return true;
+            _tweener.Kill(true);
+            _tweener = null;
+            ReleaseLock();
+            return false;
+        }
+
         protected void TrackTween(Tweener tweener)
         {
             if (displayLock != null)

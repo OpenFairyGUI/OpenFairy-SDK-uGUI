@@ -73,7 +73,7 @@ namespace OpenFairy.UGUI
             }
             _bound = true;
             if (selectionOwner != null && !_updatingController)
-                SetSelection(ControllerBinding.GetPage(selectionOwner, selectionController));
+                SetSelection(selectionOwner.GetControllerPage(selectionController));
         }
 
         internal void SelectFromController(int index)
@@ -89,7 +89,7 @@ namespace OpenFairy.UGUI
                 && !selectionOwner.IsControllerChanging(selectionController))
             {
                 _updatingController = true;
-                try { ControllerBinding.SetPage(selectionOwner, selectionController, index); }
+                try { selectionOwner.SetControllerPage(selectionController, index); }
                 finally { _updatingController = false; }
             }
         }

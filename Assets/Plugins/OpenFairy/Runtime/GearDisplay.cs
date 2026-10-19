@@ -52,8 +52,7 @@ namespace OpenFairy.UGUI
 
         public void ReleaseLock()
         {
-            if (_locks > 0)
-                _locks--;
+            _locks--;
             UpdateVisible();
         }
 

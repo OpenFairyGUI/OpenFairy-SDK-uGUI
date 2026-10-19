@@ -32,6 +32,7 @@ namespace OpenFairy.UGUI
 
         [NonSerialized] private GameObject _dropdown;
         [NonSerialized] private RectTransform _dropdownRt;
+        [NonSerialized] private RectTransform _list;
         [NonSerialized] private bool _itemsChanged;
 
         // 复刻 GComboBox.items/values 的 setter：标脏，下次 ShowDropdown 重建下拉（对齐 _itemsUpdated）。
@@ -93,41 +94,82 @@ namespace OpenFairy.UGUI
             title = _items != null && _selectedIndex >= 0 && _selectedIndex < _items.Length ? _items[_selectedIndex] : "";
         }
 
-        public override void OnPointerClick(PointerEventData eventData)
+        private bool DropdownOpen => _dropdown != null && _dropdown.activeSelf;
+
+        // 复刻 GComboBox.__rollover/__rollout：下拉打开或按住期间不改态。
+        public override void OnPointerEnter(PointerEventData eventData)
+        {
+            _over = true;
+            if (!_down && !DropdownOpen)
+                RefreshState();
+        }
+
+        public override void OnPointerExit(PointerEventData eventData)
+        {
+            _over = false;
+            if (!_down && !DropdownOpen)
+                RefreshState();
+        }
+
+        // 复刻 GComboBox.__touchBegin：按下即开关下拉（同一次按下先由 PopupInputModule 关闭的下拉不会重开）。
+        public override void OnPointerDown(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left)
-            {
-                base.OnPointerClick(eventData);
                 return;
-            }
-            PlayClickSound();
-            // Toggle honors popups closed by the pointer-down phase of this same click.
-            RefreshState();
+            _down = true;
             ShowDropdown().Forget();
+        }
+
+        public override void OnPointerUp(PointerEventData eventData)
+        {
+            if (eventData.button != PointerEventData.InputButton.Left || !_down)
+                return;
+            _down = false;
+            if (DropdownOpen)
+                RefreshState();
+        }
+
+        // 复刻 GComboBox.__click：左键只播放点击音。
+        public override void OnPointerClick(PointerEventData eventData)
+        {
+            if (eventData.button == PointerEventData.InputButton.Left)
+                PlayClickSound();
+            else
+                base.OnPointerClick(eventData);
+        }
+
+        // 复刻 GComboBox.SetCurrentState。
+        public override void RefreshState()
+        {
+            RefreshTitle();
+            SetState(grayed && StatePages.HasDisabled ? VisualState.Disabled
+                : DropdownOpen ? VisualState.Down
+                : _over ? VisualState.Over : VisualState.Up);
         }
 
         private async UniTask ShowDropdown()
         {
             if (_items == null || _items.Length == 0 || dropdownPrefab == null)
                 return;
-            if (Root.inst == null) // 烘焙 prefab 无需业务胶水：首次弹下拉时自建覆盖层（复刻 GRoot.inst 惰性自建）
-                Root.Create((RectTransform)GetComponentInParent<Canvas>().rootCanvas.transform);
+            var root = Root.Ensure(this);
             if (_itemsChanged && _dropdown != null) // items/values 变过：销毁重建（复刻 _itemsUpdated → RenderDropdownList）
             {
-                Root.inst.HidePopupImmediately(_dropdownRt);
+                root.HidePopupImmediately(_dropdownRt);
                 Destroy(_dropdown);
                 _dropdown = null;
-                _dropdownRt = null;
             }
             if (_dropdown == null)
                 Build();
-            if (_dropdownRt != null)
-            {
-                var closed = Root.inst.TogglePopup(_dropdownRt, (RectTransform)transform, popupDirection);
-                SetState(VisualState.Down); // 打开时按钮进 down 态（复刻 GComboBox）
-                if (await closed.SuppressCancellationThrow() || this == null) return;
-                RefreshState(); // 关闭（含外点）恢复态
-            }
+            // 复刻 GComboBox.ShowDropdown 的 dropdown.width = width，列表按 Width 关联跟随。
+            var width = ((RectTransform)transform).rect.width;
+            var delta = width - _dropdownRt.rect.width;
+            _dropdownRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+            if (_list.anchorMin.x == _list.anchorMax.x)
+                _list.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, _list.rect.width + delta);
+            var closed = root.TogglePopup(_dropdownRt, (RectTransform)transform, popupDirection);
+            RefreshState();
+            if (await closed.SuppressCancellationThrow() || this == null) return;
+            RefreshState(); // 关闭（含外点）恢复态
         }
 
         protected override void OnDestroy()
@@ -142,20 +184,14 @@ namespace OpenFairy.UGUI
 
         private void Build()
         {
-            var dropdown = Instantiate(dropdownPrefab);
-            if (dropdown.transform.Find("list") is not RectTransform list || list.GetComponent<ListSource>() == null)
-            {
-                Destroy(dropdown); // 下拉资源结构不符（无 list/ListSource），销毁实例、留待下次重试
-                return;
-            }
-            _dropdown = dropdown;
+            _dropdown = Instantiate(dropdownPrefab);
             _dropdownRt = (RectTransform)_dropdown.transform;
             _itemsChanged = false;
-            // 下拉项点击 + 滚动由 ComboBox 自管，去掉列表自带的选择/自挂滚动接线（否则未超可见数也会挂 ScrollPane）。
-            if (list.GetComponent<ListSelection>() is { } listSelection)
-                listSelection.enabled = false;
+            var list = _list = (RectTransform)_dropdownRt.Find("list");
             var source = list.GetComponent<ListSource>();
-            if (source.scrollPane != null) source.scrollPane.enabled = false;
+            // 下拉项点击 + 滚动由 ComboBox 自管，去掉列表自带的选择接线。
+            if (list.TryGetComponent<ListSelection>(out var listSelection))
+                listSelection.enabled = false;
             source.Fill(_items.Length, (itemGo, i) =>
             {
                 var button = itemGo.GetComponent<ButtonBase>();
@@ -163,15 +199,14 @@ namespace OpenFairy.UGUI
                 var index = i;
                 button.onClick.AddListener(() => Select(index));
             }, false);
-            // 可见高度按 visibleItemCount 裁剪；项数不超时表现与撑开一致（demo 短下拉不受影响）。
+            // 复刻 GList.ResizeToFit(visibleItemCount) 与下拉对列表的 Height 关联：下拉保持与列表的作者高度差。
             var visible = Mathf.Min(_items.Length, Mathf.Max(1, visibleItemCount));
-            var h = visible * source.itemSize.y;
-            list.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
-            _dropdownRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h + 2);
-            // 背景等其余子件带容器 relation，已烘成拉伸锚点，随下拉根缩放自动跟随。
+            var listHeight = visible * source.itemSize.y + (visible - 1) * source.lineGap;
+            _dropdownRt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, _dropdownRt.rect.height + listHeight - list.rect.height);
+            list.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, listHeight);
             // 项数超出可见数：viewport 已被裁到可见高，内容更高，挂 ScrollPane 支持拖动/滚轮滚动。
-            if (_items.Length > visible)
-                ScrollPane.Attach(list).enabled = true;
+            var pane = ScrollPane.Attach(list);
+            if (pane != null) pane.enabled = _items.Length > visible;
         }
 
         private void Select(int index)

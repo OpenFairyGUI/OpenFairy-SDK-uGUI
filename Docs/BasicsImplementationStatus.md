@@ -4,6 +4,14 @@
 
 ## 当前结论
 
+### 2026-10-20 FairyGUI 一致性与精简复审
+
+- 按钮状态逐条对齐 GButton：缺页回落首页、无 over 页不跟踪悬浮、拖出后松开回到当前态；新增 `downEffect`（dark/scale）导入与运行时效果，scale 绕中心缩放且实例默认中心轴心。ComboBox 对齐 GComboBox：按下开关下拉、打开期间保持 down 页、下拉宽度跟随组件、高度按 visibleItemCount 与行距并保持作者高度差。
+- Transition 倒放交换起止值、缓动正向推进；重播前先完成上一轮；autoPlay 随启用重播、停用时原地停止（Shake 归位）。Gear tween 终点不变时继续、改变时先完成再重起；GearLook 旋转按不取模角度线性插值。
+- Builtin TextField：字距只加在有宽度字形之间并随缩放，行距随缩放；Shrink 改为 DoShrink 算法；裁剪按完整高度；空文本 0×0；UBB 标签不分大小写、支持 `\[` 转义、未实现样式的标签被消费而非原样输出；链接保留外层颜色。行内图片按运行时同一标签口径烘焙，陈旧图片标签在导入期移除。
+- 导入：置灰按 disabled 页 → grayed 控制器 → 灰度滤镜的顺序，只取其一；解析 `fillOrigin`；TMP 输入框去掉底框与内边距，TMP 字距/行距换算为 em 单位。删除无用转发与死代码（`ControllerBinding`、`HidesRuntimeMember`、`Transition.SetHook(string)`、`TextRendering.SetBestFit` 等），六处编辑态销毁合并为一处。
+- 独立 Builtin 后台套件 **188/189 Editor、173/195 PlayMode**（含新增按钮、文字回归），未通过项与改动前基线同类（批处理缺少渲染帧、WaitForEndOfFrame 及 GearClock 浮点计时抖动）。TMP 后端各程序集编译通过，该工程缺 TMP Settings 无法运行 TMP 套件。传统 Demo/golden、TMP 完整套件与 Player 未重跑；更新 SDK 后需重新 Migrate。
+
 ### 2026-10-19 生成式名称与引用
 
 - 作者名字与 C# 标识符分离。保留原物体和动效名称，控制器操作继续按原名称/页ID解析；生成类、包命名空间、字段、嵌套 enum、页成员、动效 Hook 和本地化成员在各自作用域分配唯一标识符，保留直接序列化引用。

@@ -261,7 +261,7 @@ namespace OpenFairy.UGUI
             }
             if (node.Material == null || node.Material.shader != shader)
             {
-                Destroy(node.Material);
+                OwnedObject.Destroy(node.Material);
                 node.Material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
             }
             // Same-shader copies must retain uniforms such as color matrices and offsets.
@@ -310,11 +310,11 @@ namespace OpenFairy.UGUI
             foreach (var key in _removed)
             {
                 var node = _nodes[key];
-                Destroy(node.Material);
+                OwnedObject.Destroy(node.Material);
                 if (node.Rect != null)
                 {
                     node.Rect.gameObject.SetActive(false);
-                    Destroy(node.Rect.gameObject);
+                    OwnedObject.Destroy(node.Rect.gameObject);
                 }
                 _nodes.Remove(key);
             }
@@ -326,16 +326,9 @@ namespace OpenFairy.UGUI
             _disposed = true;
             if (_root != null) _root.SetActive(false);
             foreach (var node in _nodes.Values)
-                Destroy(node.Material);
+                OwnedObject.Destroy(node.Material);
             _nodes.Clear();
-            Destroy(_root);
-        }
-
-        private static void Destroy(Object value)
-        {
-            if (value == null) return;
-            if (Application.isPlaying) Object.Destroy(value);
-            else Object.DestroyImmediate(value);
+            OwnedObject.Destroy(_root);
         }
     }
 }

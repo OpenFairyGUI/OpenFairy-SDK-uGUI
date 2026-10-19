@@ -84,7 +84,8 @@ namespace OpenFairy.UGUI.Tests
                     ExecuteEvents.Execute(go, pointer, ExecuteEvents.pointerExitHandler);
                     Assert.That(button.controller.page, Is.EqualTo(pressed));
                     ExecuteEvents.Execute(go, pointer, ExecuteEvents.pointerUpHandler);
-                    Assert.That(button.controller.page, Is.EqualTo(mode == ButtonMode.Common ? idle : pressed));
+                    // GButton.__touchEnd: a release outside the button leaves the hover page.
+                    Assert.That(button.controller.page, Is.EqualTo(idle));
                     button.RefreshState();
                     Assert.That(button.controller.page, Is.EqualTo(idle));
 

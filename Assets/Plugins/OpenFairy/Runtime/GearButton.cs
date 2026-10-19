@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 
 namespace OpenFairy.UGUI
 {
@@ -7,14 +8,8 @@ namespace OpenFairy.UGUI
     [Serializable]
     public class GearButton<T> : Gear<T> where T : struct, Enum
     {
-        [NonSerialized] private ButtonBase _button;
+        [SerializeField] internal ButtonBase button;
 
-        public override void Apply(T page)
-        {
-            if (_button == null)
-                target.TryGetComponent(out _button);
-            if (_button != null && _button.mode != ButtonMode.Common)
-                _button.selected = Array.IndexOf(pages, page) >= 0;
-        }
+        public override void Apply(T page) => button.selected = Array.IndexOf(pages, page) >= 0;
     }
 }

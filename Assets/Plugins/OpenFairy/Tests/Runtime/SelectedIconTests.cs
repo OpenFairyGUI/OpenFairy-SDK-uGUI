@@ -115,7 +115,7 @@ namespace OpenFairy.UGUI.Tests
             button.selectedIcon = chosen;
             var selection = new Controller<SelectedIconTestButton.button> {
                 gears = new Gear<SelectedIconTestButton.button>[] { new GearButton<SelectedIconTestButton.button> {
-                    target = button.gameObject, pages = new[] { SelectedIconTestButton.button.down } } } };
+                    target = button.gameObject, button = button, pages = new[] { SelectedIconTestButton.button.down } } } };
             selection.page = SelectedIconTestButton.button.down;
             Assert.That(button.selected, Is.True);
             Assert.That(button.iconLoader.sprite, Is.SameAs(chosen));
