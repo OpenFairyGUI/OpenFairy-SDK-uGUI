@@ -22,13 +22,13 @@ namespace OpenFairyTextFixtures.NativeTextFixture
 
         protected internal override int GetControllerPage(int controller) => controller switch
         {
-            0 => (int)m_State.page,
+            0 => (int)this.m_State.page,
             _ => -1,
         };
 
         protected internal override bool IsControllerChanging(int controller) => controller switch
         {
-            0 => m_State.changing,
+            0 => this.m_State.changing,
             _ => false,
         };
 
@@ -36,13 +36,13 @@ namespace OpenFairyTextFixtures.NativeTextFixture
         {
             switch (controller)
             {
-                case 0: m_State.page = (State)page; break;
+                case 0: this.m_State.page = (State)page; break;
             }
         }
 
         protected override void InitializeControllers()
         {
-            m_State.Initialize();
+            this.m_State.Initialize();
         }
         public OpenFairyTextComponent m_Notice;
         public global::OpenFairyTextFixtures.NativeTextFixture.NativeTextButton m_Main;

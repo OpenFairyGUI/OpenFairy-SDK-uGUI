@@ -13,6 +13,12 @@ namespace OpenFairy.UGUI.Tests
 {
     public partial class ContentSizeTestButton : global::OpenFairy.UGUI.Button<ContentSizeTestButton.button>
     {
+        protected override button? StatePage(VisualState state) => state switch
+        {
+            VisualState.Up => button.up,
+            VisualState.Down => button.down,
+            _ => null,
+        };
         public enum button
         {
             up,
@@ -22,13 +28,13 @@ namespace OpenFairy.UGUI.Tests
 
         protected internal override int GetControllerPage(int controller) => controller switch
         {
-            0 => (int)m_button.page,
+            0 => (int)this.m_button.page,
             _ => -1,
         };
 
         protected internal override bool IsControllerChanging(int controller) => controller switch
         {
-            0 => m_button.changing,
+            0 => this.m_button.changing,
             _ => false,
         };
 
@@ -36,13 +42,13 @@ namespace OpenFairy.UGUI.Tests
         {
             switch (controller)
             {
-                case 0: m_button.page = (button)page; break;
+                case 0: this.m_button.page = (button)page; break;
             }
         }
 
         protected override void InitializeControllers()
         {
-            m_button.Initialize();
+            this.m_button.Initialize();
         }
         public OpenFairyTextComponent m_title;
 [global::UnityEngine.SerializeReference] private global::OpenFairy.UGUI.GearText<button> _localizedGear1_0 = null;

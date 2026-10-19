@@ -59,7 +59,7 @@ namespace OpenFairy.UGUI.Tests
             _camera.allowHDR = false;
             _camera.allowMSAA = false;
             canvas.worldCamera = _camera;
-            _destination = Own(new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32));
+            _destination = Own(new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear));
             _destination.Create();
             _camera.targetTexture = _destination;
             return Rect("Host", _canvas, new Vector2(128, 128));

@@ -20,7 +20,7 @@ namespace OpenFairy.UGUI.Tests
     }
 
     public enum HoverTestState { up, down, over, selectedOver, disabled, selectedDisabled }
-    public sealed class HoverTestButton : Button<HoverTestState> { }
+    public sealed class HoverTestButton : NamedStateButton<HoverTestState> { }
 
     public class PointerHoverTests
     {

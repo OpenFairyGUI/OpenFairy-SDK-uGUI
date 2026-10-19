@@ -134,9 +134,9 @@ namespace OpenFairy.UGUI.Tests
             Click(Field(Comp("Basics.Main"), "m_btn_ComboBox"));
             yield return null;
             var n1 = (UnityEngine.Component)Field(Comp("Basics.Demo_ComboBox"), "m_n1");
-            var handler = (IPointerClickHandler)n1.GetComponent(typeof(IPointerClickHandler));
-            Assert.IsNotNull(handler, "ComboBox 应挂上点击中继");
-            handler.OnPointerClick(new PointerEventData(EventSystem.current));
+            var handler = (IPointerDownHandler)n1.GetComponent(typeof(IPointerDownHandler));
+            Assert.IsNotNull(handler, "ComboBox 应挂上按下中继（复刻 GComboBox 按下即开下拉）");
+            handler.OnPointerDown(new PointerEventData(EventSystem.current));
             yield return null;
             Assert.IsTrue(OpenFairy.UGUI.Root.inst.hasAnyPopup, "点 ComboBox 应弹出下拉");
         }

@@ -169,7 +169,7 @@ namespace OpenFairy.UGUI.Tests
 
         private const string ComboPopupPrefab = "Assets/UIProject/Assets/Basics/components/ComboBoxPopup.prefab";
         private enum ComboPage { up, down, over, selectedOver }
-        private sealed class TestCombo : OpenFairy.UGUI.ComboBox<ComboPage> { }
+        private sealed class TestCombo : OpenFairy.UGUI.ComboBox<ComboPage> { protected override ComboPage? StatePage(VisualState state) => state switch { VisualState.Up => ComboPage.up, VisualState.Down => ComboPage.down, VisualState.Over => ComboPage.over, VisualState.SelectedOver => ComboPage.selectedOver, _ => null }; }
 
         [UnityTest]
         public IEnumerator ComboBox_dropdown_clips_to_visibleItemCount_and_scrolls()

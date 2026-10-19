@@ -2,7 +2,7 @@ using System;
 
 namespace OpenFairy.UGUI.Tests
 {
-    public sealed class PooledClickTestButton : Button<PooledClickTestButton.State>
+    public sealed class PooledClickTestButton : NamedStateButton<PooledClickTestButton.State>
     {
         public enum State { up, down }
         public int clicks;

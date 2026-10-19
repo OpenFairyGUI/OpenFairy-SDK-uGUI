@@ -9,18 +9,22 @@
 - 按组件依赖层批量保存互不依赖的 prefab，停止资产编辑并取得持久化引用后才构建父层；新材质、字体与内联图片仍在暂停导入之前创建。提示框和默认滚动条的依赖闭包先完成，组件实例的 ComboBox dropdown 也计入依赖。
 - 新增三项真实导入检查覆盖三层嵌套、生成字段、字体/内联图片/材质首次保存、稳定重导及下游重复导入。受控夹具的下游导入次数由3降为2；不据此声称完整工程的提速倍数。
 - TMP 描边像素检查从无描边字形选取中间行，并复用于描边图；避免不同默认字体的基线使固定窗口计入字帽外扩。生产描边公式、预期宽度与容差均未改变。
-- 同版交互包级结果为 Editor 220/220、PlayMode 223/223，无失败或跳过；最初的描边测量失败和批处理缺少渲染帧的失败保留。这里不包含传统完整 Demo/golden、Builtin 原生整套或 Player 验证。
+- 检查点 `02ef1a9` 的交互包级结果为 Editor 220/220、PlayMode 223/223，无失败或跳过；最初的描边测量失败和批处理缺少渲染帧的失败保留。后续静态按钮生成合并另外通过三项发布检查及 TMP/Builtin 八程序集编译，不将旧完整套件结果当作新合并版完整复验。这里不包含传统完整 Demo/golden、Builtin 原生整套或 Player 验证。
 
 ### 2026-10-20 FairyGUI 一致性与精简复审
 
-- 第二轮：组件按 opaque（缺省 true）在根节点烘焙透明命中面，Image/MovieClip 与 FairyGUI 一样可命中并挡住下层；列表 renderOrder（descent/arch）只改兄弟序，项索引、位置与选择不变，原生行布局用 reverseArrangement 保持位置。Builtin 省略号按 _ellipsisCharIndex 规则落在最后一条完整容纳行的倒数第二字（不换行时为首个越界字前两字），裁剪模式下越界后续行与越过右边的字形不绘制；换行符占零宽字符位。restrictSize 的最小尺寸经 LayoutElement 约束自适应，文字按最大宽度换行；按钮/标签实例 titleFontSize、Icon 动效已导入。反向遮罩 reversedMask 需要自定义模板着色器，仍是明确边界。
+- 第二轮：组件按 opaque（缺省 true）在根节点烘焙透明命中面，Image/MovieClip 与 FairyGUI 一样可命中并挡住下层；列表 renderOrder（descent/arch）只改兄弟序，项索引、位置与选择不变，原生行布局用 reverseArrangement 保持位置。Builtin 省略号按 _ellipsisCharIndex 规则落在最后一条完整容纳行的倒数第二字（不换行时为首个越界字前两字），裁剪模式下越界后续行与越过右边的字形不绘制；换行符占零宽字符位。restrictSize 的最小尺寸经 LayoutElement 约束自适应，文字按最大宽度换行；按钮/标签实例 titleFontSize、Icon 动效已导入。反向遮罩 reversedMask 需要自定义模板着色器，仍是明确边界。按钮/下拉的视觉状态页改为生成代码按 "button" 控制器页名静态给出（`StatePage` switch），运行时不再按字符串解析枚举；旧生成脚本仍可编译，重新 Migrate 后恢复状态页。
 - 动效目标改为导入期烘焙的组件引用，嵌套动效先建齐同组件全部动效再解析，失效嵌套项保留序号但不生效；运行时不再 GetComponent 或按名称查找。Builtin 投影改用 uGUI Shadow，描边改为 Shadow 派生的四轴复制。TMP 后端补齐描边（SDF outline 加同宽 face dilate，外扩宽度经真实渲染测得与作者宽度一致）、HTML font/strike、UBB align/font 与链接保留外层颜色。
 
 - 按钮状态逐条对齐 GButton：缺页回落首页、无 over 页不跟踪悬浮、拖出后松开回到当前态；新增 `downEffect`（dark/scale）导入与运行时效果，scale 绕中心缩放且实例默认中心轴心。ComboBox 对齐 GComboBox：按下开关下拉、打开期间保持 down 页、下拉宽度跟随组件、高度按 visibleItemCount 与行距并保持作者高度差。
 - Transition 倒放交换起止值、缓动正向推进；重播前先完成上一轮；autoPlay 随启用重播、停用时原地停止（Shake 归位）。Gear tween 终点不变时继续、改变时先完成再重起；GearLook 旋转按不取模角度线性插值。
 - Builtin TextField：字距只加在有宽度字形之间并随缩放，行距随缩放；Shrink 改为 DoShrink 算法；裁剪按完整高度；空文本 0×0；UBB 标签不分大小写、支持 `\[` 转义、未实现样式的标签被消费而非原样输出；链接保留外层颜色。行内图片按运行时同一标签口径烘焙，陈旧图片标签在导入期移除。
 - 导入：置灰按 disabled 页 → grayed 控制器 → 灰度滤镜的顺序，只取其一；解析 `fillOrigin`；TMP 输入框去掉底框与内边距，TMP 字距/行距换算为 em 单位。删除无用转发与死代码（`ControllerBinding`、`HidesRuntimeMember`、`Transition.SetHook(string)`、`TextRendering.SetBestFit` 等），六处编辑态销毁合并为一处。
-- 后台验证：Builtin 套件未通过项与改动前基线同类（批处理缺少渲染帧、WaitForEndOfFrame 及 GearClock 浮点计时抖动）。临时导入 TMP Essential Resources 后 TMP PlayMode 与原始代码对照 **175/221 对 169/215**，失败集合相同（批处理渲染帧与缺源字体的 TMP 默认字体），新增描边与标记转换回归在该环境通过；TMP EditMode 在批处理下改动前后均运行出错。传统 Demo/golden、TMP 完整套件与 Player 未重跑；更新 SDK 后需重新 Migrate。
+- 验证：窗口模式 Editor 下 Builtin 套件 **191/191 EditMode**、**PlayMode 190 通过 / 0 失败 / 6 不确定**。原先 12 项像素断言的失败来自线性色彩空间：其中 6 项只是用 sRGB 渲染目标回读，改为线性渲染目标后通过；另 6 项的期望值按 Gamma 空间混合计算，工程临时切到 Gamma 后 12/12 通过，现以 Assume 声明该前提。FairyGUI 与 OpenFairy 的颜色矩阵着色器在线性工程中同样先把顶点色转到线性空间，两者一致。GearClock 位置断言改为与尺寸一致的容差。
+- Demo 全流程（Migrate 199 个组件 → FairyGUI 对照截图 27 页 → 全部 PlayMode 测试）在窗口模式 Editor 中跑通：当前 **296 通过 / 48 未通过（含 6 项 Gamma 前提不确定）**，原始代码同流程 **283 / 61**；除 6 项改为不确定外无新增失败，13 项转为通过。静态对照 11 页的坏像素比例与原始代码逐位相同（Button 略降），差异集中在字形抗锯齿边缘；其余未通过的 Demo 交互/导航测试在原始代码上同样失败。
+- 修复生成代码：名为 page/controller 的控制器字段会被 Get/SetControllerPage 的同名参数遮蔽导致编译失败（Bag/BagWin），生成的控制器访问统一经 this。Demo 工程 Publish.json 恢复为 Demo 胶水与对照测试所依赖的 memberNamePrefix="m_"、ignoreNoname=false。
+- Windows 64 位 Player 构建成功（Build Finished, Result: Success）。
+- TMP 后端 EditMode 整套（窗口模式，临时启用 FAIRYGUI_TMPRO 与 TMP Essential Resources）：当前 204/218，原始代码同环境 202/216，未通过集合逐项相同（14 项均为 Essential Resources 自带字体资产缺少 m_SourceFontFile 的环境问题），无新增失败。AutoClearItems 导入测试要求 Assets/UIProject/Assets 已存在（即已跑过 Migrate），空工程首测会因 CreateFolder 父目录缺失失败。临时导入 TMP Essential Resources 后 TMP PlayMode 与原始代码对照 **175/221 对 169/215**，失败集合相同（批处理渲染帧与缺源字体的 TMP 默认字体），新增描边与标记转换回归在该环境通过；TMP EditMode 在批处理下改动前后均运行出错。传统 Demo/golden、TMP 完整套件与 Player 未重跑；更新 SDK 后需重新 Migrate。
 
 ### 2026-10-19 生成式名称与引用
 

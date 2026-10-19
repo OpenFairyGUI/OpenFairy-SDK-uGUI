@@ -11,8 +11,8 @@
 		"codePath":"",
 		"codeType":"",
 		"getMemberByName":false,
-		"ignoreNoname":true,
-		"memberNamePrefix":"",
+		"ignoreNoname":false,
+		"memberNamePrefix":"m_",
 		"packageName":""
 	},
 	"compressDesc":true,

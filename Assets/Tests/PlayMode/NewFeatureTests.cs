@@ -16,8 +16,8 @@ namespace OpenFairy.UGUI.Tests
     public class NewFeatureTests
     {
         private enum RadioPage { up, down, over, selectedOver }
-        private class TestButton : Button<RadioPage> { }
-        private class TestCombo : ComboBox<RadioPage> { }
+        private class TestButton : Button<RadioPage> { protected override RadioPage? StatePage(VisualState state) => state switch { VisualState.Up => RadioPage.up, VisualState.Down => RadioPage.down, VisualState.Over => RadioPage.over, VisualState.SelectedOver => RadioPage.selectedOver, _ => null }; }
+        private class TestCombo : ComboBox<RadioPage> { protected override RadioPage? StatePage(VisualState state) => state switch { VisualState.Up => RadioPage.up, VisualState.Down => RadioPage.down, VisualState.Over => RadioPage.over, VisualState.SelectedOver => RadioPage.selectedOver, _ => null }; }
         private class TestOwner : OpenFairy.UGUI.Component
         {
             public Controller<RadioPage> m_ctrl;
@@ -692,7 +692,7 @@ namespace OpenFairy.UGUI.Tests
                 b.relatedPage = i;
                 buttons[i] = b;
                 // 同 Migrate 烘焙：每个关联按钮一个 GearButton，换页时同步组内选中态。
-                gears[i] = new GearButton<RadioPage> { target = b.gameObject, pages = new[] { (RadioPage)i } };
+                gears[i] = new GearButton<RadioPage> { target = b.gameObject, button = b, pages = new[] { (RadioPage)i } };
             }
             owner.m_ctrl = new Controller<RadioPage> { gears = gears };
             yield return null;

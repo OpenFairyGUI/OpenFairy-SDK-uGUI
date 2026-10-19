@@ -1,6 +1,6 @@
 namespace OpenFairy.UGUI.Tests
 {
-    public sealed class IconBindingButton : Button<IconBindingButton.State>
+    public sealed class IconBindingButton : NamedStateButton<IconBindingButton.State>
     {
         public enum State { Up }
     }

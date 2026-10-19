@@ -450,20 +450,21 @@ namespace OpenFairy.UGUI.Editor
                 controllerBindings.Add((controllerIndex, cname, field));
             }
 
+            // 字段可能与这些方法的参数同名（如名为 page/controller 的控制器），一律经 this 访问。
             if (controllerBindings.Count > 0)
             {
                 fields.Add("");
                 fields.Add("        protected override int GetControllerPage(int controller) => controller switch");
                 fields.Add("        {");
                 foreach (var binding in controllerBindings)
-                    fields.Add($"            {binding.Index} => (int){binding.Field}.page,");
+                    fields.Add($"            {binding.Index} => (int)this.{binding.Field}.page,");
                 fields.Add("            _ => -1,");
                 fields.Add("        };");
                 fields.Add("");
                 fields.Add("        protected override bool IsControllerChanging(int controller) => controller switch");
                 fields.Add("        {");
                 foreach (var binding in controllerBindings)
-                    fields.Add($"            {binding.Index} => {binding.Field}.changing,");
+                    fields.Add($"            {binding.Index} => this.{binding.Field}.changing,");
                 fields.Add("            _ => false,");
                 fields.Add("        };");
                 fields.Add("");
@@ -472,14 +473,14 @@ namespace OpenFairy.UGUI.Editor
                 fields.Add("            switch (controller)");
                 fields.Add("            {");
                 foreach (var binding in controllerBindings)
-                    fields.Add($"                case {binding.Index}: {binding.Field}.page = ({binding.Type})page; break;");
+                    fields.Add($"                case {binding.Index}: this.{binding.Field}.page = ({binding.Type})page; break;");
                 fields.Add("            }");
                 fields.Add("        }");
                 fields.Add("");
                 fields.Add("        protected override void InitializeControllers()");
                 fields.Add("        {");
                 foreach (var binding in controllerBindings)
-                    fields.Add($"            {binding.Field}.Initialize();");
+                    fields.Add($"            this.{binding.Field}.Initialize();");
                 fields.Add("        }");
             }
 
@@ -523,6 +524,8 @@ namespace OpenFairy.UGUI.Editor
                     "        }",
                 });
             var stateEnum = names.buttonEnum;
+            if (isButtonFamily && buttonController != null)
+                fields.AddRange(StatePageCode(buttonController, stateEnum));
             var baseType = xml.Extension switch
             {
                 Schema.ComponentExtension.Button => $"global::OpenFairy.UGUI.Button<{name}.{stateEnum}>",
@@ -559,6 +562,24 @@ namespace OpenFairy.UGUI.Editor
             code.AppendLine("}");
 
             return code.ToString();
+        }
+
+        // 复刻 GButton.SetState 按页名选页：生成期把各视觉状态静态映射到 "button" 控制器的首个同名页。
+        private static IEnumerable<string> StatePageCode(Schema.Controller controller, string stateEnum)
+        {
+            var members = PageMembers(controller).AsValueEnumerable().Select(page => page.Member).ToArray();
+            yield return "";
+            yield return $"        protected override {stateEnum}? StatePage(VisualState state) => state switch";
+            yield return "        {";
+            foreach (var (state, page) in new[] { ("Up", "up"), ("Down", "down"), ("Over", "over"),
+                ("SelectedOver", "selectedOver"), ("Disabled", "disabled"), ("SelectedDisabled", "selectedDisabled") })
+            {
+                var index = Array.FindIndex(controller.Pages, authored => authored.Name == page);
+                if (index >= 0)
+                    yield return $"            VisualState.{state} => {stateEnum}.{members[index]},";
+            }
+            yield return "            _ => null,";
+            yield return "        };";
         }
 
         // GeneratedMembers 已避开基类成员名，生成的 enum 不会遮蔽 runtime 成员。

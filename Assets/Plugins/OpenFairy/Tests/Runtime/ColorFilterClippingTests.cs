@@ -158,7 +158,7 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(shader, Is.Not.Null);
             var material = new Material(shader);
             var input = new Texture2D(2, 1, TextureFormat.RGBA32, false, true);
-            var output = new RenderTexture(2, 1, 0, RenderTextureFormat.ARGB32);
+            var output = new RenderTexture(2, 1, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
             Texture2D read = null;
             var active = RenderTexture.active;
             try

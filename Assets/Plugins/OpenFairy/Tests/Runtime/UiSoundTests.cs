@@ -8,8 +8,8 @@ using UnityEngine.TestTools;
 namespace OpenFairy.UGUI.Tests
 {
     public enum SoundTestPage { up, down }
-    public sealed class SoundTestButton : Button<SoundTestPage> { }
-    public sealed class SoundTestCombo : ComboBox<SoundTestPage> { }
+    public sealed class SoundTestButton : NamedStateButton<SoundTestPage> { }
+    public sealed class SoundTestCombo : NamedStateCombo<SoundTestPage> { }
 
     public class UiSoundTests
     {
