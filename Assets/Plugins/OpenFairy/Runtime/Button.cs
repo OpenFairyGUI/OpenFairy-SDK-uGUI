@@ -193,7 +193,7 @@ namespace OpenFairy.UGUI
         private bool _down, _over;
 
         // Keep pointer state while grayed, including the authored pressed-disabled page.
-        public void OnPointerDown(PointerEventData eventData)
+        public virtual void OnPointerDown(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left) // 复刻 GButton.__touchBegin：仅左键
                 return;
@@ -202,7 +202,7 @@ namespace OpenFairy.UGUI
                 SetState(grayed && StatePages.HasDisabled ? VisualState.SelectedDisabled : VisualState.Down);
         }
 
-        public void OnPointerUp(PointerEventData eventData)
+        public virtual void OnPointerUp(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left)
                 return;
@@ -211,14 +211,14 @@ namespace OpenFairy.UGUI
                 RefreshState();
         }
 
-        public void OnPointerEnter(PointerEventData eventData)
+        public virtual void OnPointerEnter(PointerEventData eventData)
         {
             _over = true;
             if (!_down)
                 RefreshState();
         }
 
-        public void OnPointerExit(PointerEventData eventData)
+        public virtual void OnPointerExit(PointerEventData eventData)
         {
             _over = false;
             if (!_down)

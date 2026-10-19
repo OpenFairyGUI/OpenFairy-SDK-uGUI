@@ -4,6 +4,8 @@
 
 当前能力以状态文档的最新日期为准，下文开发经验保留其历史背景。原 `ScrollPaneHost` 已删除，滚动交互由原生 `ScrollRect`/`Scrollbar` 承担；虚拟列表、循环索引与变高行已实现。输入框已有 Input System 撤销/重做与单行 Tab 实现；虚拟输入测试使用官方 `InputTestFixture` 隔离设备并恢复宿主状态，不能依赖 Editor 窗口焦点。按钮 `grayed` 只决定视觉，触摸/交互是独立通道，不再以灰显一律拦截点击。
 
+2026-10-19 独立 Builtin 包级完整验证为 Editor 157/157、PlayMode 168/168，无失败或跳过；下文旧数量保留历史上下文。Button<T> 原生 Enter/Exit/Down/Up 与 Click 一样可覆写；消费方在派生方法中调用 base，避免隐藏接口方法而丢失 SDK 视觉状态。新增 ExecuteEvents 回归枚举全部按钮模式、选中、灰显与左右键；未据此扩大 TMP/golden 的验证范围。
+
 导入器的组件实例 `controller`、列表项 `controllers` 使用页ID而非序号，按原顺序应用后再结算最终布局。测试中需要挂在 GameObject/prefab 上的支持组件放运行时测试程序集，不能放 Editor 程序集；EditMode 测试经引用复用这些支持组件。
 
 对象捕获/模糊/容器颜色滤镜保留显式同步刷新，Play 自动刷新使用 `Application.onBeforeRender`，晚于关系的 `PostLateUpdate` 同步，不能改回普通 `LateUpdate` 或 `willRenderCanvases` 捕获。最外层滤镜负责内层逆序刷新。重复无域/场景重载 Play 的测试按当前原生组件重新取得托管支持对象，不能把旧托管包装器里的观察列表当成当前组件；这一测试已通过，无需为夹具引用问题改生产生命周期。

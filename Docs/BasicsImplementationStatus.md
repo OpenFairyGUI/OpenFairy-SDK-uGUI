@@ -4,6 +4,11 @@
 
 ## 当前结论
 
+### 2026-10-19 原生指针扩展验证
+
+- `Button<T>` 的 Enter/Exit/Down/Up 原生指针方法可覆写；业务 partial 调用基类即可保留视觉状态，无需额外事件中继组件。包内回归通过 EventSystem 的 ExecuteEvents 枚举 Common/Check/Radio、选中/未选中、灰显/正常以及左/右键，检查派生方法分发和基类页面状态。
+- 本轮独立 Builtin 工程的完整包级 Test Runner 结果为 **157/157 Editor**、**168/168 PlayMode**，失败、跳过、不确定项均为零。没有重跑 TMP 后端的完整套件或传统 Basics/Transition golden；下方历史结果保留各自验证范围。
+
 ### 2026-10-18 当前通用包能力与验证
 
 - 滚动交互使用原生 `ScrollRect`/`Scrollbar`，保留虚拟窗口、对象池、变高行、循环索引和选择；显式滚条、分页/吸附标志与页面控制器在导入期烘焙。
