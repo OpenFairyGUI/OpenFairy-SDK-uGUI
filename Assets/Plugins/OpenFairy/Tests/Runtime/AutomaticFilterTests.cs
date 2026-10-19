@@ -33,7 +33,7 @@ namespace OpenFairy.UGUI.Tests
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = Color.clear;
             camera.allowHDR = camera.allowMSAA = false;
-            var target = Own(new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32));
+            var target = Own(new RenderTexture(128, 128, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear));
             target.Create();
             camera.targetTexture = target;
             var canvas = go.GetComponent<UnityEngine.Canvas>();

@@ -23,7 +23,7 @@ namespace OpenFairy.UGUI.Tests
                 var path = (string)type.GetProperty("PrefabPath").GetValue(fixture);
                 var canvasObject = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas));
                 var cameraObject = new GameObject("Camera", typeof(Camera));
-                var target = new RenderTexture(80, 80, 24, RenderTextureFormat.ARGB32) { antiAliasing = 1 };
+                var target = new RenderTexture(80, 80, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) { antiAliasing = 1 };
                 var image = new Texture2D(80, 80, TextureFormat.RGBA32, false);
                 try
                 {

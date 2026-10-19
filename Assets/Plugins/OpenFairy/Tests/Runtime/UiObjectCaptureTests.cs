@@ -268,12 +268,14 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator StencilColorCaptureKeepsSourceMaterialsAndPopAcrossFrames()
         {
+            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             yield return StencilModifierLifetime(false);
         }
 
         [UnityTest]
         public IEnumerator StencilBlendCaptureKeepsSourceMaterialsAndPopAcrossFrames()
         {
+            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             yield return StencilModifierLifetime(true);
         }
 
@@ -397,6 +399,7 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator AuthoredBlendModesKeepRgbFactorsAndIsolatedCaptureCoverage()
         {
+            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             var root = MakeRoot();
             var background = Image(root, new Vector2(100, 100), new Color(.4f, .2f, .6f, .5f));
             var foreground = Image(root, new Vector2(100, 100), new Color(.4f, .7f, .2f, .4f));
@@ -425,6 +428,7 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator GrayedAdditiveEmissionAndScreenCompositeOnceOverANonblackBackdrop()
         {
+            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             var root = MakeRoot();
             var canvas = root.parent.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;

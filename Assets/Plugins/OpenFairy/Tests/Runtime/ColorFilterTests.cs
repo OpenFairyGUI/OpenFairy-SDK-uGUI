@@ -112,6 +112,7 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Direct_image_preserves_alpha_stencil_and_restores_its_original_material()
         {
+            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             var source = Source();
             var image = Image(source, new Color(.2f, .4f, .8f, .5f));
             var original = image.material;
@@ -141,6 +142,7 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Container_transforms_the_composited_color_once_and_releases_without_hiding_input()
         {
+            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             var source = Source();
             var group = source.gameObject.AddComponent<CanvasGroup>();
             group.alpha = .35f;
