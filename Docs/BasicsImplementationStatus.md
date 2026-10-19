@@ -13,7 +13,7 @@
 - Transition 倒放交换起止值、缓动正向推进；重播前先完成上一轮；autoPlay 随启用重播、停用时原地停止（Shake 归位）。Gear tween 终点不变时继续、改变时先完成再重起；GearLook 旋转按不取模角度线性插值。
 - Builtin TextField：字距只加在有宽度字形之间并随缩放，行距随缩放；Shrink 改为 DoShrink 算法；裁剪按完整高度；空文本 0×0；UBB 标签不分大小写、支持 `\[` 转义、未实现样式的标签被消费而非原样输出；链接保留外层颜色。行内图片按运行时同一标签口径烘焙，陈旧图片标签在导入期移除。
 - 导入：置灰按 disabled 页 → grayed 控制器 → 灰度滤镜的顺序，只取其一；解析 `fillOrigin`；TMP 输入框去掉底框与内边距，TMP 字距/行距换算为 em 单位。删除无用转发与死代码（`ControllerBinding`、`HidesRuntimeMember`、`Transition.SetHook(string)`、`TextRendering.SetBestFit` 等），六处编辑态销毁合并为一处。
-- 后台验证：Builtin 套件未通过项与改动前基线同类（批处理缺少渲染帧、WaitForEndOfFrame 及 GearClock 浮点计时抖动）。临时导入 TMP Essential Resources 后 TMP PlayMode 与原始代码对照 **175/221 对 169/215**，失败集合相同（批处理渲染帧与缺源字体的 TMP 默认字体），新增描边与标记转换回归在该环境通过；TMP EditMode 在批处理下改动前后均运行出错。传统 Demo/golden、TMP 完整套件与 Player 未重跑；更新 SDK 后需重新 Migrate。
+- 验证：Builtin 后台套件 **190/191 Editor**（仅缺实际 Player 帧的一项）。窗口模式 PlayMode 与原始代码同机对照为 **184/196 对 178/190**，失败集合完全相同（12 项捕获/滤镜像素断言在原始代码上同样失败）；GearClock 位置断言改为与尺寸一致的容差后连续两次 8/8。临时导入 TMP Essential Resources 后 TMP PlayMode 与原始代码对照 **175/221 对 169/215**，失败集合相同（批处理渲染帧与缺源字体的 TMP 默认字体），新增描边与标记转换回归在该环境通过；TMP EditMode 在批处理下改动前后均运行出错。传统 Demo/golden、TMP 完整套件与 Player 未重跑；更新 SDK 后需重新 Migrate。
 
 ### 2026-10-19 生成式名称与引用
 
