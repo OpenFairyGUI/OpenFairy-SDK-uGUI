@@ -12,6 +12,49 @@ namespace OpenFairy.UGUI.Tests
     public class ButtonPointerOverrideTests
     {
         [UnityTest]
+        public IEnumerator Reenabled_buttons_clear_transient_pointer_state_and_keep_selection()
+        {
+            var previous = EventSystem.current;
+            var events = new GameObject("Pointer events", typeof(EventSystem));
+            var go = new GameObject("Reusable button", typeof(RectTransform), typeof(PointerOverrideButton));
+            try
+            {
+                var button = go.GetComponent<PointerOverrideButton>();
+                var pointer = new PointerEventData(events.GetComponent<EventSystem>());
+                var clicks = 0;
+                button.onClick.AddListener(() => clicks++);
+                foreach (ButtonMode mode in Enum.GetValues(typeof(ButtonMode)))
+                foreach (var selected in new[] { false, true })
+                foreach (var grayed in new[] { false, true })
+                {
+                    if (mode == ButtonMode.Common && selected) continue;
+                    button.mode = mode;
+                    button.selected = selected;
+                    button.grayed = grayed;
+                    ExecuteEvents.Execute(go, pointer, ExecuteEvents.pointerEnterHandler);
+                    ExecuteEvents.Execute(go, pointer, ExecuteEvents.pointerDownHandler);
+                    go.SetActive(false);
+                    go.SetActive(true);
+                    button.RefreshState();
+                    var idle = grayed ? selected ? State.selectedDisabled : State.disabled : selected ? State.down : State.up;
+                    Assert.That(button.controller.page, Is.EqualTo(idle), $"{mode}, selected={selected}, grayed={grayed}");
+                    Assert.That(button.selected, Is.EqualTo(selected));
+                    ExecuteEvents.Execute(go, pointer, ExecuteEvents.pointerEnterHandler);
+                    Assert.That(button.controller.page, Is.EqualTo(grayed ? idle : selected ? State.selectedOver : State.over));
+                    ExecuteEvents.Execute(go, pointer, ExecuteEvents.pointerExitHandler);
+                    Assert.That(clicks, Is.Zero);
+                }
+            }
+            finally
+            {
+                Object.Destroy(go);
+                Object.Destroy(events);
+                if (previous) EventSystem.current = previous;
+            }
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator Native_pointer_dispatch_preserves_base_visuals_with_derived_handlers()
         {
             var previous = EventSystem.current;

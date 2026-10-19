@@ -192,6 +192,13 @@ namespace OpenFairy.UGUI
 
         private bool _down, _over;
 
+        protected override void OnDisable()
+        {
+            _down = _over = false;
+            base.OnDisable();
+            RefreshState();
+        }
+
         // Keep pointer state while grayed, including the authored pressed-disabled page.
         public virtual void OnPointerDown(PointerEventData eventData)
         {

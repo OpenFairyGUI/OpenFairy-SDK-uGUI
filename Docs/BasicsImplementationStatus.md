@@ -7,7 +7,8 @@
 ### 2026-10-19 原生指针扩展验证
 
 - `Button<T>` 的 Enter/Exit/Down/Up 原生指针方法可覆写；业务 partial 调用基类即可保留视觉状态，无需额外事件中继组件。包内回归通过 EventSystem 的 ExecuteEvents 枚举 Common/Check/Radio、选中/未选中、灰显/正常以及左/右键，检查派生方法分发和基类页面状态。
-- 本轮独立 Builtin 工程的完整包级 Test Runner 结果为 **157/157 Editor**、**168/168 PlayMode**，失败、跳过、不确定项均为零。没有重跑 TMP 后端的完整套件或传统 Basics/Transition golden；下方历史结果保留各自验证范围。
+- 按钮停用时清除瞬时按下和悬浮状态，避免复用后停留在旧的悬浮页；选中与灰显保持原值。新增停启回归枚举全部模式、选中和灰显组合，未修复时负控失败，修复后通过。
+- 本轮独立 Builtin 工程的完整包级 Test Runner 结果为 **157/157 Editor**、**169/169 PlayMode**，失败、跳过、不确定项均为零。没有重跑 TMP 后端的完整套件或传统 Basics/Transition golden；下方历史结果保留各自验证范围。
 
 ### 2026-10-18 当前通用包能力与验证
 
