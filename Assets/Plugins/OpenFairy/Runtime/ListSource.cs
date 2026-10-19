@@ -17,6 +17,8 @@ namespace OpenFairy.UGUI
         public ListLayoutType layout;
         public int lineItemCount;
         public bool autoItemSize = true;
+        public ListRenderOrder renderOrder;
+        public int apexIndex;
         [SerializeField] internal HorizontalLayoutGroup rowLayout;
         [SerializeField] internal ContentSizeFitter rowSize;
         [SerializeField] internal LayoutElement rowMinimum;
@@ -31,6 +33,7 @@ namespace OpenFairy.UGUI
         private readonly Dictionary<GameObject, int> _indices = new();
         private readonly Dictionary<int, GameObject> _rebased = new();
         private readonly List<int> _release = new();
+        private readonly List<(int Order, Transform Item)> _drawOrder = new();
         public ScrollPane scrollPane;
         public RectTransform content;
         private Action<GameObject, int> _setup;
@@ -156,6 +159,7 @@ namespace OpenFairy.UGUI
             Vector2 offset = _contentOffset = AlignmentOffset(viewSize, contentSize);
             foreach (var item in _indices.Keys)
                 ((RectTransform)item.transform).anchoredPosition += new Vector2(offset.x, -offset.y);
+            ApplyRenderOrder();
             if (_poolRoot != null)
                 _poolRoot.SetAsLastSibling();
             scrollPane?.RefreshContent();
@@ -350,8 +354,38 @@ namespace OpenFairy.UGUI
                 foreach (var pair in _visible)
                     SetItemPosition(pair.Value, pair.Key);
             } while (repeat);
+            ApplyRenderOrder();
             if (rebindSelection && TryGetComponent<ListSelection>(out var selection) && selection.enabled)
                 selection.Rebind();
+        }
+
+        // 作者项按作者顺序编号后再应用绘制顺序，选择索引不随兄弟序改变。
+        private void Awake()
+        {
+            if (renderOrder == ListRenderOrder.Ascent)
+                return;
+            var authored = List.Container((RectTransform)transform);
+            for (var i = 0; i < count; i++)
+                _indices[authored.GetChild(i).gameObject] = i;
+            ApplyRenderOrder();
+        }
+
+        // 复刻 GComponent.BuildNativeDisplayList：只改兄弟序（绘制先后），项的索引与位置不变。
+        private void ApplyRenderOrder()
+        {
+            if (renderOrder == ListRenderOrder.Ascent)
+                return;
+            _drawOrder.Clear();
+            if (_virtual)
+                foreach (var pair in _visible) _drawOrder.Add((pair.Key, pair.Value.transform));
+            else
+                foreach (var pair in _indices) _drawOrder.Add((pair.Value, pair.Key.transform));
+            _drawOrder.Sort((a, b) => a.Order.CompareTo(b.Order));
+            var last = _drawOrder.Count - 1;
+            var apex = Mathf.Clamp(apexIndex, 0, last + 1);
+            for (var i = 0; i <= last; i++)
+                _drawOrder[i].Item.SetSiblingIndex(renderOrder == ListRenderOrder.Descent ? last - i
+                    : i < apex ? i : apex + last - i);
         }
 
         private void SetItemPosition(GameObject item, int slot)

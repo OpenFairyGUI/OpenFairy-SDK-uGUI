@@ -22,6 +22,10 @@ namespace OpenFairy.UGUI
         private Action<string> _onClickLink;
         private bool _ownsRaycast;
         private readonly List<GradientSpan> _gradients = new();
+        // 复刻 HtmlParser：外层已指定颜色时链接保留该颜色；<font> 关闭时还原它打开的样式。
+        private readonly Stack<bool> _linkColors = new();
+        private readonly Stack<(string Closer, bool Color)> _fonts = new();
+        private int _colorDepth;
         private readonly struct GradientSpan
         {
             public readonly int start, end;
@@ -32,9 +36,9 @@ namespace OpenFairy.UGUI
 
         private const string Literal = @"(?<literal><noparse>.*?(?:</noparse>|$))|";
         private static readonly Regex Tags = new(Literal +
-            @"(?<escaped>\\\[)|(?<!\\)\[img\](?<image>.*?)\[/img\]|(?<!\\)\[(?<closing>/?)(?<tag>b|i|u|s|strike|sup|sub|size|color|url)(?:=(?<value>[^\]]+))?\]",
+            @"(?<escaped>\\\[)|(?<!\\)\[img\](?<image>.*?)\[/img\]|(?<!\\)\[(?<closing>/?)(?<tag>b|i|u|s|strike|sup|sub|size|color|url|align|font)(?:=(?<value>[^\]]+))?\]",
             RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline);
-        private static readonly Regex Html = new(Literal + @"<(?<closing>/)?(?<tag>img|a)\b(?<attributes>[^>]*)>",
+        private static readonly Regex Html = new(Literal + @"<(?<closing>/)?(?<tag>img|a|font|strike|color)\b(?<attributes>[^>]*)>",
             RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline);
         private static readonly Regex Attributes = new(
             @"(?<name>[\w-]+)\s*=\s*(?:""(?<value>[^""]*)""|'(?<value>[^']*)'|(?<value>[^\s>]+))",
@@ -114,18 +118,45 @@ namespace OpenFairy.UGUI
             if (!_text.richText)
                 return text;
             if (ubb)
+            {
+                ResetStyles();
                 text = ConvertUbb(text);
+            }
             if (html)
+            {
+                ResetStyles();
                 text = Html.Replace(text, match =>
                 {
                     if (match.Groups["literal"].Success)
                         return match.Value;
                     bool closing = match.Groups["closing"].Success;
-                    if (match.Groups["tag"].Value.Equals("a", StringComparison.OrdinalIgnoreCase))
-                        return closing ? LinkEnd() : LinkStart(Attribute(match.Groups["attributes"].Value, "href") ?? "");
+                    string tag = match.Groups["tag"].Value.ToLowerInvariant();
+                    string attributes = match.Groups["attributes"].Value;
+                    switch (tag)
+                    {
+                        case "a":
+                            return closing ? LinkEnd() : LinkStart(Attribute(attributes, "href") ?? "");
+                        case "strike":
+                            return closing ? "</s>" : "<s>";
+                        case "color":
+                            _colorDepth += closing ? -1 : 1;
+                            return match.Value;
+                        case "font" when closing:
+                            if (_fonts.Count == 0)
+                                return "";
+                            var font = _fonts.Pop();
+                            if (font.Color) _colorDepth--;
+                            return font.Closer;
+                        case "font":
+                        {
+                            string color = Attribute(attributes, "color"), size = Attribute(attributes, "size");
+                            if (color != null) _colorDepth++;
+                            _fonts.Push(((size != null ? "</size>" : "") + (color != null ? "</color>" : ""), color != null));
+                            return (color != null ? "<color=" + ConvertColor(color) + ">" : "") + (size != null ? "<size=" + size + ">" : "");
+                        }
+                    }
                     if (closing)
                         return "";
-                    string attributes = match.Groups["attributes"].Value;
                     string name = Attribute(attributes, "src");
                     if (name == null)
                         return match.Value;
@@ -135,6 +166,7 @@ namespace OpenFairy.UGUI
                         ? SizedSpriteTag(_text.spriteAsset, _text.font, name, width, height, Dimension(attributes, "baseline") ?? 0.8f)
                         : SpriteTag(name);
                 });
+            }
             if (_text.enableAutoSizing)
                 text = TextAutoSize.NormalizeSizeTags(text, _text.fontSizeMax);
             return ConvertGradients(text);
@@ -236,18 +268,36 @@ namespace OpenFairy.UGUI
                 }
                 return LinkStart(WebUtility.HtmlDecode(value));
             }
+            if (tag == "font") // 本后端不按名称切换字体，消费标签以免原样显示
+                return "";
             if (tag == "strike")
                 tag = "s";
+            if (tag == "color")
+                _colorDepth += closing ? -1 : 1;
             if (closing)
                 return "</" + tag + ">";
-            if (tag is "color" or "size")
+            if (tag is "color" or "size" or "align")
                 return value.Length == 0 ? match.Value : "<" + tag + "=" + (tag == "color" ? ConvertColor(value) : value) + ">";
             return "<" + tag + ">";
         });
 
-        private string LinkStart(string value) => "<color=#" + ColorUtility.ToHtmlStringRGBA(linkColor) + ">"
-            + (linkUnderline ? "<u>" : "") + "<link=\"" + WebUtility.HtmlEncode(value) + "\">";
-        private string LinkEnd() => "</link>" + (linkUnderline ? "</u>" : "") + "</color>";
+        private void ResetStyles()
+        {
+            _colorDepth = 0;
+            _linkColors.Clear();
+            _fonts.Clear();
+        }
+
+        private string LinkStart(string value)
+        {
+            bool colored = _colorDepth <= 0;
+            _linkColors.Push(colored);
+            return (colored ? "<color=#" + ColorUtility.ToHtmlStringRGBA(linkColor) + ">" : "")
+                + (linkUnderline ? "<u>" : "") + "<link=\"" + WebUtility.HtmlEncode(value) + "\">";
+        }
+
+        private string LinkEnd() => "</link>" + (linkUnderline ? "</u>" : "")
+            + (_linkColors.Count > 0 && _linkColors.Pop() ? "</color>" : "");
 
         // A name is a glyph in the assigned native sprite asset, never a resource URL.
         public static string SpriteTag(string name)

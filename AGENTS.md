@@ -33,7 +33,7 @@ Loader 已支持预烘焙 Component content 与原矩形，按 native 尺寸事�
 
 ContentSizeFitter 的 driven 尺寸不会完整序列化；Relation 首次启用时恢复并保留已烘焙的关系基准，随后接受真实重排；没有烘焙基准才 Record。不能用反序列化的零尺寸或 CanvasScaler 的临时尺寸覆盖作者基准。首次活动实例化时，父组件 OnEnable 可能早于子 fitter 原生启用；恢复已保存基线按 enabled 配置判断。self 坐标关系只叠加变化量，不能把自身 pivot 原点当绝对位移。动态修改 MaskableGraphic.maskable 的测试正控还须调用公开 RecalculateClipping，不能将未更新的 clip parent 当渲染结论。声音夹具在首次启用前配置 AudioSource，并为自身提供 AudioListener；不要因宿主无 listener 或不确定的构造时序给生产声音代码加兼容分支。
 
-导入的普通 Image/MovieClip 是装饰面，不参与原生射线检测；Loader 保留自己的命中面，按钮使用根节点的命中 Graphic。ListSource 回收不能清除业务 Awake 注册的 UnityEvent；消费端 Fill 回调自行替换其每次绑定的业务监听。SDK 的选择中继只移除自己拥有的监听，并用绑定版本取消点击派发期间重填留下的在途回调。
+导入的 Image/MovieClip/Graph 与 FairyGUI 显示对象一样默认可命中，会挡住下层；组件按 opaque（缺省 true）在根节点烘焙透明命中面，opaque=false 时只有子对象可命中。ListSource 回收不能清除业务 Awake 注册的 UnityEvent；消费端 Fill 回调自行替换其每次绑定的业务监听。SDK 的选择中继只移除自己拥有的监听，并用绑定版本取消点击派发期间重填留下的在途回调。
 
 Builtin InputField 在聚焦时会消费 EventSystem 的 updateSelected 导航事件；InputSubmit 必须在导入期持久绑定原生 onSubmit，不能把 ISubmitHandler 或 onEndEdit 当回车文字提交。测试保存并重新实例化 Prefab，再分别检查聚焦、失焦和提交的行为。
 

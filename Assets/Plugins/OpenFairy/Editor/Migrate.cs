@@ -741,18 +741,14 @@ namespace OpenFairy.UGUI.Editor
                 foreach (var controller in controllers.Values)
                     BuildController(controller);
 
+                // 复刻 Container.opaque（组件缺省不穿透）：整块矩形可命中，与内部图形无关。
+                // uGUI 需要一张透明的 raycast 面盖住根矩形，否则未被图形覆盖处的点击会穿透到下层。
+                if (xml.Opaque && root.GetComponent<Graphic>() == null)
+                    root.AddComponent<UnityEngine.UI.Image>().color = Color.clear;
+
                 if (comp is ButtonBase buttonComp)
                 {
                     buttonComp.sound = LoadButtonSound(Settings().buttonClickSound, null);
-                    // FairyGUI 按钮整块可点，与内部图形无关。uGUI 需要一个覆盖全 rect 的 raycast 面：
-                    // 加一张透明(alpha=0，不改渲染)、raycastTarget 的 Image 到按钮根，保证点按钮任意位置都命中
-                    // （否则内部图形（如只描边的 Shape）没盖住中心时，点击会穿过按钮打到背景）。
-                    if (root.GetComponent<Graphic>() == null)
-                    {
-                        var hit = root.AddComponent<UnityEngine.UI.Image>();
-                        hit.color = new Color(0, 0, 0, 0);
-                        hit.raycastTarget = true;
-                    }
                     if (controllers.TryGetValue("button", out var buttonData))
                         comp.GetType().GetField("controller").SetValue(comp, buttonData.Value); // Controller<T> 泛型字段，仅此保留反射
                     buttonComp.titleText = Child(children, "title")?.GetComponent<TextComponent>();
@@ -848,7 +844,6 @@ namespace OpenFairy.UGUI.Editor
                 {
                     go = NewChild(name, parent, typeof(Image));
                     var image = go.GetComponent<Image>();
-                    image.raycastTarget = false;
                     var resource = Resolve(element.Source, owner.PackageId);
                     image.sprite = LoadSprite(element.Source, owner.PackageId);
                     ConfigureImage(image, resource, element);
@@ -883,14 +878,18 @@ namespace OpenFairy.UGUI.Editor
                     if (element.StrokeColor is { } stroke)
                     {
                         var effect = go.AddComponent<TextStroke>();
-                        effect.color = ParseColor(stroke);
-                        effect.width = element.StrokeSize;
+                        effect.effectColor = ParseColor(stroke);
+                        effect.effectDistance = new Vector2(element.StrokeSize, element.StrokeSize);
+                        effect.useGraphicAlpha = false;
                     }
                     if (element.ShadowColor is { } shadow)
                     {
-                        var effect = go.AddComponent<TextShadow>();
-                        effect.color = ParseColor(shadow);
-                        effect.offset = element.ShadowOffset ?? new Vector2(1, 1);
+                        // FairyGUI 投影是 y 向下的偏移、不随文字透明度变化，与 uGUI Shadow 的顶点流一致。
+                        var effect = go.AddComponent<Shadow>();
+                        var offset = element.ShadowOffset ?? new Vector2(1, 1);
+                        effect.effectColor = ParseColor(shadow);
+                        effect.effectDistance = new Vector2(offset.x, -offset.y);
+                        effect.useGraphicAlpha = false;
                     }
                     if (element.Input)
                         ConfigureInput(go, textComponent, element);
@@ -951,7 +950,6 @@ namespace OpenFairy.UGUI.Editor
                     {
                         go = NewChild(name, parent, typeof(MovieClip));
                         var movieClip = go.GetComponent<MovieClip>();
-                        movieClip.raycastTarget = false;
                         ConfigureMovieClip(movieClip, Resolve(element.Source, owner.PackageId), element);
                         size ??= MovieClips[Resolve(element.Source, owner.PackageId)].Size;
                     }
@@ -962,6 +960,20 @@ namespace OpenFairy.UGUI.Editor
             }
 
             SetRect((RectTransform)go.transform, element, size ?? Vector2.zero, parent);
+            // 复刻 GObject.SetSize 的 restrictSize：最小尺寸约束内容自适应，文字按最大宽度换行。
+            if (element.RestrictSize is { } restrict)
+            {
+                if (restrict[0] > 0 || restrict[2] > 0)
+                {
+                    var minimum = go.AddComponent<LayoutElement>();
+                    minimum.minWidth = restrict[0];
+                    minimum.minHeight = restrict[2];
+                }
+#if !FAIRYGUI_TMPRO
+                if (go.TryGetComponent(out TextField restricted))
+                    restricted.maxWidth = restrict[1];
+#endif
+            }
             if (go.GetComponent<Loader>() is { autoSize: true } autoLoader)
                 autoLoader.SetNativeSize();
             if (go.GetComponent<TextField>() is { } createdText)
@@ -1334,10 +1346,19 @@ namespace OpenFairy.UGUI.Editor
             if (buttonXml.DownEffectValue is { } downEffectValue) button.downEffectValue = downEffectValue;
             if (buttonXml.TitleColor is { } titleColor)
                 ConfigureTitleColor(button, ParseColor(titleColor));
+            if (buttonXml.TitleFontSize is { } titleFontSize && button.titleText != null)
+                SetTitleFontSize(button.titleText, titleFontSize);
             button._selected = buttonXml.Checked && button.mode != ButtonMode.Common; // 烘焙直写（复刻 GButton.selected：Common 忽略选中态），不触发关联控制器
             button.RefreshState();
             if (button.useSelectedIcon) button.RefreshIcon();
         }
+
+        // 复刻 GButton/GLabel.titleFontSize：实例覆盖标题文字字号。
+#if FAIRYGUI_TMPRO
+        private static void SetTitleFontSize(TMP_Text text, int size) => TextAutoSize.SetFontSize(text, size);
+#else
+        private static void SetTitleFontSize(UnityEngine.UI.Text text, int size) => text.fontSize = size;
+#endif
 
         private static void ConfigureTitleColor(ButtonBase button, Color color)
         {
@@ -1418,6 +1439,8 @@ namespace OpenFairy.UGUI.Editor
                 titleText.text = title;
             if (labelXml.TitleColor is { } titleColor && titleText != null)
                 titleText.color = ParseColor(titleColor);
+            if (labelXml.TitleFontSize is { } titleFontSize && titleText != null)
+                SetTitleFontSize(titleText, titleFontSize);
             if (labelXml.Icon is { } icon)
                 go.GetComponent<Label>().icon = LoadSprite(icon, packageId);
         }
@@ -1616,8 +1639,7 @@ namespace OpenFairy.UGUI.Editor
                 if (tooltip == null) tooltip = go.AddComponent<Tooltip>();
                 tooltip.text = element.Tooltips;
                 if (!string.IsNullOrEmpty(Settings().tipsRes))
-                    tooltip.template = LoadPrefab(Resolve(Settings().tipsRes, null)).GetComponent<Label>()
-                        ?? throw new InvalidDataException("The configured tooltip template must be a Label.");
+                    tooltip.template = LoadPrefab(Resolve(Settings().tipsRes, null)).GetComponent<Label>();
                 if (element.Touchable)
                 {
                     var hit = go.GetComponent<Graphic>();
@@ -1930,6 +1952,8 @@ namespace OpenFairy.UGUI.Editor
                 Schema.ListLayout.Pagination => ListLayoutType.Pagination,
                 _ => ListLayoutType.SingleColumn,
             };
+            source.renderOrder = element.RenderOrder;
+            source.apexIndex = element.Apex;
 
             var view = element.Overflow == Schema.Overflow.Scroll
                 ? BuildScrollView(go, element, size)
@@ -2063,10 +2087,12 @@ namespace OpenFairy.UGUI.Editor
 
         private static void BuildTransitions(GameObject root, Schema.Component xml, Dictionary<string, (Schema.Display Xml, GameObject Go)> byId, string packageId)
         {
+            // 先建齐本组件的全部动效，嵌套项才能直接引用同组件内的其它动效。
+            foreach (var transitionXml in xml.Transitions)
+                root.AddComponent<Transition>().transitionName = transitionXml.Name;
             foreach (var transitionXml in xml.Transitions)
             {
-                var transition = root.AddComponent<Transition>();
-                transition.transitionName = transitionXml.Name;
+                var transition = Array.Find(root.GetComponents<Transition>(), value => value.transitionName == transitionXml.Name);
                 transition.autoPlay = transitionXml.AutoPlay;
                 transition.autoPlayTimes = transitionXml.AutoPlayRepeat;
                 transition.autoPlayDelay = transitionXml.AutoPlayDelay;
@@ -2074,19 +2100,14 @@ namespace OpenFairy.UGUI.Editor
                 var items = new List<TransitionItem>();
                 foreach (var itemXml in TransitionItems(xml, transitionXml))
                 {
-                    var targetId = itemXml.Target;
-                    (Schema.Display Xml, GameObject Go) target = default;
-                    if (targetId != "" && !byId.TryGetValue(targetId, out target))
-                        continue; // 编辑器遗留的失效目标
-                    var type = ParseTransitionType(itemXml.Type);
-                    if (type == null)
-                        continue;
+                    var target = itemXml.Target != "" ? byId[itemXml.Target] : default;
+                    var type = ParseTransitionType(itemXml.Type).Value;
 
                     var item = new TransitionItem
                     {
                         time = itemXml.Time / (float)transitionXml.FrameRate,
                         target = target.Go != null ? (RectTransform)target.Go.transform : null,
-                        type = type.Value,
+                        type = type,
                         tween = itemXml.Tween,
                         duration = itemXml.Duration / (float)transitionXml.FrameRate,
                         ease = ParseEase(itemXml.Ease),
@@ -2123,12 +2144,17 @@ namespace OpenFairy.UGUI.Editor
                                 break;
                             case TransitionItemType.Nested:
                                 var transitionParts = value.Split(',');
-                                item.stringValue = transitionParts[0];
+                                // 复刻 Transition.Play：嵌套目标的同名动效，指向自身或已被作者删除时为空（该项不生效，保留项序号供 Hook 使用）。
+                                item.component = Array.Find((target.Go != null ? target.Go : root).GetComponents<Transition>(),
+                                    nested => nested.transitionName == transitionParts[0] && nested != transition);
                                 if (transitionParts.Length > 1)
                                     item.playTimes = int.Parse(transitionParts[1]);
                                 break;
                             case TransitionItemType.Text:
                                 item.stringValue = value;
+                                break;
+                            case TransitionItemType.Icon:
+                                item.icon = LoadSprite(value, packageId);
                                 break;
                             default:
                                 item.start = ParseTransitionValues(value, item.type);
@@ -2158,6 +2184,19 @@ namespace OpenFairy.UGUI.Editor
                             ConfigureColorFilter(filterGo, target.Xml?.Kind ?? Schema.DisplayKind.Component).enabled = false;
                     }
 
+                    var targetGo = target.Go != null ? target.Go : root;
+                    item.component = item.type switch
+                    {
+                        TransitionItemType.Alpha => targetGo.GetComponent<CanvasGroup>(),
+                        TransitionItemType.Animation => targetGo.GetComponent<MovieClip>(),
+                        TransitionItemType.Text => targetGo.GetComponent<TextComponent>(),
+                        TransitionItemType.Skew => targetGo.GetComponent<Graph>(),
+                        TransitionItemType.Color => targetGo.GetComponent<Graphic>(),
+                        TransitionItemType.ColorFilter => targetGo.GetComponent<ColorAdjust>(),
+                        TransitionItemType.Icon => targetGo.TryGetComponent(out ButtonBase iconButton) ? iconButton
+                            : targetGo.TryGetComponent(out Label iconLabel) ? iconLabel : targetGo.GetComponent<Loader>(),
+                        _ => item.component,
+                    };
                     items.Add(item);
                 }
                 transition.items = items.ToArray();
@@ -2181,6 +2220,7 @@ namespace OpenFairy.UGUI.Editor
             "ColorFilter" => TransitionItemType.ColorFilter,
             "Text" => TransitionItemType.Text,
             "Skew" => TransitionItemType.Skew,
+            "Icon" => TransitionItemType.Icon,
             _ => null,
         };
 
@@ -2561,11 +2601,11 @@ namespace OpenFairy.UGUI.Editor
                 _ => TextAlignmentOptions.TopLeft,
             };
             text.raycastTarget = false;
+            var materialPath = Path.ChangeExtension(AssetPath(owner.File), null) + "_" + Identifier(element.Id) + "_TextMaterial.mat";
+            if (element.StrokeColor is { } stroke)
+                TmpTextMaterialBuilder.ConfigureStroke(text, materialPath, ParseColor(stroke), element.StrokeSize);
             if (element.ShadowColor is { } shadow)
-            {
-                var path = Path.ChangeExtension(AssetPath(owner.File), null) + "_" + Identifier(element.Id) + "_TextMaterial.mat";
-                TmpTextMaterialBuilder.ConfigureShadow(text, path, ParseColor(shadow), element.ShadowOffset ?? new Vector2(1, 1));
-            }
+                TmpTextMaterialBuilder.ConfigureShadow(text, materialPath, ParseColor(shadow), element.ShadowOffset ?? new Vector2(1, 1));
         }
 
         private static TMP_FontAsset LoadTmpFont(Schema.Display element, Resource owner)

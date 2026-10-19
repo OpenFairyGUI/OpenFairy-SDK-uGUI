@@ -361,7 +361,7 @@ namespace OpenFairy.UGUI.Tests
         {
             var go = Child(_rig.CanvasRt, "gc", Vector2.zero, new Vector2(50, 50), true);
             var stroke = go.gameObject.AddComponent<TextStroke>();
-            stroke.color = Color.black;
+            stroke.effectColor = Color.black;
             var gear = new GearColor<RadioPage>
             {
                 target = go.gameObject,
@@ -374,10 +374,10 @@ namespace OpenFairy.UGUI.Tests
             gear.Apply(RadioPage.down);
             yield return null;
             Assert.AreEqual(Color.green, go.GetComponent<UnityEngine.UI.Image>().color, "GearColor 应把 down 页设为绿");
-            Assert.AreEqual(Color.yellow, stroke.color, "GearColor 应同步应用文字描边色");
+            Assert.AreEqual(Color.yellow, stroke.effectColor, "GearColor 应同步应用文字描边色");
             gear.Apply(RadioPage.over); // 不在 pages → default
             Assert.AreEqual(Color.white, go.GetComponent<UnityEngine.UI.Image>().color, "不在页列表应回退 default");
-            Assert.AreEqual(Color.black, stroke.color, "不在页列表时描边色也应回退 default");
+            Assert.AreEqual(Color.black, stroke.effectColor, "不在页列表时描边色也应回退 default");
         }
 
         [UnityTest]

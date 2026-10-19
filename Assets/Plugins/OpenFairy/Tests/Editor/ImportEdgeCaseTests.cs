@@ -146,8 +146,9 @@ namespace OpenFairy.UGUI.Tests
             }
         }
 
-        [UnityTest] public IEnumerator Image_decoration_keeps_the_saved_button_reachable() => SavedHitSurface(Schema.DisplayKind.Image);
-        [UnityTest] public IEnumerator Movie_decoration_keeps_the_saved_button_reachable() => SavedHitSurface(Schema.DisplayKind.MovieClip);
+        // FairyGUI display objects are touchable by default and cover what lies beneath them.
+        [UnityTest] public IEnumerator Image_overlay_covers_the_saved_button_beneath() => SavedHitSurface(Schema.DisplayKind.Image);
+        [UnityTest] public IEnumerator Movie_overlay_covers_the_saved_button_beneath() => SavedHitSurface(Schema.DisplayKind.MovieClip);
         [UnityTest] public IEnumerator Loader_keeps_its_saved_hit_surface() => SavedHitSurface(Schema.DisplayKind.Loader);
 
         private static IEnumerator SavedHitSurface(Schema.DisplayKind kind)
@@ -200,7 +201,7 @@ namespace OpenFairy.UGUI.Tests
                 yield return null;
                 Canvas.ForceUpdateCanvases();
                 var saved = clone.transform.Find("Overlay").GetComponent<UnityEngine.UI.Graphic>();
-                Assert.That(saved.raycastTarget, Is.EqualTo(kind == Schema.DisplayKind.Loader));
+                Assert.That(saved.raycastTarget, Is.True);
                 var events = new GameObject("Events", typeof(UnityEngine.EventSystems.EventSystem));
                 try
                 {
@@ -209,7 +210,7 @@ namespace OpenFairy.UGUI.Tests
                     var hits = new List<UnityEngine.EventSystems.RaycastResult>();
                     clone.GetComponent<UnityEngine.UI.GraphicRaycaster>().Raycast(pointer, hits);
                     Assert.That(hits, Is.Not.Empty);
-                    Assert.That(hits[0].gameObject.name, Is.EqualTo(kind == Schema.DisplayKind.Loader ? "Overlay" : "Button"));
+                    Assert.That(hits[0].gameObject.name, Is.EqualTo("Overlay"));
                 }
                 finally { Object.DestroyImmediate(events); }
             }

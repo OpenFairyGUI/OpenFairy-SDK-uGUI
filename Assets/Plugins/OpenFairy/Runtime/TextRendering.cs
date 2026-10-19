@@ -116,7 +116,7 @@ namespace OpenFairy.UGUI
                 return tmp.outlineColor;
 #endif
             var stroke = text.GetComponent<TextStroke>();
-            return stroke != null ? stroke.color : Color.clear;
+            return stroke != null ? stroke.effectColor : Color.clear;
         }
 
         public static void SetOutlineColor(this Graphic text, Color color)
@@ -130,7 +130,7 @@ namespace OpenFairy.UGUI
 #endif
             var stroke = text.GetComponent<TextStroke>();
             if (stroke != null)
-                stroke.color = color;
+                stroke.effectColor = color;
         }
     }
 }

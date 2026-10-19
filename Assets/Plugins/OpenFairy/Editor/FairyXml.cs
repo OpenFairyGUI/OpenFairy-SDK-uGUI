@@ -211,6 +211,8 @@ namespace OpenFairy.UGUI.Editor
             }
             if (type == typeof(string[]))
                 return value.Split(',');
+            if (type == typeof(int[]))
+                return value.Split(',').AsValueEnumerable().Select(part => int.Parse(part, CultureInfo.InvariantCulture)).ToArray();
             if (type == typeof(ValueTuple<string, string>[]))
                 return ParsePages(value);
             if (type == typeof(OpenFairy.UGUI.RelationRule[]))
@@ -448,12 +450,6 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlEnum("pagination")] Pagination,
     }
 
-    public enum ListRenderOrder
-    {
-        Ascent,
-        Descent,
-        Arch,
-    }
 
     // 文本自动尺寸。Shrink/Ellipsis 未实现，转换时按 Height 处理。
     public enum TextAutoSize
@@ -566,6 +562,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("margin")] public string Margin;
         [XmlAttribute("scrollBarMargin")] public string ScrollBarMargin;
         [XmlAttribute("clipSoftness")] public string ClipSoftness;
+        [XmlAttribute("opaque")] public bool Opaque = true;
 
         [XmlElement("controller")] public Controller[] Controllers = Array.Empty<Controller>();
         [XmlElement("relation")] public Relation[] Relations = Array.Empty<Relation>();
@@ -629,7 +626,8 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("src")] public string Src;
         [XmlAttribute("pkg")] public string Package;
         [XmlAttribute("lineItemCount")] public int LineItemCount;
-        [XmlAttribute("renderOrder")] public ListRenderOrder RenderOrder;
+        [XmlAttribute("renderOrder")] public OpenFairy.UGUI.ListRenderOrder RenderOrder;
+        [XmlAttribute("restrictSize")] public int[] RestrictSize; // minWidth,maxWidth,minHeight,maxHeight
         [XmlAttribute("apex")] public int Apex;
         [XmlAttribute("url")] public string Url;
         [XmlAttribute("group")] public string Group;
@@ -775,6 +773,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("mode")] public OpenFairy.UGUI.ButtonMode? Mode; // 实例级缺省时不覆盖定义级
         [XmlAttribute("checked")] public bool Checked;
         [XmlAttribute("titleColor")] public string TitleColor;
+        [XmlAttribute("titleFontSize")] public int? TitleFontSize;
         // 按钮关联控制器（FairyGUI relatedController/relatedPageId）：点击换该控制器的页，实现 tab/radio 组。
         [XmlAttribute("controller")] public string Controller;
         [XmlAttribute("page")] public string Page;

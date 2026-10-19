@@ -12,6 +12,14 @@ namespace OpenFairy.UGUI
         Pagination,
     }
 
+    // 复刻 FairyGUI ChildrenRenderOrder：只决定项的绘制先后。
+    public enum ListRenderOrder
+    {
+        Ascent,
+        Descent,
+        Arch,
+    }
+
     // 列表结构工具：动态填充入口在 ListSource.Fill（状态与烘焙描述都在 ListSource 上）。
     public static class List
     {

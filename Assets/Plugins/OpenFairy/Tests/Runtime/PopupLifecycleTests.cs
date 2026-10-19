@@ -111,7 +111,7 @@ namespace OpenFairy.UGUI.Tests
         private Transition Animation(RectTransform target, float from, float to)
         {
             var transition = target.gameObject.AddComponent<Transition>();
-            transition.items = new[] { new TransitionItem { type = TransitionItemType.Alpha, target = target,
+            transition.items = new[] { new TransitionItem { type = TransitionItemType.Alpha, target = target, component = target.GetComponent<CanvasGroup>(),
                 tween = true, duration = .12f, start = new[] { from }, end = new[] { to } } };
             return transition;
         }

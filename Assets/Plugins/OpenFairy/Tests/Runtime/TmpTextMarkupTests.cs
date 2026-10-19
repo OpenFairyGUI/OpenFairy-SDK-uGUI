@@ -194,6 +194,24 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [UnityTest]
+        public IEnumerator HtmlFontStrikeAndUbbAlignConvertAndLinksKeepEnclosingColors()
+        {
+            var go = Own(new GameObject("Markup", typeof(RectTransform), typeof(TextMeshProUGUI)));
+            go.GetComponent<TextMeshProUGUI>().richText = true;
+            _markup = go.AddComponent<TmpTextMarkup>();
+            _markup.ubb = true;
+            _markup.html = true;
+            var linkColor = ColorUtility.ToHtmlStringRGBA(_markup.linkColor);
+            Assert.That(_markup.PreprocessText("<font color='#ff0000' size='30'>x</font>"), Is.EqualTo("<color=#ff0000><size=30>x</size></color>"));
+            Assert.That(_markup.PreprocessText("<strike>x</strike>"), Is.EqualTo("<s>x</s>"));
+            Assert.That(_markup.PreprocessText("[align=center]x[/align][font=Arial]y[/font]"), Is.EqualTo("<align=center>x</align>y"));
+            Assert.That(_markup.PreprocessText("<font color='#00ff00'><a href='h'>x</a></font>"), Does.Not.Contain(linkColor));
+            Assert.That(_markup.PreprocessText("[color=#00ff00][url=h]x[/url][/color]"), Does.Not.Contain(linkColor));
+            Assert.That(_markup.PreprocessText("<a href='h'>x</a>"), Does.Contain(linkColor));
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator HtmlAndUbbImagesRetainColorLinksAndLiteralMarkup()
         {
             SetUpText();

@@ -34,6 +34,7 @@ namespace OpenFairy.UGUI
         public string fontNames;
         public int leading = 3;
         public int letterSpacing;
+        public int maxWidth; // 复刻 TextField.maxWidth：大于 0 时按该宽度换行，自适应宽度不超过它
         public bool ubb;
         public bool html;
         public bool underlined;
@@ -205,6 +206,7 @@ namespace OpenFairy.UGUI
         private int _layoutFontSize;
         private int _layoutLeading;
         private int _layoutLetterSpacing;
+        private int _layoutMaxWidth;
         private FontStyle _layoutStyle;
         private TextAnchor _layoutAlignment;
         private HorizontalWrapMode _layoutHOverflow;
@@ -223,7 +225,7 @@ namespace OpenFairy.UGUI
             if (_layoutValid && ReferenceEquals(_layoutText, text) && _layoutRectSize == rectSize
                 && _layoutFontSize == fontSize && _layoutStyle == fontStyle && _layoutAlignment == alignment
                 && _layoutHOverflow == horizontalOverflow && _layoutVOverflow == verticalOverflow
-                && _layoutLeading == leading && _layoutLetterSpacing == letterSpacing
+                && _layoutLeading == leading && _layoutLetterSpacing == letterSpacing && _layoutMaxWidth == maxWidth
                 && ReferenceEquals(_layoutFont, font) && ReferenceEquals(_layoutBitmapFont, bitmapFont)
                 && _layoutOverflowMode == overflowMode)
             {
@@ -541,7 +543,7 @@ namespace OpenFairy.UGUI
             get
             {
                 EnsureLayout();
-                return string.IsNullOrEmpty(text) ? 0 : TextWidth;
+                return string.IsNullOrEmpty(text) ? 0 : maxWidth > 0 ? Mathf.Min(TextWidth, maxWidth) : TextWidth;
             }
         }
 
@@ -590,6 +592,7 @@ namespace OpenFairy.UGUI
             _layoutFontSize = fontSize;
             _layoutLeading = leading;
             _layoutLetterSpacing = letterSpacing;
+            _layoutMaxWidth = maxWidth;
             _layoutStyle = fontStyle;
             _layoutAlignment = alignment;
             _layoutHOverflow = horizontalOverflow;
@@ -612,8 +615,9 @@ namespace OpenFairy.UGUI
             }
 
             var rect = rectTransform.rect;
-            var wrap = horizontalOverflow == HorizontalWrapMode.Wrap;
-            var rectWidth = rect.width - 4;
+            var wrap = horizontalOverflow == HorizontalWrapMode.Wrap || maxWidth > 0;
+            var rectWidth = (maxWidth > 0 ? maxWidth : rect.width) - 4;
+            _clipHeight = rect.height > 0 ? Mathf.Max(rect.height, bitmapFont != null ? bitmapFont.size : Mathf.RoundToInt(fontSize * 1.25f)) : 0;
             LayoutLines(runs, wrap, rectWidth, 1);
             if (overflowMode == OverflowMode.Shrink && !string.IsNullOrEmpty(text))
                 Shrink(runs, wrap, rectWidth, rect);
@@ -621,61 +625,24 @@ namespace OpenFairy.UGUI
             var hAlign = (int)alignment % 3;
             var vAlign = (int)alignment / 3;
             var textHeight = TextHeight;
-            var visibleLines = _lines.Count;
-            if (overflowMode == OverflowMode.Ellipsis)
-            {
-                visibleLines = 0;
-                var height = 2f;
-                foreach (var line in _lines)
-                {
-                    if (height + line.Height > rect.height) break;
-                    visibleLines++;
-                    if (line.Width > rectWidth) break;
-                    height += line.Height + LineSpacing;
-                }
-            }
-            if (overflowMode != OverflowMode.Default && (rect.width <= 4 || rect.height <= 4))
-                visibleLines = 0;
+            // 复刻 TextField 的 clipping：无自动尺寸与省略模式下，越界的后续行和越过右边的字形不绘制。
+            var clipping = overflowMode == OverflowMode.Ellipsis || verticalOverflow == VerticalWrapMode.Truncate;
+            var ellipsisIndex = overflowMode == OverflowMode.Ellipsis && (TextWidth > rect.width || TextHeight > rect.height + 2)
+                ? _ellipsisIndex : -1;
+            var visibleLines = overflowMode != OverflowMode.Default && (rect.width <= 4 || rect.height <= 4) ? 0 : _lines.Count;
 
             var y = 2f + (vAlign == 1 ? (int)(Mathf.Max(0, rect.height - textHeight) / 2)
                 : vAlign == 2 ? Mathf.Max(0, rect.height - textHeight) : 0);
 
-            for (var lineIndex = 0; lineIndex < visibleLines; lineIndex++)
+            for (var lineIndex = 0; lineIndex < visibleLines; y += _lines[lineIndex].Height + LineSpacing, lineIndex++)
             {
                 var line = _lines[lineIndex];
-                if (verticalOverflow == VerticalWrapMode.Truncate && lineIndex > 0 && y + line.Height > rect.height)
-                    break;
-
-                var ellipsis = overflowMode == OverflowMode.Ellipsis && lineIndex == visibleLines - 1
-                    && (visibleLines < _lines.Count || line.Width > rectWidth);
-                var ellipsisRun = default(Run);
-                if (ellipsis)
-                {
-                    ellipsisRun = new Run { Size = fontSize, Style = fontStyle, Image = -1 };
-                    SetColor(ref ellipsisRun, color);
-                    while (true)
-                    {
-                        if (line.Count > 0) ellipsisRun = runs[_characters[line.Start + line.Count - 1].Run];
-                        if (ellipsisRun.Image >= 0)
-                        {
-                            ellipsisRun = new Run { Size = fontSize, Style = fontStyle, Image = -1 };
-                            SetColor(ref ellipsisRun, color);
-                        }
-                        var width = CharWidth('…', ellipsisRun);
-                        var total = line.Width > 0 ? line.Width + LetterSpacing + width : width;
-                        if (total <= rectWidth || line.Count == 0)
-                        {
-                            line.Width = total;
-                            break;
-                        }
-                        line.Count--;
-                        line.Width = Span(_characters, line.Start, line.Count);
-                    }
-                    if (line.Width > rectWidth) break;
-                }
+                if (clipping && lineIndex > 0 && y + line.Height > _clipHeight)
+                    continue;
 
                 var indent = hAlign == 1 ? (int)((rectWidth - line.Width) / 2) : hAlign == 2 ? rectWidth - line.Width : 0;
-                var x = 2f + Mathf.Max(0, indent);
+                var lineStart = 2f + Mathf.Max(0, indent);
+                var x = lineStart;
                 var baselineY = y + line.Baseline;
                 var runStart = x;
                 var activeRun = -1;
@@ -691,6 +658,25 @@ namespace OpenFairy.UGUI
                         if (placed)
                             x += LetterSpacing;
                         placed = true;
+                    }
+                    if (i == ellipsisIndex)
+                    {
+                        // 省略号取代该字符并结束本行，末段下划线随行裁剪不绘制。
+                        if (run.Image >= 0)
+                        {
+                            run = new Run { Size = fontSize, Style = fontStyle, Image = -1 };
+                            SetColor(ref run, color);
+                        }
+                        DrawChar('…', run, x, baselineY);
+                        activeRun = -1;
+                        break;
+                    }
+                    if (character.Value == '\n')
+                        continue;
+                    if (clipping && (rectWidth < 7 || x != lineStart) && x + character.Width > rect.width - 1.5f)
+                    {
+                        x += character.Width;
+                        continue;
                     }
                     if (run.Image >= 0)
                     {
@@ -716,14 +702,6 @@ namespace OpenFairy.UGUI
                 }
                 if (activeRun >= 0)
                     FinishRun(runs[activeRun], runStart, x, y, line.Height, baselineY);
-                if (ellipsis)
-                {
-                    if (placed)
-                        x += LetterSpacing;
-                    var width = DrawChar('…', ellipsisRun, x, baselineY);
-                    FinishRun(ellipsisRun, x, x + width, y, line.Height, baselineY);
-                }
-                y += line.Height + LineSpacing;
             }
 
             UpdateImages();
@@ -760,6 +738,11 @@ namespace OpenFairy.UGUI
         }
 
         private int ScaledSize(int size) => Mathf.Max(1, Mathf.FloorToInt(size * _fontSizeScale));
+
+        // 复刻 BuildLines2 的 _ellipsisCharIndex：最后一条完整容纳的已提交行末两字，或不换行时首个越界字符前两字。
+        private float _clipHeight;
+        private float _lineTop;
+        private int _ellipsisIndex;
 
         private float LetterSpacing => letterSpacing * _fontSizeScale;
 
@@ -880,6 +863,8 @@ namespace OpenFairy.UGUI
             for (var i = start; i < start + count; i++)
             {
                 var character = _characters[i];
+                if (character.Value == '\n')
+                    continue;
                 var run = _runs[character.Run];
                 if (run.Image >= 0)
                 {
@@ -917,6 +902,8 @@ namespace OpenFairy.UGUI
             _pendingCharacters.Clear();
             _characters.Clear();
             _lines.Clear();
+            _lineTop = 2;
+            _ellipsisIndex = -1;
             var x = 0f;
             var wordPossible = false;
             var wordLen = 0;
@@ -932,6 +919,8 @@ namespace OpenFairy.UGUI
                     wordPossible = false;
                     if (wrap && x > rectWidth && _pendingCharacters.Count > 1)
                         CommitLine(_pendingCharacters.Count - 1, ref x);
+                    else if (!wrap && x > rectWidth)
+                        MarkOverflow();
                     continue;
                 }
 
@@ -939,6 +928,8 @@ namespace OpenFairy.UGUI
                 {
                     if (ch == '\n')
                     {
+                        // 换行符与 FairyGUI 一样占一个零宽字符位，参与省略号定位。
+                        _pendingCharacters.Add(new Character { Run = runIndex, Value = ch });
                         CommitLine(_pendingCharacters.Count, ref x);
                         wordPossible = false;
                         continue;
@@ -972,12 +963,20 @@ namespace OpenFairy.UGUI
                             CommitLine(_pendingCharacters.Count - 1, ref x);
                         wordPossible = false;
                     }
+                    else if (!wrap && x > rectWidth)
+                        MarkOverflow();
                 }
             }
-            CommitLine(_pendingCharacters.Count, ref x);
+            CommitLine(_pendingCharacters.Count, ref x, true);
         }
 
-        private void CommitLine(int count, ref float width)
+        private void MarkOverflow()
+        {
+            if (overflowMode == OverflowMode.Ellipsis && _ellipsisIndex < 0)
+                _ellipsisIndex = _characters.Count + Math.Max(0, _pendingCharacters.Count - 3);
+        }
+
+        private void CommitLine(int count, ref float width, bool last = false)
         {
             var start = _characters.Count;
             for (var i = 0; i < count; i++)
@@ -993,6 +992,11 @@ namespace OpenFairy.UGUI
             });
             _pendingCharacters.RemoveRange(0, count);
             width = Span(_pendingCharacters, 0, _pendingCharacters.Count);
+            if (last)
+                return;
+            if (overflowMode == OverflowMode.Ellipsis && _lineTop + metrics.Height < _clipHeight)
+                _ellipsisIndex = start + Math.Max(0, count - 2);
+            _lineTop = Mathf.Max(2, _lineTop + metrics.Height + LineSpacing);
         }
     }
 }

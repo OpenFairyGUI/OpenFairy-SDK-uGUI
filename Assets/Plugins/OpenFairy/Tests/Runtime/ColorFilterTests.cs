@@ -178,7 +178,7 @@ namespace OpenFairy.UGUI.Tests
             filter.enabled = false;
             var transition = source.gameObject.AddComponent<Transition>();
             transition.items = new[] { new TransitionItem { type = TransitionItemType.ColorFilter,
-                target = source, start = new[] { .2f, .3f, -.4f, .5f } } };
+                target = source, component = filter, start = new[] { .2f, .3f, -.4f, .5f } } };
             transition.Play().Forget();
             Assert.That(filter.enabled, Is.True);
             Assert.That(filter.brightness, Is.EqualTo(.2f));

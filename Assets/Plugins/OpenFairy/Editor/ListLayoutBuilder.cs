@@ -7,9 +7,10 @@ namespace OpenFairy.UGUI.Editor
     public static class ListLayoutBuilder
     {
         // A nonvirtual row follows its children's actual widths. Virtual rows keep fixed extents.
+        // Descent draws the row in reverse sibling order; Arch cannot keep native row positions.
         public static void Configure(ListSource source)
         {
-            if (source.layout != ListLayoutType.SingleRow) return;
+            if (source.layout != ListLayoutType.SingleRow || source.renderOrder == ListRenderOrder.Arch) return;
             var content = source.content;
             if (!content.TryGetComponent<HorizontalLayoutGroup>(out var layout)) layout = content.gameObject.AddComponent<HorizontalLayoutGroup>();
             if (!content.TryGetComponent<ContentSizeFitter>(out var size)) size = content.gameObject.AddComponent<ContentSizeFitter>();
@@ -19,6 +20,7 @@ namespace OpenFairy.UGUI.Editor
             layout.childAlignment = source.alignment;
             layout.childControlWidth = layout.childControlHeight = false;
             layout.childForceExpandWidth = layout.childForceExpandHeight = false;
+            layout.reverseArrangement = source.renderOrder == ListRenderOrder.Descent;
             var viewport = source.scrollPane != null ? source.scrollPane.viewportSize : ((RectTransform)source.transform).rect.size;
             minimum.minWidth = viewport.x; minimum.minHeight = viewport.y;
             if (content != source.transform)

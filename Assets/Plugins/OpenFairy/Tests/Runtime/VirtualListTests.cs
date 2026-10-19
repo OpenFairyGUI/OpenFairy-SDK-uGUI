@@ -51,6 +51,27 @@ namespace OpenFairy.UGUI.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator Render_order_changes_drawing_but_keeps_indices_and_positions()
+        {
+            foreach (var (order, expected) in new[] { (ListRenderOrder.Descent, new[] { 4, 3, 2, 1, 0 }), (ListRenderOrder.Arch, new[] { 0, 1, 4, 3, 2 }) })
+            {
+                var source = MakeList(new Vector2(200, 300), new Vector2(200, 30), ListLayoutType.SingleColumn);
+                source.renderOrder = order;
+                source.apexIndex = 2;
+                source.Fill(5, (item, index) => item.name = index.ToString());
+                var drawn = source.content.Cast<Transform>().Select(item => int.Parse(item.name)).ToArray();
+                CollectionAssert.AreEqual(expected, drawn, order.ToString());
+                for (var i = 0; i < 5; i++)
+                {
+                    var item = source.GetItemAt(i);
+                    Assert.That(source.GetItemIndex(item), Is.EqualTo(i));
+                    Assert.That(((RectTransform)item.transform).anchoredPosition.y, Is.EqualTo(-30 * i).Within(.01f));
+                }
+            }
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator FixedRowsKeepSelectionAndRejectRecycledBindings()
         {
             var source = MakeList(new Vector2(200, 300), new Vector2(200, 30), ListLayoutType.SingleColumn);

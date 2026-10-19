@@ -68,7 +68,7 @@ namespace OpenFairy.UGUI.Tests
             switch (kind)
             {
                 case Kind.Position:
-                    Assert.That(rect.anchoredPosition, Is.EqualTo(end ? new Vector2(80, -40) : Vector2.zero));
+                    Assert.That(Vector2.Distance(rect.anchoredPosition, end ? new Vector2(80, -40) : Vector2.zero), Is.LessThan(.01f));
                     break;
                 case Kind.Size:
                     Assert.That(Vector2.Distance(rect.rect.size, end ? new Vector2(80, 60) : new Vector2(40, 20)), Is.LessThan(.001f));

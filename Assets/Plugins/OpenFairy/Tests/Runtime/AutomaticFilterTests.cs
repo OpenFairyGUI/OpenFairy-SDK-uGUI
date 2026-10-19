@@ -308,7 +308,7 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(filter.pixel.b, Is.GreaterThan(.98f));
             var transition = filter.gameObject.AddComponent<Transition>();
             transition.items = new[] { new TransitionItem { type = TransitionItemType.Color,
-                target = right.rectTransform, tween = true, duration = .05f,
+                target = right.rectTransform, component = right, tween = true, duration = .05f,
                 start = new[] { 0f, 0f, 1f, 1f }, end = new[] { 0f, 1f, 0f, 1f } } };
             var completion = transition.Play();
             for (int i = 0; i < 120 && transition.playing; i++) yield return null;

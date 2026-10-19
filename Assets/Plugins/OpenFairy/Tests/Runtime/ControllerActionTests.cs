@@ -69,7 +69,7 @@ namespace OpenFairy.UGUI.Tests
             _objects.Add(go);
             var timeline = go.AddComponent<Transition>();
             timeline.items = new[] { new TransitionItem {
-                type = TransitionItemType.Alpha, tween = true, duration = 1,
+                type = TransitionItemType.Alpha, component = go.GetComponent<CanvasGroup>(), tween = true, duration = 1,
                 ease = Ease.Linear, start = new[] { 0f }, end = new[] { 1f },
             } };
             return timeline;
@@ -289,7 +289,7 @@ namespace OpenFairy.UGUI.Tests
             var timeline = Timeline();
             var late = timeline.items[0];
             late.time = 1;
-            var early = new TransitionItem { type = TransitionItemType.Alpha, tween = true,
+            var early = new TransitionItem { type = TransitionItemType.Alpha, component = late.component, tween = true,
                 duration = .5f, start = new[] { 0f }, end = new[] { 1f }, ease = Ease.Linear };
             timeline.items = new[] { early, late };
             var order = new List<string>();

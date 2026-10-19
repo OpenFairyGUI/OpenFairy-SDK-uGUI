@@ -39,7 +39,7 @@ namespace OpenFairy.UGUI.Tests
                 configure.Invoke(null, new object[] { text, display, resource, false });
                 var path = folder + "/Panel_label_TextMaterial.mat";
                 Assert.That(original.ComputeCRC(), Is.EqualTo(crc));
-                Assert.That(text.GetComponent<TextShadow>(), Is.Null, "TMP uses its native SDF material, not BaseMeshEffect.");
+                Assert.That(text.GetComponent<UnityEngine.UI.Shadow>(), Is.Null, "TMP uses its native SDF material, not BaseMeshEffect.");
                 if (!shadow)
                 {
                     Assert.That(AssetDatabase.LoadAssetAtPath<Material>(path), Is.Null);

@@ -1,11 +1,9 @@
 using System;
-using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using DG.Tweening.Core.Easing;
 using UnityEngine;
 using UnityEngine.UI;
-using ZLinq;
 
 #if FAIRYGUI_TMPRO
 using TextComponent = TMPro.TextMeshProUGUI;
@@ -32,6 +30,7 @@ namespace OpenFairy.UGUI
         ColorFilter,
         Text,
         Skew,
+        Icon,
     }
 
     [Serializable]
@@ -48,8 +47,10 @@ namespace OpenFairy.UGUI
         public float[] start;           // NaN = 保持当前值
         public float[] end;
         public string stringValue;
+        public UnityEngine.Component component; // 烘焙的目标组件：CanvasGroup/MovieClip/嵌套 Transition/文字/Graph/Graphic/ColorAdjust
         public int playTimes = 1;
         public AudioClip sound;
+        public Sprite icon;
         public float volume = 1;
         public Vector2 positionOffset;  // FairyGUI xy → anchoredPosition 的固定偏移（pivot/anchor/拉伸锚点修正）
         public float[] pathData;
@@ -64,7 +65,6 @@ namespace OpenFairy.UGUI
         [NonSerialized] internal Vector4 ResolvedStart;
         [NonSerialized] internal Vector4 ResolvedEnd;
         [NonSerialized] internal Vector2 ShakeBase;
-        [NonSerialized] internal UnityEngine.Component RuntimeTarget;
     }
 
     // 复刻 FairyGUI Transition：时间轴上的一组 item，逐帧求值。缓动直接用 DOTween 的 EaseManager
@@ -86,8 +86,6 @@ namespace OpenFairy.UGUI
         private float _totalDuration;
         private bool _hasInfinite;
         private int _playVersion;
-
-        private static readonly List<Transition> NestedTransitions = new();
 
         // 复刻 Transition.OnOwnerAddedToStage/OnOwnerRemovedFromStage：显示时自动播放，隐藏时原地停止。
         private void OnEnable()
@@ -120,7 +118,6 @@ namespace OpenFairy.UGUI
             {
                 if (item.pathData is { Length: > 0 })
                     item.Path ??= new TransitionPath(item.pathData);
-                item.RuntimeTarget ??= ResolveTarget(item);
                 var tail = Tail(item);
                 if (float.IsPositiveInfinity(tail))
                     _hasInfinite = true;
@@ -175,8 +172,8 @@ namespace OpenFairy.UGUI
             foreach (var item in items)
                 if (item.type is TransitionItemType.Sound or TransitionItemType.Nested)
                 {
-                    if (item.Applied && item.type == TransitionItemType.Nested)
-                        ((Transition)item.RuntimeTarget).Stop(setToComplete);
+                    if (item.Applied && item.component is Transition nested)
+                        nested.Stop(setToComplete);
                     item.Applied = true; // 停止时不补播声音、不启动未到点的嵌套
                 }
                 else if (!setToComplete && item.type == TransitionItemType.Shake && item.Started && !item.Applied)
@@ -371,7 +368,7 @@ namespace OpenFairy.UGUI
                     break;
                 case TransitionItemType.Animation:
                 {
-                    var movieClip = (MovieClip)item.RuntimeTarget;
+                    var movieClip = (MovieClip)item.component;
                     movieClip.playing = item.start[1] != 0;
                     if (item.start[0] >= 0)
                         movieClip.frame = (int)item.start[0];
@@ -385,9 +382,8 @@ namespace OpenFairy.UGUI
                             source.PlayOneShot(item.sound, item.volume);
                     }
                     break;
-                case TransitionItemType.Nested:
+                case TransitionItemType.Nested when item.component is Transition nested: // 引用已失效的嵌套项不生效
                 {
-                    var nested = (Transition)item.RuntimeTarget;
                     if (item.playTimes == 0) // 复刻 FairyGUI：播放次数 0 是嵌套动效的停止点
                         nested.Stop(false);
                     else if (_reversed)
@@ -396,6 +392,13 @@ namespace OpenFairy.UGUI
                         nested.Play(item.playTimes).Forget();
                     break;
                 }
+                case TransitionItemType.Nested:
+                    break;
+                case TransitionItemType.Icon: // 复刻 GObject.icon：按钮/标签换图标，装载器换图
+                    if (item.component is ButtonBase button) button.icon = item.icon;
+                    else if (item.component is Label label) label.icon = item.icon;
+                    else ((Loader)item.component).sprite = item.icon;
+                    break;
                 case TransitionItemType.Pivot:
                 {
                     // 保持 rect 不动地改 pivot
@@ -406,7 +409,7 @@ namespace OpenFairy.UGUI
                     break;
                 }
                 case TransitionItemType.Text:
-                    ((TextComponent)item.RuntimeTarget).text = item.stringValue;
+                    ((TextComponent)item.component).text = item.stringValue;
                     break;
                 default:
                     ApplyValue(item, Resolve(item, item.start));
@@ -430,22 +433,22 @@ namespace OpenFairy.UGUI
                     rt.localScale = new Vector3(value[0], value[1], 1);
                     break;
                 case TransitionItemType.Alpha:
-                    ((CanvasGroup)item.RuntimeTarget).alpha = value[0];
+                    ((CanvasGroup)item.component).alpha = value[0];
                     break;
                 case TransitionItemType.Rotation:
                     rt.localEulerAngles = new Vector3(0, 0, -value[0]);
                     break;
                 case TransitionItemType.Skew:
-                    var skewShape = (Graph)item.RuntimeTarget; // 目前仅 Graph 支持逐顶点 skew
+                    var skewShape = (Graph)item.component; // 目前仅 Graph 支持逐顶点 skew
                     skewShape.skew = new Vector2(value[0], value[1]);
                     skewShape.SetVerticesDirty();
                     break;
                 case TransitionItemType.Color:
-                    ((Graphic)item.RuntimeTarget).color = new Color(value[0], value[1], value[2], value[3]);
+                    ((Graphic)item.component).color = new Color(value[0], value[1], value[2], value[3]);
                     break;
                 case TransitionItemType.ColorFilter:
                     // ColorAdjust 由 Migrate 烘焙在 ColorFilter 目标上。
-                    ((ColorAdjust)item.RuntimeTarget).Set(value[0], value[1], value[2], value[3]);
+                    ((ColorAdjust)item.component).Set(value[0], value[1], value[2], value[3]);
                     break;
             }
         }
@@ -468,36 +471,11 @@ namespace OpenFairy.UGUI
                     : -(rt.anchoredPosition.y - item.positionOffset.y),
                 TransitionItemType.Size => index == 0 ? rt.rect.width : rt.rect.height,
                 TransitionItemType.Scale => index == 0 ? rt.localScale.x : rt.localScale.y,
-                TransitionItemType.Alpha => ((CanvasGroup)item.RuntimeTarget).alpha,
+                TransitionItemType.Alpha => ((CanvasGroup)item.component).alpha,
                 TransitionItemType.Rotation => -rt.localEulerAngles.z,
-                TransitionItemType.Skew => index == 0 ? ((Graph)item.RuntimeTarget).skew.x : ((Graph)item.RuntimeTarget).skew.y,
+                TransitionItemType.Skew => index == 0 ? ((Graph)item.component).skew.x : ((Graph)item.component).skew.y,
                 _ => 0,
             };
-        }
-
-        private UnityEngine.Component ResolveTarget(TransitionItem item)
-        {
-            var target = Target(item);
-            return item.type switch
-            {
-                TransitionItemType.Alpha => target.GetComponent<CanvasGroup>(),
-                TransitionItemType.Animation => target.GetComponent<MovieClip>(),
-                TransitionItemType.Nested => FindNested(target, item.stringValue),
-                TransitionItemType.Text => target.GetComponent<TextComponent>(),
-                TransitionItemType.Skew => target.GetComponent<Graph>(),
-                TransitionItemType.Color => target.GetComponent<Graphic>(),
-                TransitionItemType.ColorFilter => target.GetComponent<ColorAdjust>(),
-                _ => null,
-            };
-        }
-
-        private static Transition FindNested(RectTransform target, string name)
-        {
-            NestedTransitions.Clear();
-            target.GetComponents(NestedTransitions);
-            var result = NestedTransitions.AsValueEnumerable().FirstOrDefault(t => t.transitionName == name);
-            NestedTransitions.Clear();
-            return result;
         }
 
         private RectTransform Target(TransitionItem item) =>
