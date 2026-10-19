@@ -52,7 +52,8 @@ namespace OpenFairy.UGUI.Tests
             material.DisableKeyword("UNDERLAY_ON"); material.DisableKeyword("UNDERLAY_INNER");
             material.SetFloat("_OutlineWidth", 0); material.SetColor("_FaceColor", Color.white);
             text.fontSharedMaterial = material; text.text = "MM";
-            _target = Own(new RenderTexture(256, 128, 24, RenderTextureFormat.ARGB32) { antiAliasing = 1 }); _target.Create();
+            // 线性目标：读回值与混合结果成正比，不受工程色彩空间的 sRGB 编码影响。
+            _target = Own(new RenderTexture(256, 128, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) { antiAliasing = 1 }); _target.Create();
             return text;
         }
         private float Darkness(TextMeshProUGUI text, string imageName)

@@ -163,7 +163,7 @@ namespace OpenFairy.UGUI.Tests
                 var child = new GameObject("child", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
                 child.transform.SetParent(go.transform, false);
 
-                apply.Invoke(null, new[] { go, displays.GetValue(i) });
+                apply.Invoke(null, new[] { go, displays.GetValue(i), null }); // 非组件元素不读取所属资源
 
                 var effects = go.GetComponentsInChildren<BlendModeEffect>(true);
                 Assert.AreEqual(2, effects.Length, tags[i]);
@@ -208,18 +208,11 @@ namespace OpenFairy.UGUI.Tests
             foreach (var path in Directory.GetFiles(scriptRoot, "*.cs", SearchOption.AllDirectories))
             {
                 var code = File.ReadAllText(path);
+                // 生成的类型引用（含同包组件）一律 global:: 限定，作者命名的类型/命名空间与嵌套枚举无法遮蔽。
                 var ambiguousPackageType = false;
-                var redundantSamePackageType = false;
-                var currentNamespace = code.Split('\n').AsValueEnumerable()
-                    .First(line => line.StartsWith("namespace "))["namespace ".Length..].Trim();
                 foreach (var line in code.Split('\n'))
                 {
                     var field = line.Trim();
-                    if (field.StartsWith($"public global::{currentNamespace}."))
-                    {
-                        redundantSamePackageType = true;
-                        break;
-                    }
                     if (field.StartsWith("public ") && field.EndsWith(";") && field.Contains(".")
                         && !field.StartsWith("public global::") && !field.StartsWith("public OpenFairy.UGUI.") && !field.StartsWith("public UnityEngine."))
                     {
@@ -228,10 +221,10 @@ namespace OpenFairy.UGUI.Tests
                     }
                 }
                 if (code.Contains("namespace UI.") || code.Contains("OpenFairy.UGUI.Text ") || code.Contains("OpenFairy.UGUI.Shape ") || code.Contains("OpenFairy.UGUI.InputText ")
-                    || code.Contains("public Image ") || code.Contains("public RectTransform ") || ambiguousPackageType || redundantSamePackageType)
+                    || code.Contains("public Image ") || code.Contains("public RectTransform ") || ambiguousPackageType)
                     failures.Add(Path.GetRelativePath(scriptRoot, path));
             }
-            Assert.IsEmpty(failures, "Generated scripts contain old, ambiguous, or redundantly qualified same-package types:\n" + string.Join("\n", failures));
+            Assert.IsEmpty(failures, "Generated scripts contain old or ambiguous types:\n" + string.Join("\n", failures));
 #endif
         }
 

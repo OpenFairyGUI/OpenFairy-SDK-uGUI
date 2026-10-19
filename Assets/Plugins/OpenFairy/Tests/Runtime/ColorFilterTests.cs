@@ -92,10 +92,14 @@ namespace OpenFairy.UGUI.Tests
                 RenderTexture.active = texture;
                 read.ReadPixels(new UnityEngine.Rect(0, 0, texture.width, texture.height), 0, 0);
                 read.Apply();
-                return read.GetPixel(texture.width / 2, texture.height / 2);
+                var color = read.GetPixel(texture.width / 2, texture.height / 2);
+                return texture.sRGB ? color.linear : color;
             }
             finally { RenderTexture.active = active; }
         }
+
+        // 作者颜色在工程色彩空间中参与运算：线性工程里 Canvas 先把顶点色转为线性。
+        private static Color Working(Color color) => QualitySettings.activeColorSpace == ColorSpace.Linear ? color.linear : color;
 
         [UnityTearDown]
         public IEnumerator TearDown()
@@ -112,7 +116,6 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Direct_image_preserves_alpha_stencil_and_restores_its_original_material()
         {
-            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             var source = Source();
             var image = Image(source, new Color(.2f, .4f, .8f, .5f));
             var original = image.material;
@@ -130,10 +133,11 @@ namespace OpenFairy.UGUI.Tests
             texture.Create();
             using (var capture = new UiObjectCapture(source, Shader("OpenFairy/UI Capture"), 31)) capture.Capture(texture, Render);
             var color = Read(texture);
+            var authored = Working(image.color);
             Assert.That(color.a, Is.EqualTo(.5f).Within(.025));
-            Assert.That(color.r, Is.EqualTo(.2f).Within(.025));
-            Assert.That(color.g, Is.EqualTo(.3f).Within(.025));
-            Assert.That(color.b, Is.EqualTo(.5f).Within(.025));
+            Assert.That(color.r, Is.EqualTo((authored.r + .2f) * .5f).Within(.025));
+            Assert.That(color.g, Is.EqualTo((authored.g + .2f) * .5f).Within(.025));
+            Assert.That(color.b, Is.EqualTo((authored.b + .2f) * .5f).Within(.025));
             filter.enabled = false;
             Assert.That(filter.GetModifiedMaterial(original), Is.SameAs(original));
             Assert.That(image.raycastTarget, Is.True);
@@ -142,7 +146,6 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator Container_transforms_the_composited_color_once_and_releases_without_hiding_input()
         {
-            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             var source = Source();
             var group = source.gameObject.AddComponent<CanvasGroup>();
             group.alpha = .35f;
@@ -153,9 +156,11 @@ namespace OpenFairy.UGUI.Tests
             yield return null;
             filter.Refresh(Render);
             var color = Read(filter.texture);
-            Assert.That(color.r, Is.EqualTo(.5980392f).Within(.025));
-            Assert.That(color.g, Is.EqualTo(0).Within(.025));
-            Assert.That(color.b, Is.EqualTo(.4980392f).Within(.025));
+            // 半透明 front 叠在不透明 back 上，再按对比度 1 的矩阵（×2，偏移 -128/255）变换。
+            var composite = Working(front.color) * .5f + Working(back.color) * .5f;
+            Assert.That(color.r, Is.EqualTo(Mathf.Clamp01(composite.r * 2 - 128f / 255)).Within(.025));
+            Assert.That(color.g, Is.EqualTo(Mathf.Clamp01(composite.g * 2 - 128f / 255)).Within(.025));
+            Assert.That(color.b, Is.EqualTo(Mathf.Clamp01(composite.b * 2 - 128f / 255)).Within(.025));
             Assert.That(color.a, Is.EqualTo(1).Within(.025));
             Assert.That(filter.presentationGroup.alpha, Is.EqualTo(.35f));
             Assert.That(filter.presentation.raycastTarget, Is.False);

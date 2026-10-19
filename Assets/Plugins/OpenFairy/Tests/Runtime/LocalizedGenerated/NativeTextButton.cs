@@ -13,13 +13,6 @@ namespace OpenFairyTextFixtures.NativeTextFixture
 {
     public partial class NativeTextButton : global::OpenFairy.UGUI.Button<NativeTextButton.button>
     {
-        protected override button? StatePage(VisualState state) => state switch
-        {
-            VisualState.Up => button.up,
-            VisualState.Over => button.over,
-            VisualState.Down => button.down,
-            _ => null,
-        };
         public enum button
         {
             up,
@@ -56,6 +49,15 @@ namespace OpenFairyTextFixtures.NativeTextFixture
         public OpenFairyTextComponent m_title;
         public global::UnityEngine.RectTransform m_FirstGroup;
         public global::UnityEngine.RectTransform m_SecondGroup;
+
+        protected override button? StatePage(VisualState state) => state switch
+        {
+            VisualState.Up => button.up,
+            VisualState.Down => button.down,
+            VisualState.Over => button.over,
+            VisualState.SelectedOver => button.selectedOver,
+            _ => null,
+        };
 [global::System.Serializable]
 public sealed class LocalizedCaptionTexts
 {

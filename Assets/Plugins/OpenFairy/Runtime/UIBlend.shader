@@ -76,19 +76,18 @@ Shader "OpenFairy/UI Blend"
                 float4 worldPosition : TEXCOORD1;
             };
 
+            int _UIVertexColorAlwaysGammaSpace;
+
             v2f vert(appdata_t v)
             {
                 v2f o;
                 o.worldPosition = v.vertex;
                 o.vertex = UnityObjectToClipPos(o.worldPosition);
                 o.texcoord = v.texcoord;
-#if !defined(UNITY_COLORSPACE_GAMMA) && (UNITY_VERSION >= 550)
-                o.color.rgb = GammaToLinearSpace(v.color.rgb);
-                o.color.a = v.color.a;
-#else
-                o.color = v.color;
-#endif
-                o.color *= _Color;
+                // 同 uGUI UI-Default：线性空间下 Canvas 已在 CPU 把顶点色转为线性，仅 vertexColorAlwaysGammaSpace 时由着色器转换。
+                if (_UIVertexColorAlwaysGammaSpace && !IsGammaSpace())
+                    v.color.rgb = UIGammaToLinear(v.color.rgb);
+                o.color = v.color * _Color;
                 return o;
             }
 

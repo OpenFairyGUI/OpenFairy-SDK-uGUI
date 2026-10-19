@@ -184,7 +184,7 @@ AI 操作流程：
 - `GGroup` 布局：子物体在烘焙期已绝对定位，组内相对布局在编辑器就解算完。组级 alpha/显隐用 `GearLook`/`GearDisplay` 逐 target 传播（`CanvasGroup`），不单造 runtime group。
 
 **转换器健壮性整改（对非 demo 的真实 FairyGUI 工程）**
-- 包名/空名进 C# 标识符前统一过 `Identifier`：`namespace {包}`、跨包组件类型、`FindType` 三处都 sanitize，避免带空格/连字符/数字开头的包名（如 `My UI`/`2048`）生成不可编译代码；同包组件字段使用短类型名，跨包字段使用 `global::{包}.{组件}`，避免目标包命名空间被同名组件类遮蔽；包命名空间进入全局后，既有同名外部类型也必须全限定（如 `UnityEngine.RenderTexture`、`FairyGUI.Emoji`/`Transition`/`TypingEffect`）。
+- 包名/空名进 C# 标识符前统一过 `Identifier`：`namespace {包}`、跨包组件类型、`FindType` 三处都 sanitize，避免带空格/连字符/数字开头的包名（如 `My UI`/`2048`）生成不可编译代码；组件字段（含同包）统一使用 `global::{包}.{组件}`，避免目标包命名空间被同名组件类或生成的嵌套枚举遮蔽；包命名空间进入全局后，既有同名外部类型也必须全限定（如 `UnityEngine.RenderTexture`、`FairyGUI.Emoji`/`Transition`/`TypingEffect`）。
 - list 的 `<item>` 不再假定是 button：`ConfigureButton` 找不到按钮面时跳过，支持 defaultItem 为普通 component/label 的列表。
 - gear 的 `pages` 引到控制器已删除的陈旧页 id 时跳过该槽（`Array.IndexOf==-1` 不再越界），对齐 transition 侧已有的 stale-target 防护。
 - `Image`/`RectTransform` 子物体字段类型改全限定（`UnityEngine.UI.Image`/`UnityEngine.RectTransform`），避免组件命名为 `Image`/`RectTransform` 时字段类型被外层类遮蔽。

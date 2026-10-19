@@ -24,7 +24,8 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(_folder, Is.Null);
             var key = "__PublishItems_" + Guid.NewGuid().ToString("N");
             _folder = "Assets/UIProject/Assets/" + key;
-            AssetDatabase.CreateFolder("Assets/UIProject/Assets", key);
+            Directory.CreateDirectory(_folder);
+            AssetDatabase.ImportAsset(_folder);
             var source = Path.GetTempFileName();
             var resources = (IDictionary)typeof(Migrate).GetField("Resources", PrivateStatic).GetValue(null);
             var prefabs = (IDictionary)typeof(Migrate).GetField("Prefabs", PrivateStatic).GetValue(null);

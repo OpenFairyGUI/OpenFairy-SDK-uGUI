@@ -7,7 +7,7 @@ namespace OpenFairy.UGUI.Example
     // UIConfig.defaultFont = "Microsoft YaHei"）。显式指定字体（Comic Sans 等）与位图字体不受影响。
     public static class DemoFont
     {
-        public const string Design = "Heiti SC Medium";
+        public const string Design = "Heiti SC Medium,SimSun"; // Common.json 的设计期字体（含回退列表），烘焙原样写入 fontNames
         public const string Runtime = "Microsoft YaHei";
 
         private static Font _font;

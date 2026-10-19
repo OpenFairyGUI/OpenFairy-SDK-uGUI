@@ -20,11 +20,12 @@
 - Transition 倒放交换起止值、缓动正向推进；重播前先完成上一轮；autoPlay 随启用重播、停用时原地停止（Shake 归位）。Gear tween 终点不变时继续、改变时先完成再重起；GearLook 旋转按不取模角度线性插值。
 - Builtin TextField：字距只加在有宽度字形之间并随缩放，行距随缩放；Shrink 改为 DoShrink 算法；裁剪按完整高度；空文本 0×0；UBB 标签不分大小写、支持 `\[` 转义、未实现样式的标签被消费而非原样输出；链接保留外层颜色。行内图片按运行时同一标签口径烘焙，陈旧图片标签在导入期移除。
 - 导入：置灰按 disabled 页 → grayed 控制器 → 灰度滤镜的顺序，只取其一；解析 `fillOrigin`；TMP 输入框去掉底框与内边距，TMP 字距/行距换算为 em 单位。删除无用转发与死代码（`ControllerBinding`、`HidesRuntimeMember`、`Transition.SetHook(string)`、`TextRendering.SetBestFit` 等），六处编辑态销毁合并为一处。
-- 验证：窗口模式 Editor 下 Builtin 套件 **191/191 EditMode**、**PlayMode 190 通过 / 0 失败 / 6 不确定**。原先 12 项像素断言的失败来自线性色彩空间：其中 6 项只是用 sRGB 渲染目标回读，改为线性渲染目标后通过；另 6 项的期望值按 Gamma 空间混合计算，工程临时切到 Gamma 后 12/12 通过，现以 Assume 声明该前提。FairyGUI 与 OpenFairy 的颜色矩阵着色器在线性工程中同样先把顶点色转到线性空间，两者一致。GearClock 位置断言改为与尺寸一致的容差。
-- Demo 全流程（Migrate 199 个组件 → FairyGUI 对照截图 27 页 → 全部 PlayMode 测试）在窗口模式 Editor 中跑通：当前 **296 通过 / 48 未通过（含 6 项 Gamma 前提不确定）**，原始代码同流程 **283 / 61**；除 6 项改为不确定外无新增失败，13 项转为通过。静态对照 11 页的坏像素比例与原始代码逐位相同（Button 略降），差异集中在字形抗锯齿边缘；其余未通过的 Demo 交互/导航测试在原始代码上同样失败。
-- 修复生成代码：名为 page/controller 的控制器字段会被 Get/SetControllerPage 的同名参数遮蔽导致编译失败（Bag/BagWin），生成的控制器访问统一经 this。Demo 工程 Publish.json 恢复为 Demo 胶水与对照测试所依赖的 memberNamePrefix="m_"、ignoreNoname=false。
-- Windows 64 位 Player 构建成功（Build Finished, Result: Success）。
-- TMP 后端 EditMode 整套（窗口模式，临时启用 FAIRYGUI_TMPRO 与 TMP Essential Resources）：当前 204/218，原始代码同环境 202/216，未通过集合逐项相同（14 项均为 Essential Resources 自带字体资产缺少 m_SourceFontFile 的环境问题），无新增失败。AutoClearItems 导入测试要求 Assets/UIProject/Assets 已存在（即已跑过 Migrate），空工程首测会因 CreateFolder 父目录缺失失败。临时导入 TMP Essential Resources 后 TMP PlayMode 与原始代码对照 **175/221 对 169/215**，失败集合相同（批处理渲染帧与缺源字体的 TMP 默认字体），新增描边与标记转换回归在该环境通过；TMP EditMode 在批处理下改动前后均运行出错。传统 Demo/golden、TMP 完整套件与 Player 未重跑；更新 SDK 后需重新 Migrate。
+- 验证（窗口模式 Editor，全部无失败/跳过/不确定）：Builtin EditMode **192/192**；Demo 全流程（Migrate 199 个组件 → FairyGUI 对照截图 27 页 → 全部 PlayMode，含 SDK 与 Demo 程序集、11 页静态 golden）**350/350**；TMP 后端（临时启用 FAIRYGUI_TMPRO、TMP Essential Resources，默认字体资产设为动态并指定源字体）EditMode **218/218**、PlayMode **223/223**；Windows 64 位 Player 构建成功。
+- 线性色彩空间修正：Canvas 在线性工程中已于 CPU 把顶点色转为线性，OpenFairy 的 ColorMatrix/Blend/Grayscale 着色器原先再次转换，滤镜/混合/灰显的颜色偏暗。现与 uGUI UI-Default 一致，仅 vertexColorAlwaysGammaSpace 时在着色器中转换；像素测试按工程色彩空间计算期望并解码 sRGB 读回，不再只在 Gamma 下运行。
+- 滚轮滚动复刻 ScrollPane：位置直接钳在可滚范围内，不越界回弹。
+- Builtin 输入框的文字组件改为 TextField，按 fontNames 在运行时取系统字体；原生 Text 在系统字体下烘焙为空字体，输入框既不显示文字也无法聚焦。
+- 生成代码中名为 page/controller 的控制器字段会被 Get/SetControllerPage 的同名参数遮蔽（Bag/BagWin 编译失败），生成的控制器访问统一经 this。Demo 工程 Publish.json 恢复 memberNamePrefix="m_"、ignoreNoname=false。
+- 测试环境修正：交互测试相机渲进页尺寸目标，射线不再依赖 Game 视图尺寸（竖向窄 Game 视图曾令全部导航/交互射线落空）；Demo 字体替换按烘焙的完整设计字体列表（Heiti SC Medium,SimSun）匹配，静态 golden 对照恢复同字体；导入测试自建输出目录，不依赖先跑 Migrate；随实现演进过时的断言（同包类型 global:: 限定、ApplyElement 签名、原生 ScrollRect、grayed 仅决定视觉、GButton.icon 保存值、Fill 不清理项监听）与生成器顺序的 StatePage 夹具已更新。更新 SDK 后需重新 Migrate。
 
 ### 2026-10-19 生成式名称与引用
 

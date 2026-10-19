@@ -25,7 +25,8 @@ namespace OpenFairy.UGUI.Tests.Editor
         {
             var key = "__ListClip_" + Guid.NewGuid().ToString("N");
             var output = "Assets/UIProject/Assets/" + key;
-            AssetDatabase.CreateFolder("Assets/UIProject/Assets", key);
+            Directory.CreateDirectory(output);
+            AssetDatabase.ImportAsset(output);
             var sourceFile = Path.GetTempFileName();
             var resources = (IDictionary)typeof(Migrate).GetField("Resources", PrivateStatic).GetValue(null);
             var settingsField = typeof(Migrate).GetField("_settings", PrivateStatic);

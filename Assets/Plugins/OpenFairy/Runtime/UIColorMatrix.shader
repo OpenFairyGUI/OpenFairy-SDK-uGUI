@@ -81,6 +81,8 @@ Shader "OpenFairy/UI ColorMatrix"
                 half4 mask : TEXCOORD1;
             };
 
+            int _UIVertexColorAlwaysGammaSpace;
+
             v2f vert(appdata_t v)
             {
                 v2f o;
@@ -90,13 +92,10 @@ Shader "OpenFairy/UI ColorMatrix"
                 o.mask = half4(v.vertex.xy * 2 - rect.xy - rect.zw,
                     0.25 / (0.25 * half2(_UIMaskSoftnessX, _UIMaskSoftnessY) + abs(pixelSize)));
                 o.texcoord = v.texcoord;
-#if !defined(UNITY_COLORSPACE_GAMMA) && (UNITY_VERSION >= 550)
-                o.color.rgb = GammaToLinearSpace(v.color.rgb);
-                o.color.a = v.color.a;
-#else
-                o.color = v.color;
-#endif
-                o.color *= _Color;
+                // 同 uGUI UI-Default：线性空间下 Canvas 已在 CPU 把顶点色转为线性，仅 vertexColorAlwaysGammaSpace 时由着色器转换。
+                if (_UIVertexColorAlwaysGammaSpace && !IsGammaSpace())
+                    v.color.rgb = UIGammaToLinear(v.color.rgb);
+                o.color = v.color * _Color;
                 return o;
             }
 

@@ -247,7 +247,7 @@ namespace OpenFairy.UGUI
             StopMovement();
             RefreshContent();
             base.OnScroll(data);
-            Notify();
+            SetPosition(position); // 复刻 ScrollPane 滚轮：位置直接钳在可滚范围内，不越界回弹
             _needsSnap = snapToItem || pageMode;
         }
 

@@ -85,6 +85,7 @@ namespace OpenFairy.UGUI.Tests
             {
                 RenderTexture.active = source;
                 texture.ReadPixels(new UnityEngine.Rect(0, 0, source.width, source.height), 0, 0);
+                if (source.sRGB) texture.SetPixels(Array.ConvertAll(texture.GetPixels(), color => color.linear));
                 texture.Apply();
                 return texture;
             }
@@ -268,14 +269,12 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator StencilColorCaptureKeepsSourceMaterialsAndPopAcrossFrames()
         {
-            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             yield return StencilModifierLifetime(false);
         }
 
         [UnityTest]
         public IEnumerator StencilBlendCaptureKeepsSourceMaterialsAndPopAcrossFrames()
         {
-            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             yield return StencilModifierLifetime(true);
         }
 
@@ -360,8 +359,8 @@ namespace OpenFairy.UGUI.Tests
             return effect;
         }
 
-        private static Color BlendInput(Color color, BlendMode mode)
-            => mode != BlendMode.Normal && QualitySettings.activeColorSpace == ColorSpace.Linear ? color.linear : color;
+        // 作者颜色在工程色彩空间中参与混合：线性工程里 Canvas 先把顶点色转为线性。
+        private static Color Working(Color color) => QualitySettings.activeColorSpace == ColorSpace.Linear ? color.linear : color;
 
         private static Color IsolatedBlendReference(BlendMode mode, Color source, Color destination)
         {
@@ -399,7 +398,6 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator AuthoredBlendModesKeepRgbFactorsAndIsolatedCaptureCoverage()
         {
-            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             var root = MakeRoot();
             var background = Image(root, new Vector2(100, 100), new Color(.4f, .2f, .6f, .5f));
             var foreground = Image(root, new Vector2(100, 100), new Color(.4f, .7f, .2f, .4f));
@@ -408,12 +406,13 @@ namespace OpenFairy.UGUI.Tests
             yield return null;
             var capture = Capture(root);
             var rt = Destination();
-            var destination = new Color(.2f, .1f, .3f, .5f);
+            var back = Working(background.color);
+            var destination = new Color(back.r * back.a, back.g * back.a, back.b * back.a, back.a);
             foreach (BlendMode mode in Enum.GetValues(typeof(BlendMode)))
             {
                 effect.blendMode = mode;
                 capture.Capture(rt, Render, localBounds: root.rect);
-                var expected = IsolatedBlendReference(mode, BlendInput(foreground.color, mode), destination);
+                var expected = IsolatedBlendReference(mode, Working(foreground.color), destination);
                 AssertRgba(At(Read(rt), capture.bounds, new Vector2(12, 8)), expected, mode.ToString());
             }
             // Alpha zero is a real active additive graphic, not a reason to skip its mode.
@@ -428,7 +427,6 @@ namespace OpenFairy.UGUI.Tests
         [UnityTest]
         public IEnumerator GrayedAdditiveEmissionAndScreenCompositeOnceOverANonblackBackdrop()
         {
-            Assume.That(QualitySettings.activeColorSpace, Is.EqualTo(ColorSpace.Gamma), "The expected values are gamma-space blend results.");
             var root = MakeRoot();
             var canvas = root.parent.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
@@ -473,7 +471,7 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(baseline.b, Is.GreaterThan(.1f), "The backdrop positive control must be visible and nonblack.");
             root.gameObject.SetActive(true);
             filter.Refresh(Render);
-            var source = BlendInput(image.color, BlendMode.Add);
+            var source = Working(image.color);
             float emission = (.299f * source.r + .587f * source.g + .114f * source.b) * source.a;
             var captured = Read(filter.texture).GetPixel(76, 72);
             AssertRgba(captured, new Color(emission, emission, emission, 0), "Gray preserves zero-coverage emission");

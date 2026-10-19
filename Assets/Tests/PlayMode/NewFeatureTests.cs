@@ -130,15 +130,16 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [Test]
-        public void Button_icon_is_optional_when_template_has_no_icon_loader()
+        public void Button_icon_is_kept_when_template_has_no_icon_loader()
         {
             var go = new GameObject("button", typeof(RectTransform));
             var button = go.AddComponent<TestButton>();
             var texture = new Texture2D(1, 1);
             var sprite = Sprite.Create(texture, new Rect(0, 0, 1, 1), Vector2.zero);
 
+            // 复刻 GButton.icon：没有图标对象时仍保存设置的值。
             Assert.DoesNotThrow(() => button.icon = sprite);
-            Assert.IsNull(button.icon);
+            Assert.AreSame(sprite, button.icon);
 
             Object.DestroyImmediate(sprite);
             Object.DestroyImmediate(texture);
@@ -619,23 +620,22 @@ namespace OpenFairy.UGUI.Tests
             var selection = root.gameObject.AddComponent<ListSelection>();
             selection.selectionMode = ListSelectionMode.Multiple;
             var clicked = -1;
-            selection.onClickItem.AddListener(i => clicked = i);
-            ScrollPane.Attach(root);
+            var clicks = 0;
+            selection.onClickItem.AddListener(i => { clicked = i; clicks++; });
+            var pane = ScrollPane.Attach(root);
             yield return null;
 
             source.Fill(3, (item, _) => item.GetComponent<TestButton>().mode = ButtonMode.Check);
             selection.Rebind(); // 第二次重绑不应留下重复 listener
             var content = viewport.Find("content") as RectTransform;
-            var hit = content.GetChild(0) as RectTransform;
-            Assert.IsNotNull(hit, "ListSource.Fill 不应删除 ScrollPane 的透明命中面");
-            Assert.AreEqual("__scrollHit", hit.name, "ScrollPane 的保留命中面应仍在 content 内");
-            Assert.AreEqual(0, hit.GetSiblingIndex(), "命中面应保持在最底层，不遮住列表项");
-            Assert.GreaterOrEqual(hit.sizeDelta.y, 120f, "命中面高度应随重填后的内容刷新");
+            Assert.AreEqual(3, content.GetComponentsInChildren<TestButton>(false).Length, "重填的项应落在原生 ScrollRect 的 content 内");
+            Assert.GreaterOrEqual(pane.contentSize.y, 120f, "内容尺寸应随重填刷新，才能滚到末项");
 
             var button = content.GetComponentsInChildren<TestButton>(true).AsValueEnumerable().First();
             button.OnPointerClick(new PointerEventData(EventSystem.current));
             Assert.IsTrue(button.selected, "ListSelection 重绑后应由列表选择逻辑选中项");
-            Assert.AreEqual(0, clicked, "onClickItem 应按当前动态项索引触发一次");
+            Assert.AreEqual(0, clicked, "onClickItem 应按当前动态项索引触发");
+            Assert.AreEqual(1, clicks, "重绑不应留下重复 listener");
             Assert.IsFalse(button.changeStateOnClick, "列表项自身翻转应关闭，避免和 ListSelection 双翻");
 
             Object.Destroy(itemPrefab);
@@ -643,7 +643,7 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [UnityTest]
-        public IEnumerator List_fill_reuses_pooled_items_and_clears_runtime_listeners()
+        public IEnumerator List_fill_reuses_pooled_items_and_keeps_item_listeners()
         {
             var root = Child(_rig.CanvasRt, "list", Vector2.zero, new Vector2(100, 100), false);
             var itemPrefab = new GameObject("item", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image), typeof(TestButton));
@@ -659,14 +659,20 @@ namespace OpenFairy.UGUI.Tests
             first[0].onClick.Invoke();
             Assert.AreEqual(1, fired, "第一次填充的 listener 应触发一次");
 
+            // 回收不清项上的 UnityEvent（业务 Awake 注册的监听须保留），每次绑定的业务监听由 Fill 回调自行替换。
             fired = 0;
-            source.Fill(2, (item, i) => item.GetComponent<TestButton>().onClick.AddListener(() => fired += 10 + i));
+            source.Fill(2, (item, i) =>
+            {
+                var onClick = item.GetComponent<TestButton>().onClick;
+                onClick.RemoveAllListeners();
+                onClick.AddListener(() => fired += 10 + i);
+            });
             var second = root.GetComponentsInChildren<TestButton>(false).AsValueEnumerable().OrderBy(button => button.transform.GetSiblingIndex()).ToArray();
             CollectionAssert.AreEquivalent(first, second, "ListSource.Fill 应复用整批 item，而不是销毁重建");
             Assert.AreEqual("__listPool", root.GetChild(root.childCount - 1).name, "池根应留在末尾，不污染可见 item 顺序");
 
             second[0].onClick.Invoke();
-            Assert.AreEqual(10, fired, "复用 item 时旧 listener 应被清掉，只触发本轮 setup 的 listener");
+            Assert.AreEqual(10, fired, "复用 item 时只触发本轮 setup 替换后的 listener");
 
             Object.Destroy(itemPrefab);
             Object.Destroy(root.gameObject);
@@ -763,15 +769,16 @@ namespace OpenFairy.UGUI.Tests
             };
             gear.Apply(RadioPage.down);
             yield return null;
-            Assert.IsTrue(button.grayed, "GearLook 置灰应把按钮 grayed 置 true（进 disabled 页、拦截点击）");
+            Assert.IsTrue(button.grayed, "GearLook 置灰应把按钮 grayed 置 true（进 disabled 页）");
 
+            // 复刻 FairyGUI：grayed 只决定视觉，触摸由 touchable 独立控制；此页 touchable 为 true，点击照常派发。
             var fired = false;
             button.onClick.AddListener(() => fired = true);
             button.OnPointerClick(new PointerEventData(EventSystem.current));
-            Assert.IsFalse(fired, "grayed 按钮点击应被拦截，不发 onClick");
+            Assert.IsTrue(fired, "grayed 但可触摸的按钮点击应照常派发 onClick");
 
             gear.Apply(RadioPage.up);
-            Assert.IsFalse(button.grayed, "非置灰页应恢复可点");
+            Assert.IsFalse(button.grayed, "非置灰页应恢复非灰显");
             Object.Destroy(buttonGo.gameObject);
         }
 

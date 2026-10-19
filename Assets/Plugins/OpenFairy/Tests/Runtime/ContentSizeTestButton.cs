@@ -13,12 +13,6 @@ namespace OpenFairy.UGUI.Tests
 {
     public partial class ContentSizeTestButton : global::OpenFairy.UGUI.Button<ContentSizeTestButton.button>
     {
-        protected override button? StatePage(VisualState state) => state switch
-        {
-            VisualState.Up => button.up,
-            VisualState.Down => button.down,
-            _ => null,
-        };
         public enum button
         {
             up,
@@ -51,6 +45,13 @@ namespace OpenFairy.UGUI.Tests
             this.m_button.Initialize();
         }
         public OpenFairyTextComponent m_title;
+
+        protected override button? StatePage(VisualState state) => state switch
+        {
+            VisualState.Up => button.up,
+            VisualState.Down => button.down,
+            _ => null,
+        };
 [global::UnityEngine.SerializeReference] private global::OpenFairy.UGUI.GearText<button> _localizedGear1_0 = null;
 [global::System.Serializable]
 public sealed class LocalizedCaptionTexts

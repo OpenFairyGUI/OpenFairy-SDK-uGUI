@@ -94,7 +94,7 @@ namespace OpenFairy.UGUI.TestSupport
             // 与 FairyGUI 参照侧的 UIConfig.defaultFont = "Microsoft YaHei" 同字体，否则像素对比全崩。
             foreach (var text in _instance.GetComponentsInChildren<OpenFairy.UGUI.TextField>(true))
             {
-                if (text.fontNames == "Heiti SC Medium")
+                if (text.fontNames == "Heiti SC Medium,SimSun")
                 {
                     text.fontNames = "Microsoft YaHei";
                     text.font = _runtimeFont = _runtimeFont ? _runtimeFont : Font.CreateDynamicFontFromOSFont("Microsoft YaHei", 16);
@@ -112,8 +112,12 @@ namespace OpenFairy.UGUI.TestSupport
         }
 
         // 相机摆位：正交、覆盖整页，画布左上角落在 world 原点（与快照/截图坐标约定一致）。
+        // 相机渲进页尺寸的目标，屏幕坐标即页像素坐标，射线与截图都不受 Game 视图尺寸影响。
         public void PlaceCamera()
         {
+            if (_camera.targetTexture != null)
+                UnityEngine.RenderTexture.ReleaseTemporary(_camera.targetTexture);
+            _camera.targetTexture = UnityEngine.RenderTexture.GetTemporary(_size.x, _size.y, 24, RenderTextureFormat.ARGB32);
             _camera.orthographicSize = _size.y * 0.5f;
             _camera.transform.position = new Vector3(_size.x * 0.5f, -_size.y * 0.5f, -10);
         }
@@ -123,8 +127,7 @@ namespace OpenFairy.UGUI.TestSupport
             PlaceCamera();
             Canvas.ForceUpdateCanvases();
 
-            var rt = UnityEngine.RenderTexture.GetTemporary(_size.x, _size.y, 24, RenderTextureFormat.ARGB32);
-            _camera.targetTexture = rt;
+            var rt = _camera.targetTexture;
             _camera.Render();
 
             var old = UnityEngine.RenderTexture.active;
@@ -134,9 +137,6 @@ namespace OpenFairy.UGUI.TestSupport
             texture.ReadPixels(new Rect(0, 0, _size.x, _size.y), 0, 0);
             texture.Apply();
             UnityEngine.RenderTexture.active = old;
-
-            _camera.targetTexture = null;
-            UnityEngine.RenderTexture.ReleaseTemporary(rt);
             return texture;
         }
 
@@ -160,6 +160,7 @@ namespace OpenFairy.UGUI.TestSupport
             }
             if (_camera != null)
             {
+                UnityEngine.RenderTexture.ReleaseTemporary(_camera.targetTexture);
                 Object.Destroy(_camera.gameObject);
                 _camera = null;
             }

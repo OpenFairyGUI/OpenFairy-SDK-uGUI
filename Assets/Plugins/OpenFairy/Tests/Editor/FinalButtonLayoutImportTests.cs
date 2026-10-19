@@ -23,7 +23,8 @@ namespace OpenFairy.UGUI.Tests
             var key = "__ButtonLayout_" + Guid.NewGuid().ToString("N");
             var output = "Assets/UIProject/Assets/" + key;
             var sourceDirectory = "UIProject/assets/" + key;
-            AssetDatabase.CreateFolder("Assets/UIProject/Assets", key);
+            Directory.CreateDirectory(output);
+            AssetDatabase.ImportAsset(output);
             var settingsField = typeof(Migrate).GetField("_codeGenerationSettings", PrivateStatic);
             var previousSettings = settingsField.GetValue(null);
             var prefabs = (IDictionary)typeof(Migrate).GetField("Prefabs", PrivateStatic).GetValue(null);

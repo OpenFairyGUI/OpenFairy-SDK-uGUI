@@ -2474,9 +2474,11 @@ namespace OpenFairy.UGUI.Editor
             if (element.MaxLength > 0)
                 field.characterLimit = element.MaxLength;
 
-            var textGo = NewChild("Text", (RectTransform)go.transform, typeof(UnityEngine.UI.Text));
-            var text = textGo.GetComponent<UnityEngine.UI.Text>();
+            // 系统字体按 fontNames 在运行时解析，烘焙期 font 为空；用 TextField 承载输入文字，与其它文本同源取字体。
+            var textGo = NewChild("Text", (RectTransform)go.transform, typeof(TextField));
+            var text = textGo.GetComponent<TextField>();
             text.font = font;
+            text.fontNames = fontNames;
             text.fontSize = fontSize;
             text.color = color;
             text.alignment = alignment;
