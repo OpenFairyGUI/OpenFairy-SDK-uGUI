@@ -2640,11 +2640,17 @@ namespace OpenFairy.UGUI.Editor
             var bold = element.Bold;
             var italic = element.Italic;
             text.fontStyle = bold && italic ? FontStyle.BoldAndItalic : bold ? FontStyle.Bold : italic ? FontStyle.Italic : FontStyle.Normal;
-            // Shrink/Ellipsis 未实现，按 Height（竖向撑开）处理。
+            text.overflowMode = element.AutoSize switch
+            {
+                Schema.TextAutoSize.Shrink => TextField.OverflowMode.Shrink,
+                Schema.TextAutoSize.Ellipsis => TextField.OverflowMode.Ellipsis,
+                _ => TextField.OverflowMode.Default,
+            };
             text.horizontalOverflow = element.AutoSize == Schema.TextAutoSize.Both || element.SingleLine
                 ? HorizontalWrapMode.Overflow
                 : HorizontalWrapMode.Wrap;
-            text.verticalOverflow = element.AutoSize == Schema.TextAutoSize.None ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow;
+            text.verticalOverflow = element.AutoSize is Schema.TextAutoSize.None or Schema.TextAutoSize.Ellipsis
+                ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow;
             text.alignment = (element.VAlign, element.Align) switch
             {
                 (Schema.VAlign.Middle, Schema.Align.Center) => TextAnchor.MiddleCenter,
