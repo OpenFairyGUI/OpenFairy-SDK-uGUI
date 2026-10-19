@@ -47,6 +47,7 @@ namespace OpenFairy.UGUI.Editor
             public string Scale9Grid;
             public string Texture;
             public bool Exported;
+            public int BuildLevel;
             private Schema.Component _componentXml;
 
             public Schema.Component ComponentXml => _componentXml ??= Schema.Component.Load(File);
@@ -109,6 +110,7 @@ namespace OpenFairy.UGUI.Editor
             foreach (var bar in new[] { Settings().scrollBars?.vertical, Settings().scrollBars?.horizontal })
                 if (TryResolveScrollBar(bar, out var barRes))
                     Collect(barRes, components, images);
+            var prerequisiteCount = components.Count;
             // 导出所有 exported 组件；
             // Collect 会按依赖顺序把它们引用到的（可能未导出、可能跨包的）组件一并带出。
             foreach (var entry in Resources.Values.AsValueEnumerable().Where(r => r.Type == Schema.ResourceKind.Component
@@ -152,8 +154,8 @@ namespace OpenFairy.UGUI.Editor
                 return;
             }
 
-            foreach (var component in components)
-                BuildPrefab(component);
+            BuildPrefabs(components.GetRange(0, prerequisiteCount));
+            BuildPrefabs(components.GetRange(prerequisiteCount, components.Count - prerequisiteCount));
             SaveLocaleAssets($"{OutputRoot}/Locales");
             AssetDatabase.SaveAssets();
             // 通用导出器不认识任何具体工程；工程特有的收尾（如示例脚本挂载）通过此扩展点自行注册。
@@ -205,6 +207,12 @@ namespace OpenFairy.UGUI.Editor
             if (components.Contains(component))
                 return;
 
+            var level = 0;
+            void Include(Resource dependency)
+            {
+                Collect(dependency, components, images);
+                level = Math.Max(level, dependency.BuildLevel + 1);
+            }
             var xml = component.ComponentXml;
             foreach (var child in xml.DisplayList)
             {
@@ -212,30 +220,34 @@ namespace OpenFairy.UGUI.Editor
                 if (src != null && TryResolve(src, component.PackageId, out var dep))
                 {
                     if (dep.Type == Schema.ResourceKind.Component)
-                        Collect(dep, components, images);
+                        Include(dep);
                     else if (dep.Type is Schema.ResourceKind.Image or Schema.ResourceKind.MovieClip)
                         images.Add(dep);
                 }
+                if (child.ComboBox?.Dropdown is { } childDropdown && TryResolve(childDropdown, component.PackageId, out var childDropdownResource)
+                    && childDropdownResource.Type == Schema.ResourceKind.Component)
+                    Include(childDropdownResource);
                 if (child.DefaultItem is { } defaultItem && TryResolve(defaultItem, component.PackageId, out var item))
-                    Collect(item, components, images);
+                    Include(item);
                 foreach (var entry in child.Items)
                     if (entry.Url is { } itemUrl && TryResolve(itemUrl, component.PackageId, out var itemResource))
-                        Collect(itemResource, components, images);
+                        Include(itemResource);
                 foreach (var uri in child.ScrollBarRes ?? Array.Empty<string>())
-                    if (TryResolveScrollBar(uri, out var bar)) Collect(bar, components, images);
+                    if (TryResolveScrollBar(uri, out var bar)) Include(bar);
             }
             foreach (var uri in xml.ScrollBarRes ?? Array.Empty<string>())
-                if (TryResolveScrollBar(uri, out var bar)) Collect(bar, components, images);
+                if (TryResolveScrollBar(uri, out var bar)) Include(bar);
             // ComboBox 的 dropdown 组件只在根 <ComboBox dropdown> 属性引用（displayList 里没有），单独跟随。
             if (xml.ComboBox?.Dropdown is { } dropdown
                 && TryResolve(dropdown, component.PackageId, out var dropdownRes) && dropdownRes.Type == Schema.ResourceKind.Component)
-                Collect(dropdownRes, components, images);
+                Include(dropdownRes);
             // 覆盖 icon 属性、富文本内嵌图、动效 Sound 之外的一切 ui:// 引用。
             // 编辑器源 XML 里的引用一律是 hex id（ui://<pkgId><itemId>）；命名引用（ui://Pkg/Name）只出现在运行时代码、这里读不到。
             // token 用 [\w/] 兜住命名形式的完整串（TryResolve 解析不到就跳过），避免在 '/' 处截断成错误的部分匹配。
             foreach (Match match in RuntimeResourceReferences(component.File))
                 if (TryResolve(match.Value, component.PackageId, out var embedded) && embedded.Type is Schema.ResourceKind.Image or Schema.ResourceKind.MovieClip)
                     images.Add(embedded);
+            component.BuildLevel = level;
             components.Add(component);
         }
 
@@ -618,6 +630,20 @@ namespace OpenFairy.UGUI.Editor
 
         private static void BuildPrefab(Resource component)
         {
+            var root = CreatePrefab(component);
+            try
+            {
+                var path = Path.ChangeExtension(AssetPath(component.File), ".prefab");
+                var prefab = PrefabUtility.SaveAsPrefabAsset(root, path, out var saved);
+                if (!saved || prefab == null)
+                    throw new InvalidOperationException($"OpenFairy failed to save prefab '{path}'.");
+                Prefabs[path] = prefab;
+            }
+            finally { Object.DestroyImmediate(root); }
+        }
+
+        private static GameObject CreatePrefab(Resource component)
+        {
             var xml = component.ComponentXml;
             var root = new GameObject(Path.GetFileNameWithoutExtension(component.File), typeof(RectTransform));
             try
@@ -819,14 +845,12 @@ namespace OpenFairy.UGUI.Editor
                     LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)fitter.transform);
                 LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
                 SyncRelations(root);
-                var prefab = PrefabUtility.SaveAsPrefabAsset(root, prefabPath, out var saved);
-                if (!saved || prefab == null)
-                    throw new InvalidOperationException($"OpenFairy failed to save prefab '{prefabPath}'.");
-                Prefabs[prefabPath] = prefab;
+                return root;
             }
-            finally
+            catch
             {
                 Object.DestroyImmediate(root);
+                throw;
             }
         }
 

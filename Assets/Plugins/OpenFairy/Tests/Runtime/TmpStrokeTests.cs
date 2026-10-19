@@ -42,14 +42,14 @@ namespace OpenFairy.UGUI.Tests
                 text.text = "I";
                 target.Create();
                 yield return null;
-                var (face, _) = Extents(text, camera, target);
+                var (face, _, firstRow, endRow) = Extents(text, camera, target);
                 var builder = Type.GetType("OpenFairy.UGUI.Editor.TmpTextMaterialBuilder, OpenFairy.UGUI.Editor", true);
                 foreach (var size in new[] { 2f, 4f })
                 {
                     text.fontSharedMaterial = (Material)builder.GetMethod("BakeStroke").Invoke(null,
                         new object[] { text.font.material, text.font, 50f, Path, Color.black, size });
                     yield return null;
-                    var (strokedFace, stroke) = Extents(text, camera, target);
+                    var (strokedFace, stroke, _, _) = Extents(text, camera, target, firstRow, endRow);
                     Assert.That(strokedFace + stroke - face, Is.EqualTo(size).Within(.5f), "Outward extent per side");
                     Assert.That(strokedFace, Is.EqualTo(face).Within(.75f), "The stroke must not cover the face.");
                     AssetDatabase.DeleteAsset(Path);
@@ -66,7 +66,7 @@ namespace OpenFairy.UGUI.Tests
         }
 
         // Half the face and stroke coverage across the middle rows of a vertical stem, in pixels per side.
-        private static (float Face, float Stroke) Extents(TextMeshProUGUI text, Camera camera, RenderTexture target)
+        private static (float Face, float Stroke, int FirstRow, int EndRow) Extents(TextMeshProUGUI text, Camera camera, RenderTexture target, int firstRow = 0, int endRow = 0)
         {
             text.UpdateMeshPadding(); text.ForceMeshUpdate(); Canvas.ForceUpdateCanvases();
             camera.targetTexture = target;
@@ -76,8 +76,25 @@ namespace OpenFairy.UGUI.Tests
             var previous = RenderTexture.active; RenderTexture.active = target;
             var image = new Texture2D(256, 128, TextureFormat.RGBA32, false);
             image.ReadPixels(new Rect(0, 0, 256, 128), 0, 0); image.Apply(); RenderTexture.active = previous;
+            if (endRow == 0)
+            {
+                var first = image.height;
+                var last = -1;
+                for (var y = 0; y < image.height; y++)
+                    for (var x = 0; x < image.width; x++)
+                    {
+                        var pixel = image.GetPixel(x, y);
+                        if (pixel.r <= pixel.g) continue;
+                        first = Mathf.Min(first, y); last = Mathf.Max(last, y);
+                    }
+                Assert.That(last, Is.GreaterThan(first), "The unstroked glyph must be visible.");
+                // Different font baselines move the glyph vertically. Reuse its central rows so
+                // expanded caps are never mistaken for a change in the stem's sideways extent.
+                var margin = (last - first + 1) / 4;
+                firstRow = first + margin; endRow = last + 1 - margin;
+            }
             float face = 0, stroke = 0;
-            for (var y = 55; y < 75; y++)
+            for (var y = firstRow; y < endRow; y++)
                 for (var x = 0; x < 256; x++)
                 {
                     var pixel = image.GetPixel(x, y);
@@ -85,7 +102,8 @@ namespace OpenFairy.UGUI.Tests
                     stroke += Mathf.Clamp01(1 - pixel.r);
                 }
             Object.DestroyImmediate(image);
-            return (face / 40, stroke / 40);
+            var divisor = 2f * (endRow - firstRow);
+            return (face / divisor, stroke / divisor, firstRow, endRow);
         }
     }
 }
