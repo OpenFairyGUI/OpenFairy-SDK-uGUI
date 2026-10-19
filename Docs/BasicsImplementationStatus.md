@@ -11,7 +11,7 @@
 - 提示框使用作者配置的 Label prefab 直接引用。普通文本自动尺寸交给原生 `ContentSizeFitter`；根关系与尺寸 gear 尊重内容拥有的自动轴。立即显示提示框时刷新实际文字布局节点，避免非布局容器阻断子树遍历。
 - 输入框通过 Input System 支持焦点期五步撤销/重做、选区恢复和单行 Tab 导航，程序赋值清除历史。灰显保留视觉语义，命中与点击由独立触摸/交互通道决定。
 - 生成器支持发布命名空间前缀，避开 Unity 原生序列化保留字段。未绘图的 Graph 节点生成 `RectTransform` 引用。Transition 使用各自动画的帧率，缺省仍为 24。
-- 当前同一正式源码在 Unity Editor/Mono 的完整 Test Runner 结果为 **141/141 Editor**、**175/175 PlayMode**，失败、跳过及不确定项均为零。TMP 与 Builtin 两种文字后端各四个程序集离线编译零错误，Builtin 不据此视为原生行为通过。此前104/119及更早结果为历史检查点，不与当前总数相加；传统 Basics/Transition 历史 golden 套件没有重新运行。
+- 当前同一正式源码在 Unity Editor/Mono 的完整 Test Runner 结果为 **152/152 Editor**、**177/177 PlayMode**，失败、跳过及不确定项均为零。TMP 与 Builtin 两种文字后端各四个程序集离线编译零错误，Builtin 不据此视为原生行为通过。此前104/119及更早结果为历史检查点，不与当前总数相加；传统 Basics/Transition 历史 golden 套件没有重新运行。
 - 灰显与已有颜色滤镜共用子树捕获，保留原生 TMP 字体材质以及独立的触摸/交互通道。十三种内置混合方式已有覆盖率和预乘透明度捕获回归，alpha 为零的发光 RGB 不被提前丢弃；离屏组对外部背景的 Multiply/Screen 等依赖不承诺等同直接画屏。
 - 捕获保留原生 MaskableGraphic/Mask 的完整材质链，只在 owned 副本上还原 base 遮罩参数，再由代理重算内部遮罩。此前不同输入会使颜色或混合缓存释放源图仍在使用的材质，下一帧源图消失；两项跨帧 GPU 回归及增强的 TMP 图文混排现已验证源图、材质、原生 pop 和图集保持。
 - 非虚拟 SingleRow 使用原生布局与实际子物体矩形，公开滚动、吸附和可见项查询不再假设固定宽度；虚拟列表保留既有窗口和固定行路径。Hidden 列表在导入期增加原生 RectMask2D，新增六项导入和一项 GPU 裁剪回归；不是消费端运行时补挂蒙版。
@@ -169,3 +169,5 @@
 导入器将预挂捕获 presentation 与源一同移入作者 group、mask 或 scroll 层级。已有发布定义可经同一依赖顺序窄修，只搬已验证的既有 companion，保留 GUID/local ID 与引用；直通图像颜色滤镜不变，Runtime 严格父层校验保留。新增三种真实导入/损坏保存/重载与幂等检查、两个失效绑定正控和一项三模式 GPU 回归。
 
 生成式本地化与原生标题绑定共用首个作者 title 身份；后续同名文本走既有 private typed 引用，保留公开首项、语言 family 名称和翻译 key。新增五项 Editor 与一项 Play 回归，覆盖 Button/Label/ComboBox 生成、跨组同名文本、持久化重载和独立语言切换；不增加运行时名称查找。
+
+发布时清空列表通过共享的编辑期 XML 投影处理：明确启用 `autoClearItems` 的预览项不进入 prefab、资源依赖和生成式本地化；源文件及 defaultItem 保留，运行时正常 Fill 和停启不会清空动态项。缺省/false 的作者项保持。已有产物需重生成受影响脚本并在编译后重烘 prefab/语言资产。

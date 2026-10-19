@@ -184,8 +184,8 @@ namespace OpenFairy.UGUI.Editor
 
         private static MatchCollection RuntimeResourceReferences(string file)
         {
-            var xml = XDocument.Load(file, LoadOptions.PreserveWhitespace);
-            xml.Root.Attribute("designImage")?.Remove();
+            var xml = FairyXml.LoadPublishedComponentXml(file);
+            xml.Attribute("designImage")?.Remove();
             return Regex.Matches(xml.ToString(SaveOptions.DisableFormatting), @"ui://[\w/]+");
         }
 
@@ -1512,12 +1512,12 @@ namespace OpenFairy.UGUI.Editor
                 type.GetField("dropdownPrefab", Any).SetValue(combo, LoadPrefab(dropRes));
             type.GetField("visibleItemCount", Any).SetValue(combo, xml.VisibleItemCount);
             var items = xml.Items;
-            if (items.Length > 0)
+            if (xml.AutoClearItems || items.Length > 0)
             {
                 type.GetField("_items", Any).SetValue(combo, items);
-                if (xml.Values.Length > 0)
+                if (xml.AutoClearItems || xml.Values.Length > 0)
                     type.GetField("_values", Any).SetValue(combo, xml.Values);
-                combo.title = items[0]; // 默认选中项 0
+                if (items.Length > 0) combo.title = items[0]; // 默认选中项 0
             }
         }
 

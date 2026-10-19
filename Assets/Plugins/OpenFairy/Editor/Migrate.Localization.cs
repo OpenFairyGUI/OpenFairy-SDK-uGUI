@@ -121,7 +121,7 @@ namespace OpenFairy.UGUI.Editor
             var tableNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (var resource in components)
             {
-                var view = new LocalView { resource = resource, xml = XDocument.Load(resource.File).Root };
+                var view = new LocalView { resource = resource, xml = FairyXml.LoadPublishedComponentXml(resource.File) };
                 view.tableField = LocalName(tableNames, resource.Package + "_" + ClassName(resource));
                 view.names.Add(ClassName(resource));
                 view.names.Add("LocalizedTexts");
@@ -345,7 +345,7 @@ namespace OpenFairy.UGUI.Editor
                 AddCaptionOverride(owner, path, extension.Attribute("title"), suffix, "Text");
                 AddCaptionOverride(owner, path, extension.Attribute("selectedTitle"), suffix + "-0", "Selected");
                 AddCaptionOverride(owner, path, extension.Attribute("prompt"), suffix + "-prompt", "Prompt");
-                if (extension.Element("item") != null)
+                if (extension.Element("item") != null || (string)extension.Attribute("autoClearItems") == "true")
                 {
                     var family = target.families.Find(value => value.combo);
                     var row = OverrideRow(owner, path, family);
@@ -355,7 +355,7 @@ namespace OpenFairy.UGUI.Editor
                         choices.Add(Choice(owner, "Item" + index, suffix + "-" + index++, (string)item.Attribute("title")));
                     row.choices = choices.ToArray();
                     var title = (string)extension.Attribute("title");
-                    row.initialIndex = title == null ? 0 : Array.FindIndex(row.choices, value => value.text == title);
+                    row.initialIndex = title == null ? row.choices.Length == 0 ? -1 : 0 : Array.FindIndex(row.choices, value => value.text == title);
                 }
             }
             foreach (var property in instance.Elements("property"))

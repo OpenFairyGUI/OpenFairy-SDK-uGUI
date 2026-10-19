@@ -72,7 +72,17 @@ namespace OpenFairy.UGUI.Editor
         }
 
         public static Schema.Component LoadComponent(string file) =>
-            Deserialize<Schema.Component>(file);
+            (Schema.Component)Read(typeof(Schema.Component), LoadPublishedComponentXml(file));
+
+        internal static XElement LoadPublishedComponentXml(string file)
+        {
+            var root = XDocument.Load(file, LoadOptions.PreserveWhitespace).Root;
+            foreach (var element in root.DescendantsAndSelf().AsValueEnumerable()
+                .Where(element => element.Name.LocalName is "list" or "tree" or "ComboBox"
+                    && (string)element.Attribute("autoClearItems") == "true").ToArray())
+                element.Elements("item").Remove();
+            return root;
+        }
 
         private static T Deserialize<T>(string file) where T : new() =>
             (T)Read(typeof(T), XDocument.Load(file).Root);
@@ -769,6 +779,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("changeOnClick")] public bool ChangeOnClick = true;
         [XmlAttribute("dropdown")] public string Dropdown;
         [XmlAttribute("visibleItemCount")] public int VisibleItemCount = 10;
+        [XmlAttribute("autoClearItems")] public bool AutoClearItems;
         [XmlElement("item")] public Extension[] ItemNodes = Array.Empty<Extension>();
 
         public string[] Items = Array.Empty<string>();

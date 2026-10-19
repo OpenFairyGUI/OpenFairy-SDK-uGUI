@@ -9,3 +9,24 @@ The importer reads the existing FairyGUI project settings in `UIProject/settings
 Default-only look gears are valid even without a page/value list. Their default appearance applies to controller pages that have no explicit override. Empty or whitespace-only icon overrides clear the icon.
 
 Generated members avoid the native MonoBehaviour serialization header and the base component's `controllerChildren` field. A colliding identifier receives a trailing underscore. For example, the usual member prefix and an authored child named `Name` produce `m_Name_`, since `m_Name` belongs to Unity's object header. Regenerate scripts and prefabs together after changing generation settings.
+
+## Preview-only list items
+
+The authoring `autoClearItems="true"` setting is a publish directive, not a
+runtime lifecycle rule. The importer removes the corresponding List/Tree and
+ComboBox item nodes from an in-memory publication view. Prefab construction,
+resource-reference collection and generated localization consume this same view.
+The authoring files are never rewritten. Omitted or false settings retain their
+items, and `defaultItem` remains a direct prefab reference for later `Fill` calls.
+Explicit empty ComboBox overrides also replace inherited item/value arrays and
+remain empty localization rows.
+
+For already generated assets, regenerate affected view scripts, wait for Unity
+compilation, then rebuild their prefabs and save language assets with the complete
+localization context. Runtime code does not clear stale published samples or
+repair old generated bindings. Hiding and showing a populated list does not clear
+its runtime items.
+
+This follows the FairyGUI authoring documentation for
+[lists](https://www.fairygui.com/docs/editor/list/) and
+[combo boxes](https://www.fairygui.com/docs/editor/combobox/).
