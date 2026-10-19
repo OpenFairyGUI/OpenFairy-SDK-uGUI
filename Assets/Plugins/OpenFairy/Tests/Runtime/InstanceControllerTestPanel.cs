@@ -8,16 +8,16 @@ namespace OpenFairy.UGUI.Tests
 
         protected override void InitializeControllers()
         {
-            first.Initialize();
-            second.Initialize();
+            this.first.Initialize();
+            this.second.Initialize();
         }
 
         protected internal override void SetControllerPage(int controller, int page)
         {
             switch (controller)
             {
-                case 0: first.page = (Page)page; break;
-                case 1: second.page = (Page)page; break;
+                case 0: this.first.page = (Page)page; break;
+                case 1: this.second.page = (Page)page; break;
             }
         }
     }

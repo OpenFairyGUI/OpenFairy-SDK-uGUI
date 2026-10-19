@@ -96,27 +96,27 @@ namespace Example._class.Name_Fixtures
 
         protected internal override int GetControllerPage(int controller) => controller switch
         {
-            0 => (int)_class.page,
-            1 => (int)_class_2.page,
-            2 => (int)x_y.page,
-            3 => (int)x_y_2.page,
-            4 => (int)_12_panel__2.page,
-            5 => (int)UnityEngine_2.page,
-            6 => (int)状态.page,
-            7 => (int)_.page,
+            0 => (int)this._class.page,
+            1 => (int)this._class_2.page,
+            2 => (int)this.x_y.page,
+            3 => (int)this.x_y_2.page,
+            4 => (int)this._12_panel__2.page,
+            5 => (int)this.UnityEngine_2.page,
+            6 => (int)this.状态.page,
+            7 => (int)this._.page,
             _ => -1,
         };
 
         protected internal override bool IsControllerChanging(int controller) => controller switch
         {
-            0 => _class.changing,
-            1 => _class_2.changing,
-            2 => x_y.changing,
-            3 => x_y_2.changing,
-            4 => _12_panel__2.changing,
-            5 => UnityEngine_2.changing,
-            6 => 状态.changing,
-            7 => _.changing,
+            0 => this._class.changing,
+            1 => this._class_2.changing,
+            2 => this.x_y.changing,
+            3 => this.x_y_2.changing,
+            4 => this._12_panel__2.changing,
+            5 => this.UnityEngine_2.changing,
+            6 => this.状态.changing,
+            7 => this._.changing,
             _ => false,
         };
 
@@ -124,27 +124,27 @@ namespace Example._class.Name_Fixtures
         {
             switch (controller)
             {
-                case 0: _class.page = (_classPages)page; break;
-                case 1: _class_2.page = (_classPages_2)page; break;
-                case 2: x_y.page = (x_yPages)page; break;
-                case 3: x_y_2.page = (x_yPages_2)page; break;
-                case 4: _12_panel__2.page = (_12_panel_Pages)page; break;
-                case 5: UnityEngine_2.page = (UnityEnginePages)page; break;
-                case 6: 状态.page = (状态Pages)page; break;
-                case 7: _.page = (_Pages)page; break;
+                case 0: this._class.page = (_classPages)page; break;
+                case 1: this._class_2.page = (_classPages_2)page; break;
+                case 2: this.x_y.page = (x_yPages)page; break;
+                case 3: this.x_y_2.page = (x_yPages_2)page; break;
+                case 4: this._12_panel__2.page = (_12_panel_Pages)page; break;
+                case 5: this.UnityEngine_2.page = (UnityEnginePages)page; break;
+                case 6: this.状态.page = (状态Pages)page; break;
+                case 7: this._.page = (_Pages)page; break;
             }
         }
 
         protected override void InitializeControllers()
         {
-            _class.Initialize();
-            _class_2.Initialize();
-            x_y.Initialize();
-            x_y_2.Initialize();
-            _12_panel__2.Initialize();
-            UnityEngine_2.Initialize();
-            状态.Initialize();
-            _.Initialize();
+            this._class.Initialize();
+            this._class_2.Initialize();
+            this.x_y.Initialize();
+            this.x_y_2.Initialize();
+            this._12_panel__2.Initialize();
+            this.UnityEngine_2.Initialize();
+            this.状态.Initialize();
+            this._.Initialize();
         }
         public global::UnityEngine.RectTransform _class_3;
         public global::UnityEngine.RectTransform _class_4;

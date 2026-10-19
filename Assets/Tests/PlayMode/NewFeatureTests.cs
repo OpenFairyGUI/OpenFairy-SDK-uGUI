@@ -692,7 +692,7 @@ namespace OpenFairy.UGUI.Tests
                 b.relatedPage = i;
                 buttons[i] = b;
                 // 同 Migrate 烘焙：每个关联按钮一个 GearButton，换页时同步组内选中态。
-                gears[i] = new GearButton<RadioPage> { target = b.gameObject, pages = new[] { (RadioPage)i } };
+                gears[i] = new GearButton<RadioPage> { target = b.gameObject, button = b, pages = new[] { (RadioPage)i } };
             }
             owner.m_ctrl = new Controller<RadioPage> { gears = gears };
             yield return null;

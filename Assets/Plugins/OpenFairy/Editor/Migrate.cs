@@ -438,20 +438,21 @@ namespace OpenFairy.UGUI.Editor
                 controllerBindings.Add((controllerIndex, cname, field));
             }
 
+            // 字段可能与这些方法的参数同名（如名为 page/controller 的控制器），一律经 this 访问。
             if (controllerBindings.Count > 0)
             {
                 fields.Add("");
                 fields.Add("        protected override int GetControllerPage(int controller) => controller switch");
                 fields.Add("        {");
                 foreach (var binding in controllerBindings)
-                    fields.Add($"            {binding.Index} => (int){binding.Field}.page,");
+                    fields.Add($"            {binding.Index} => (int)this.{binding.Field}.page,");
                 fields.Add("            _ => -1,");
                 fields.Add("        };");
                 fields.Add("");
                 fields.Add("        protected override bool IsControllerChanging(int controller) => controller switch");
                 fields.Add("        {");
                 foreach (var binding in controllerBindings)
-                    fields.Add($"            {binding.Index} => {binding.Field}.changing,");
+                    fields.Add($"            {binding.Index} => this.{binding.Field}.changing,");
                 fields.Add("            _ => false,");
                 fields.Add("        };");
                 fields.Add("");
@@ -460,14 +461,14 @@ namespace OpenFairy.UGUI.Editor
                 fields.Add("            switch (controller)");
                 fields.Add("            {");
                 foreach (var binding in controllerBindings)
-                    fields.Add($"                case {binding.Index}: {binding.Field}.page = ({binding.Type})page; break;");
+                    fields.Add($"                case {binding.Index}: this.{binding.Field}.page = ({binding.Type})page; break;");
                 fields.Add("            }");
                 fields.Add("        }");
                 fields.Add("");
                 fields.Add("        protected override void InitializeControllers()");
                 fields.Add("        {");
                 foreach (var binding in controllerBindings)
-                    fields.Add($"            {binding.Field}.Initialize();");
+                    fields.Add($"            this.{binding.Field}.Initialize();");
                 fields.Add("        }");
             }
 
