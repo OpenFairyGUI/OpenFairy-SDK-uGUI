@@ -699,7 +699,8 @@ namespace OpenFairy.UGUI.Editor
             {
                 var path = directory + "/" + names[language] + ".asset";
                 var table = AssetDatabase.LoadAssetAtPath(path, type);
-                if (table == null) { table = ScriptableObject.CreateInstance(type); AssetDatabase.CreateAsset(table, path); }
+                var createTable = table == null;
+                if (createTable) table = ScriptableObject.CreateInstance(type);
                 foreach (var view in LocalViews.Values)
                 {
                     var rowType = type.GetField(view.tableField).FieldType;
@@ -716,14 +717,17 @@ namespace OpenFairy.UGUI.Editor
                     }
                     type.GetField(view.tableField).SetValue(table, row);
                 }
+                if (createTable) AssetDatabase.CreateAsset(table, path);
                 EditorUtility.SetDirty(table);
                 tables.SetValue(table, language);
             }
             var setType = LocaleAssetType("LocaleSet");
             var setPath = directory + "/Languages.asset";
             var set = AssetDatabase.LoadAssetAtPath(setPath, setType);
-            if (set == null) { set = ScriptableObject.CreateInstance(setType); AssetDatabase.CreateAsset(set, setPath); }
+            var createSet = set == null;
+            if (createSet) set = ScriptableObject.CreateInstance(setType);
             setType.GetField("tables", LocalFields).SetValue(set, tables);
+            if (createSet) AssetDatabase.CreateAsset(set, setPath);
             EditorUtility.SetDirty(set);
         }
 
