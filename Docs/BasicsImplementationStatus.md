@@ -20,7 +20,7 @@
 - Transition 倒放交换起止值、缓动正向推进；重播前先完成上一轮；autoPlay 随启用重播、停用时原地停止（Shake 归位）。Gear tween 终点不变时继续、改变时先完成再重起；GearLook 旋转按不取模角度线性插值。
 - Builtin TextField：字距只加在有宽度字形之间并随缩放，行距随缩放；Shrink 改为 DoShrink 算法；裁剪按完整高度；空文本 0×0；UBB 标签不分大小写、支持 `\[` 转义、未实现样式的标签被消费而非原样输出；链接保留外层颜色。行内图片按运行时同一标签口径烘焙，陈旧图片标签在导入期移除。
 - 导入：置灰按 disabled 页 → grayed 控制器 → 灰度滤镜的顺序，只取其一；解析 `fillOrigin`；TMP 输入框去掉底框与内边距，TMP 字距/行距换算为 em 单位。删除无用转发与死代码（`ControllerBinding`、`HidesRuntimeMember`、`Transition.SetHook(string)`、`TextRendering.SetBestFit` 等），六处编辑态销毁合并为一处。
-- 验证（窗口模式 Editor，全部无失败/跳过/不确定）：Builtin EditMode **192/192**；Demo 全流程（Migrate 199 个组件 → FairyGUI 对照截图 27 页 → 全部 PlayMode，含 SDK 与 Demo 程序集、11 页静态 golden）**350/350**；TMP 后端（临时启用 FAIRYGUI_TMPRO、TMP Essential Resources，默认字体资产设为动态并指定源字体）EditMode **218/218**、PlayMode **223/223**；Windows 64 位 Player 构建成功。
+- 验证（合入依赖层级发布后的最终提交，窗口模式 Editor，全部无失败/跳过/不确定）：Builtin EditMode **195/195**；Demo 全流程（Migrate 199 个组件 → FairyGUI 对照截图 27 页 → 全部 PlayMode，含 SDK 与 Demo 程序集、11 页静态 golden）**350/350**；TMP 后端（临时启用 FAIRYGUI_TMPRO、TMP Essential Resources，默认字体资产设为动态并指定源字体）EditMode **221/221**、PlayMode **223/223**；Windows 64 位 Player 构建成功。同一代码在 batchmode 下为 337/350，13 项均依赖原生渲染帧或 WaitForEndOfFrame（含 Image/Button 静态对照），窗口模式全部通过，不能以 batchmode 结果代替。
 - 线性色彩空间修正：Canvas 在线性工程中已于 CPU 把顶点色转为线性，OpenFairy 的 ColorMatrix/Blend/Grayscale 着色器原先再次转换，滤镜/混合/灰显的颜色偏暗。现与 uGUI UI-Default 一致，仅 vertexColorAlwaysGammaSpace 时在着色器中转换；像素测试按工程色彩空间计算期望并解码 sRGB 读回，不再只在 Gamma 下运行。
 - 滚轮滚动复刻 ScrollPane：位置直接钳在可滚范围内，不越界回弹。
 - Builtin 输入框的文字组件改为 TextField，按 fontNames 在运行时取系统字体；原生 Text 在系统字体下烘焙为空字体，输入框既不显示文字也无法聚焦。
