@@ -137,12 +137,14 @@ namespace OpenFairy.UGUI
 
             var rect = GetPixelAdjustedRect();
             var size = overrideSprite.rect.size;
-            var displayed = Vector2.Scale(size, Scale(rect.size, size));
+            var scale = Scale(rect.size, size);
+            var displayed = Vector2.Scale(size, scale);
             var offset = Offset(rect.size, displayed);
-            var w = displayed.x;
-            var h = displayed.y;
-            var x = rect.xMin + offset.x;
-            var y = rect.yMax - offset.y;
+            var padding = UnityEngine.Sprites.DataUtility.GetPadding(overrideSprite);
+            var w = (size.x - padding.x - padding.z) * scale.x;
+            var h = (size.y - padding.y - padding.w) * scale.y;
+            var x = rect.xMin + offset.x + padding.x * scale.x;
+            var y = rect.yMax - offset.y - padding.w * scale.y;
             var uv = UnityEngine.Sprites.DataUtility.GetOuterUV(overrideSprite);
             var color32 = (Color32)color;
 

@@ -15,6 +15,90 @@ namespace OpenFairy.UGUI.Tests
     {
         private const BindingFlags Static = BindingFlags.NonPublic | BindingFlags.Static;
 
+        [TestCase(Loader.FillType.None, 64, 48)]
+        [TestCase(Loader.FillType.Scale, 84, 63)]
+        [TestCase(Loader.FillType.ScaleMatchHeight, 84, 63)]
+        [TestCase(Loader.FillType.ScaleMatchWidth, 101, 75.75f)]
+        [TestCase(Loader.FillType.ScaleFree, 101, 63)]
+        [TestCase(Loader.FillType.ScaleNoBorder, 101, 75.75f)]
+        public void Sprite_padding_matches_native_image_for_every_alignment(Loader.FillType fill, float width, float height)
+        {
+            var folder = "Assets/__LoaderSpriteTest_" + Guid.NewGuid().ToString("N");
+            AssetDatabase.CreateFolder("Assets", Path.GetFileName(folder));
+            var texture = new Texture2D(64, 48, TextureFormat.RGBA32, false);
+            var pixels = new Color32[64 * 48];
+            for (var y = 6; y < 36; ++y)
+                for (var x = 12; x < 48; ++x)
+                    pixels[y * 64 + x] = new Color32(255, 128, 64, 255);
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            var path = folder + "/Sprite.png";
+            File.WriteAllBytes(path, texture.EncodeToPNG());
+            AssetDatabase.ImportAsset(path);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            var settings = new TextureImporterSettings();
+            var root = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas));
+            root.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
+            var loaderObject = new GameObject("Loader", typeof(RectTransform), typeof(CanvasRenderer), typeof(Loader));
+            loaderObject.transform.SetParent(root.transform, false);
+            var loader = loaderObject.GetComponent<Loader>();
+            loader.rectTransform.sizeDelta = new Vector2(101, 63);
+            loader.rectTransform.pivot = new Vector2(.3f, .7f);
+            loader.fill = fill;
+            var referenceObject = new GameObject("Reference", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
+            referenceObject.transform.SetParent(loader.transform, false);
+            var reference = referenceObject.GetComponent<UnityEngine.UI.Image>();
+            reference.rectTransform.anchorMin = reference.rectTransform.anchorMax = reference.rectTransform.pivot = new Vector2(0, 1);
+            reference.rectTransform.sizeDelta = new Vector2(width, height);
+            loader.color = reference.color = new Color(.7f, .3f, .9f, .6f);
+            try
+            {
+                foreach (var meshType in new[] { SpriteMeshType.FullRect, SpriteMeshType.Tight })
+                {
+                    importer.ReadTextureSettings(settings);
+                    settings.spriteMeshType = meshType;
+                    importer.SetTextureSettings(settings);
+                    importer.SaveAndReimport();
+                    var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+                    if (meshType == SpriteMeshType.Tight)
+                        Assert.That(UnityEngine.Sprites.DataUtility.GetPadding(sprite).x, Is.GreaterThan(0), "Positive control: the imported sprite must have transparent padding.");
+                    loader.sprite = reference.sprite = sprite;
+                    foreach (Loader.AlignType align in Enum.GetValues(typeof(Loader.AlignType)))
+                    foreach (Loader.VertAlignType vertical in Enum.GetValues(typeof(Loader.VertAlignType)))
+                    {
+                        loader.align = align;
+                        loader.vAlign = vertical;
+                        reference.rectTransform.anchoredPosition = new Vector2(
+                            align == Loader.AlignType.Center ? (101 - width) / 2 : align == Loader.AlignType.Right ? 101 - width : 0,
+                            vertical == Loader.VertAlignType.Middle ? -(63 - height) / 2 : vertical == Loader.VertAlignType.Bottom ? height - 63 : 0);
+                        loader.SetVerticesDirty();
+                        loader.Rebuild(UnityEngine.UI.CanvasUpdate.PreRender);
+                        reference.Rebuild(UnityEngine.UI.CanvasUpdate.PreRender);
+                        var actual = loader.canvasRenderer.GetMesh();
+                        var expected = reference.canvasRenderer.GetMesh();
+                        Assert.That(actual.vertexCount, Is.EqualTo(4));
+                        Assert.That(expected.vertexCount, Is.EqualTo(4));
+                        for (var i = 0; i < 4; ++i)
+                        {
+                            var position = loader.transform.InverseTransformPoint(reference.transform.TransformPoint(expected.vertices[i]));
+                            Assert.That(Vector3.Distance(actual.vertices[i], position), Is.LessThan(.0001f), $"{meshType}/{align}/{vertical} vertex {i}");
+                            Assert.That(actual.uv[i], Is.EqualTo(expected.uv[i]));
+                            Assert.That(actual.colors32[i], Is.EqualTo(expected.colors32[i]));
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(texture);
+                AssetDatabase.DeleteAsset(folder);
+            }
+        }
+
         [TestCase(false)]
         [TestCase(true)]
         public void Component_loader_is_baked_with_direct_references_and_survives_repeated_prefab_round_trip(bool autoSize)
