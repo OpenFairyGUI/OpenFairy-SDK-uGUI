@@ -1,5 +1,7 @@
 using System;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace OpenFairy.UGUI
 {
@@ -7,8 +9,20 @@ namespace OpenFairy.UGUI
     public abstract class ControllerAction<T> where T : struct, Enum
     {
         // null is a wildcard; an empty array matches no page (a deleted page in the source).
-        public T[] fromPages;
-        public T[] toPages;
+        [SerializeField, FormerlySerializedAs("fromPages")] private T[] _fromPages;
+        [SerializeField, FormerlySerializedAs("toPages")] private T[] _toPages;
+        [SerializeField] private bool _anyFromPage = true, _anyToPage = true;
+
+        public T[] fromPages
+        {
+            get => _anyFromPage ? null : _fromPages;
+            set { _anyFromPage = value == null; _fromPages = value; }
+        }
+        public T[] toPages
+        {
+            get => _anyToPage ? null : _toPages;
+            set { _anyToPage = value == null; _toPages = value; }
+        }
 
         internal void Run(T previous, T current, bool hasPrevious)
         {

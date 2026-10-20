@@ -1242,8 +1242,8 @@ namespace OpenFairy.UGUI.Editor
                         type.GetField("stopOnExit").SetValue(action, xml.StopOnExit);
                     }
                     var baseType = action.GetType().BaseType;
-                    baseType.GetField("fromPages").SetValue(action, ActionPages(source, xml.FromPage));
-                    baseType.GetField("toPages").SetValue(action, ActionPages(source, xml.ToPage));
+                    baseType.GetProperty("fromPages").SetValue(action, ActionPages(source, xml.FromPage));
+                    baseType.GetProperty("toPages").SetValue(action, ActionPages(source, xml.ToPage));
                     source.Actions.Add(action);
                 }
         }
