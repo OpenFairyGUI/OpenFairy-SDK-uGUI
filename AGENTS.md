@@ -4,6 +4,8 @@
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-10-24 GroupLayout 的五参数 SetLayoutInputForAxis 从 Unity 6.6 / uGUI 2.6 起可用，不能以 UNITY_6000_7_OR_NEWER 为边界；保留更早版本的四参数分支。6.6.7f1 与 6.7.0b5 的 Builtin/TMP Runtime、Editor 程序集分别编译通过，Builtin 包级非批处理 PlayMode 各196/196；旧四参数参考程序集分支另编译通过，不等于完整旧版 Editor 验证。自动捕获和 WaitForEndOfFrame 测试须使用非批处理运行，批处理结果不能冒充完整通过。
+
 Builtin TextField 使用自己的字形排版，原生 UI.Text 的 Best Fit 不会驱动该网格；Shrink/Ellipsis 必须走已烘焙的 overflowMode。缩放保留原始 text/fontSize，字体大小 gear、矩形和文本变化重新求解；行内图片保留作者尺寸。RebuildImages 烘焙所有已知图片及直接引用，包含初始被省略的项；运行时只更新位置与显隐，不重建节点。更新 SDK 后重跑 Migrate，不能只改旧 Prefab 的原生 overflow 标志。
 
 新建语言表/集合先填充字段，再调用 CreateAsset；该 API 会立即写初始文件，不能依赖随后反射赋值和更晚的统一 SaveAssets 赶在首次重导之前。首写回归直接强制重导后检查翻译内容，不能只断言内存中的新对象。

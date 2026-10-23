@@ -54,7 +54,7 @@ namespace OpenFairy.UGUI
                 if (flow && size != 0) cursor += size + _spacing;
             }
             var extent = rectChildren.Count == 0 ? 0 : max - min;
-#if UNITY_6000_7_OR_NEWER
+#if UNITY_6000_6_OR_NEWER
             SetLayoutInputForAxis(extent, float.PositiveInfinity, extent, 0, dimension);
 #else
             SetLayoutInputForAxis(extent, extent, 0, dimension);
