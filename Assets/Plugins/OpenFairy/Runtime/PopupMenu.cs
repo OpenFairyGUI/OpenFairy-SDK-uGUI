@@ -52,7 +52,7 @@ namespace OpenFairy.UGUI
                     item.transform.SetParent(PoolRoot, false);
                     item.SetActive(false);
                 },
-                UnityEngine.Object.Destroy,
+                OwnedObject.Destroy,
                 false);
             for (var i = _items.childCount - 1; i >= 0; i--)
                 _itemPool.Release(_items.GetChild(i).gameObject);
@@ -110,7 +110,7 @@ namespace OpenFairy.UGUI
             if (Root.inst != null)
                 Root.inst.HidePopupImmediately(_contentRt);
             _itemPool.Clear();
-            UnityEngine.Object.Destroy(_content);
+            OwnedObject.Destroy(_content);
         }
 
         private RectTransform PoolRoot

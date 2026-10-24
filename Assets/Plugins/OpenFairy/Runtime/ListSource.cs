@@ -587,7 +587,7 @@ namespace OpenFairy.UGUI
                     item.transform.SetParent(PoolRoot, false);
                     item.SetActive(false);
                 },
-                Destroy,
+                OwnedObject.Destroy,
                 false);
         }
 
