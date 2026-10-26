@@ -9,7 +9,7 @@ namespace OpenFairy.UGUI
     {
         public override void ModifyMesh(VertexHelper vh)
         {
-            if (!IsActive())
+            if (!IsActive() || effectDistance.x == 0)
                 return;
             var vertices = ListPool<UIVertex>.Get();
             vh.GetUIVertexStream(vertices);

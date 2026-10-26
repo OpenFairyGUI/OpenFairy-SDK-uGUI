@@ -81,6 +81,14 @@ namespace OpenFairy.UGUI.Tests
             using var fixture = new FilterHierarchyFixture(mode);
             var saved = AssetDatabase.LoadAssetAtPath<GameObject>(fixture.PrefabPath);
             var panel = saved.GetComponent<FilterHierarchyTestPanel>();
+            if (mode == 1)
+            {
+                var mask = saved.GetComponentInChildren<MaskShape>(true);
+                Assert.That(mask.source, Is.Not.Null, "The saved stencil must retain its authored source.");
+                Assert.That(panel.m_Mask.transform.parent, Is.SameAs(panel.m_Source.transform.parent));
+                Assert.That(panel.m_Mask.GetComponent<Mask>(), Is.Null, "The authored mask must not parent the content.");
+                Assert.That(mask.GetComponent<Mask>().showMaskGraphic, Is.False);
+            }
             var filter = panel.m_Source.GetComponent<ColorAdjust>();
             Assert.That(filter.presentation.transform.parent == filter.transform.parent, Is.True, "Actual importer must move the pre-baked companion with its source.");
             Assert.That(filter.presentationGroup, Is.Not.Null);

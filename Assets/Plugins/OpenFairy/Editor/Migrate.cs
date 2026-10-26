@@ -713,10 +713,19 @@ namespace OpenFairy.UGUI.Editor
                 if (xml.Mask is { } mask)
                 {
                     var maskGo = children.AsValueEnumerable().First(child => child.Xml.Id == mask).Go;
-                    maskGo.AddComponent<Mask>().showMaskGraphic = false;
+                    var carrier = new GameObject("Mask", typeof(RectTransform), typeof(MaskShape), typeof(Mask));
+                    carrier.layer = root.layer;
+                    var carrierRect = (RectTransform)carrier.transform;
+                    carrierRect.SetParent(rt, false);
+                    carrierRect.pivot = rt.pivot;
+                    carrierRect.anchorMin = Vector2.zero;
+                    carrierRect.anchorMax = Vector2.one;
+                    carrierRect.offsetMin = carrierRect.offsetMax = Vector2.zero;
+                    carrier.GetComponent<MaskShape>().source = maskGo.AddComponent<MaskSource>();
+                    carrier.GetComponent<Mask>().showMaskGraphic = false;
                     foreach (var (_, childGo) in children)
-                        if (childGo != maskGo && childGo.transform.parent == rt)
-                            ReparentPreservingRect((RectTransform)childGo.transform, (RectTransform)maskGo.transform);
+                        if (childGo.transform.parent == rt)
+                            ReparentPreservingRect((RectTransform)childGo.transform, carrierRect);
                 }
 
                 var relationSpace = rt;

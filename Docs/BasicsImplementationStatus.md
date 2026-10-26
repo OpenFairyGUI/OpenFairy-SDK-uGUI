@@ -4,6 +4,14 @@
 
 ## 当前结论
 
+### 2026-10-26 蒙版独立变换与零宽描边
+
+- 原生 FairyGUI 的蒙版是内容的兄弟节点。迁移器改为烘焙独立的 stencil 容器，MaskSource 保留原始节点的网格和控制器，MaskShape 仅将其网格变换到裁剪空间。蒙版翻转、缩放和 alpha 不再作为父级变换或透明度传给内容；父组件 alpha 继续生效。源几何在原生 Canvas 重建前同步，支持同帧更新。已有产物需重新 Migrate。
+- Builtin TextStroke 在宽度为 0 时直接保留原网格，对齐 FairyGUI 的 outline!=0 条件，避免四份重叠字形改变透明度和边缘颜色。
+- Unity 6.6.7f1 Builtin 包级非批处理 Editor **214/214**、PlayMode **198/198**，无失败或跳过；包括保存重载后的蒙版绑定、不对称遮罩翻转、遮罩 alpha=0、父级 alpha、浮点 RT 像素检查和描边宽度 0→2→0 的网格检查。未重跑 TMP、传统完整 Demo/golden 或 Player。
+- 消费工程独立 Gamma 夹具使用原始 FairyGUI 2560×1440 渲染、相同 RGB153 背景及4093个匹配对象。两项修复后 RGB8 MAE 从1.474357降到1.247172，RMSE从11.175095降到9.864620。头像亮度／朝向和 WAVE 黄色叠画已纠正，仍不满足浮点精度级验收；悬浮框关系、字体和采样差异继续排查。
+- 浮点蒙版专项首轮发现 uGUI 将 CanvasGroup alpha=.5 量化为128/255，不能据此认为它等于.5；另修正了夹具释放仍绑定相机的 RT 的清理错误。专项改用整码 alpha=.4 隔离蒙版结构验证，RGB误差阈值仍为1e-6；未将量化差异归为已解决。
+
 ### 2026-10-26 装饰图片的指针穿透
 
 - 原生 `Image` 设置 `TouchDisabled`，`MovieClip` 继承该行为，`Container.HitTest` 始终跳过它们；不能仅凭 `GObject.touchable` 的默认值认定图片会拦截点击。迁移器现在为图片和序列帧烘焙 `raycastTarget=false`，保留 Loader、组件根及按钮的命中面。已有产物需重新执行 Migrate。

@@ -4,6 +4,8 @@
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-10-26 蒙版是内容的兄弟，不可把作者蒙版作为内容的变换/alpha 父节点。迁移器用独立 MaskShape/MaskSource 烘焙 stencil，控制器继续绑定原始节点；零宽 TextStroke 不应生成任何描边副本。6.6.7f1 Builtin Editor214/214、PlayMode198/198。Gamma 实际界面 MAE 降低不等于浮点精度一致，尤其 CanvasGroup 的8位 alpha 量化仍有已测差异。
+
 2026-10-26 图片／序列帧的原生 `TouchDisabled` 与 `GObject.touchable` 是不同条件。迁移时应关闭它们的 raycastTarget，避免装饰外框阻挡后方按钮；Loader 和组件根继续保留命中。已有产物须 Migrate。保存重载后的真实射线及点击回归替换了原先“所有图片都拦截”的错误断言；6.6.7f1 Builtin 导入边界20/20、非批处理 PlayMode196/196。
 
 2026-10-24 GroupLayout 的五参数 SetLayoutInputForAxis 从 Unity 6.6 / uGUI 2.6 起可用，不能以 UNITY_6000_7_OR_NEWER 为边界；保留更早版本的四参数分支。6.6.7f1 与 6.7.0b5 的 Builtin/TMP Runtime、Editor 程序集分别编译通过，Builtin 包级非批处理 PlayMode 各196/196；旧四参数参考程序集分支另编译通过，不等于完整旧版 Editor 验证。自动捕获和 WaitForEndOfFrame 测试须使用非批处理运行，批处理结果不能冒充完整通过。
