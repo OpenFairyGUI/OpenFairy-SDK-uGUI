@@ -4,6 +4,13 @@
 
 ## 当前结论
 
+### 2026-10-26 文件字体的 TextCore 栅格与小数度量
+
+- 当前 FairyGUI 编辑器对导入的 ttf/otf 使用 ExternalFont，缺省渲染模式为 SMOOTH。旧 Builtin 后端使用 Font.GetCharacterInfo 的整数度量和不同栅格，造成字宽、提示框宽度、边缘采样差异。Migrate 现在烘焙文件字体标记、renderMode 和直接 Font 引用；输入正文和 placeholder 同步保存。系统字体继续原路径，Builtin 组件仍继承 UnityEngine.UI.Text，没有替换成 TMP 组件或增加运行时资源 URL。
+- 新缓存按实际字号请求 TextCore 字形，保留浮点 bearing/advance、原始 Alpha8 栅格和原生斜体/加粗偏移。临时 FontAsset 仅用于公开栅格 API，拷贝样本后释放；共享图集增长不缩放已有像素，旧文本重新生成 UV。域重载、Play 切换与迁移开始清理缓存。新增模式、混合字号、逐样本图集、几何、实际扩容、保存重载、进入 Play 后新增字符，以及输入框导入回归。
+- 独立 Gamma 工程与原生编辑器批量导出对照：308个字形度量误差0，304个非空字形共231654个 Alpha8 样本误差0。实际2560×1440界面RGB8 MAE由1.063715降至0.764650，差异像素389430，最大通道误差仍为255；提示文字恢复171×29。整体仍不满足浮点精度一致，原生浮点目标读回也尚未取得，不能将 PNG 的改善当作达标。
+- Unity6.6.7f1 Builtin 完整包级 Editor **223/223**、PlayMode **199/199**，无失败、跳过或不确定项。首轮扩容测试使用150px的62字符并未实际超出1024图集，改用250px后覆盖真实扩容；导入回归另暴露原枚举解析器删除 SMOOTH_HINTED 的下划线，已改为先解析原名再处理 XML 标点。传统完整 Demo/golden、TMP 原生整套和 Player 未重跑。
+
 ### 2026-10-26 实例内容自适应的构造期关系
 
 - 组件实例在父文档中可能已保存内容变更后的尺寸。导入期先恢复嵌套关系保存的基线，显式进行构造期同步；自有子对象的 Width/Height、RightExtRight/BottomExtBottom 按 FairyGUI underConstruct 分支从 sourceSize 与初始子尺寸计算，避免把增量加到实例结果上。构造完成后退出该分支并记录 prefab 中的关系覆盖，运行时继续按增量跟随内容。

@@ -46,6 +46,7 @@ namespace OpenFairy.UGUI.Editor
             public Schema.ImageScale Scale;
             public string Scale9Grid;
             public string Texture;
+            public UnityEngine.TextCore.LowLevel.GlyphRenderMode FontRenderMode;
             public bool Exported;
             public int BuildLevel;
             private Schema.Component _componentXml;
@@ -89,6 +90,7 @@ namespace OpenFairy.UGUI.Editor
         public static void Execute()
         {
             EditorApplication.delayCall -= Execute;
+            ExternalFont.Clear();
             Resources.Clear();
             MovieClips.Clear();
             FontAssets.Clear();
@@ -191,6 +193,7 @@ namespace OpenFairy.UGUI.Editor
                     Scale = resource.Scale,
                     Scale9Grid = resource.Scale9Grid,
                     Texture = resource.Texture,
+                    FontRenderMode = resource.FontRenderMode,
                     Exported = resource.Exported,
                 };
         }
@@ -2486,6 +2489,8 @@ namespace OpenFairy.UGUI.Editor
         {
             var font = display.font;
             var fontNames = display.fontNames;
+            var externalFont = display.externalFont;
+            var fontRenderMode = display.fontRenderMode;
             var fontSize = display.fontSize;
             var color = display.color;
             var alignment = display.alignment;
@@ -2507,6 +2512,8 @@ namespace OpenFairy.UGUI.Editor
             var text = textGo.GetComponent<TextField>();
             text.font = font;
             text.fontNames = fontNames;
+            text.externalFont = externalFont;
+            text.fontRenderMode = fontRenderMode;
             text.fontSize = fontSize;
             text.color = color;
             text.alignment = alignment;
@@ -2521,6 +2528,8 @@ namespace OpenFairy.UGUI.Editor
                 var ph = phGo.GetComponent<TextField>();
                 ph.font = font;
                 ph.fontNames = fontNames;
+                ph.externalFont = externalFont;
+                ph.fontRenderMode = fontRenderMode;
                 ph.fontSize = fontSize;
                 ph.alignment = alignment;
                 ph.ubb = true;
@@ -2792,6 +2801,9 @@ namespace OpenFairy.UGUI.Editor
                     {
                         text.fontNames = Path.GetFileNameWithoutExtension(fontResource.File);
                         text.font = ImportDynamicFont(fontResource);
+                        text.externalFont = true;
+                        text.fontRenderMode = fontResource.FontRenderMode == UnityEngine.TextCore.LowLevel.GlyphRenderMode.DEFAULT
+                            ? UnityEngine.TextCore.LowLevel.GlyphRenderMode.SMOOTH : fontResource.FontRenderMode;
                     }
                 else
                     text.fontNames = font;
