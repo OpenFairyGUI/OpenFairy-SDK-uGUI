@@ -17,6 +17,7 @@ namespace OpenFairy.UGUI
         [SerializeField, HideInInspector] private Vector2 _ownerSize;
         [SerializeField, HideInInspector] private Vector2 _referenceSize;
         [SerializeField, HideInInspector] private bool _hasBaseline;
+        [SerializeField, HideInInspector] private Vector2[] _sourceTargets;
         private bool _recorded;
         private bool _applying;
         private bool _registered;
@@ -97,8 +98,12 @@ namespace OpenFairy.UGUI
         {
             RestoreBaseline();
             _constructionSize = sourceSize;
-            _constructionTargets = Array.ConvertAll(bindings, binding => binding.previous.size);
+            _constructionTargets = _sourceTargets?.Length == bindings.Length
+                ? _sourceTargets : Array.ConvertAll(bindings, binding => binding.previous.size);
         }
+
+        internal void RecordSourceTargets() =>
+            _sourceTargets = Array.ConvertAll(bindings, binding => binding.previous.size);
 
         internal void EndConstruction()
         {

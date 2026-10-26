@@ -597,9 +597,16 @@ namespace OpenFairy.UGUI.Editor.Schema
     {
         [XmlAttribute("name")] public string Name;
         [XmlAttribute("selected")] public int Selected;
+        [XmlAttribute("homePageType")] public ControllerHomePageType HomePageType;
+        [XmlAttribute("homePage")] public string HomePage;
         [XmlAttribute("pages")] public (string Id, string Name)[] Pages = Array.Empty<(string Id, string Name)>();
         [XmlElement("action")] public ControllerAction[] Actions = Array.Empty<ControllerAction>();
+
+        public int InitialPage => HomePageType == ControllerHomePageType.Specific
+            ? Math.Max(0, Array.FindIndex(Pages, page => page.Id == HomePage)) : 0;
     }
+
+    public enum ControllerHomePageType { Default, Specific, Branch, Variable }
 
     public enum ControllerActionType
     {

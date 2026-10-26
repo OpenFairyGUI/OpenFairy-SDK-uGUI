@@ -4,6 +4,14 @@
 
 ## 当前结论
 
+### 2026-10-26 发布首页、隐藏容器柔化裁剪与源关系尺寸
+
+- 控制器的 `selected` 是编辑器当前选中页，不能用作发布默认值。现在缺省使用第一页，`homePageType="specific"` 按 `homePage` 页ID选择；实例 `controller` 指定仍按原顺序覆盖。实际战斗预制体无需比对脚本即可得到左侧三个头像 left／右侧三个 right，头像外框与蒙版同步。
+- Hidden 组件与列表导入 `clipSoftness` 到 RectMask2D；软裁剪下的默认 Graphic 材质预烘焙为 UI Blend。该 shader 使用原生默认 StageCamera 的 `softness / 5` 屏幕像素渐隐宽度，并取两轴最小值，避免 uGUI 原生半宽／乘积渐隐的差异。保留自定义与 TMP 材质引用，本次未扩展它们的软裁剪路径。实际小地图 MapClamp 的100,100软裁剪恢复了蓝色背景边缘过渡。
+- 关系另存控制器应用前的源 target 尺寸，构造嵌套实例时使用它；完成布局后的运行基线继续单独保存。否则缺省隐藏30像素图标会把源组85×30变成55×29，随后错误生成221×51提示框；现在保持原生191×50。克隆／序列化源尺寸与运行时后续变化有回归。
+- Unity6.6.7f1 Builtin Editor **234/234**；完整PlayMode **200/201**，唯一失败为 `InputEditingTests.Paste_undo_restores_the_selection_and_new_edits_discard_redo`。隔离单项同样失败，直接 `GUIUtility.systemCopyBuffer` 写入测试文本并读回的比较为false，重启编辑器仍复现；输入实现未改动，不将此结果写成整套通过。新增柔化GPU测试在.5／1／2缩放下逐像素与原生公式比较，RGB误差阈值1e-6；新增关系及首页测试通过。
+- Gamma2560×1440整图RGB8 MAE从0.605887降到**0.533565**，小地图区域从3.840605降到**1.331605**；最大通道差仍255，整体未达到浮点精度一致。完整对象、网格、材质、纹理、RGBAFloat及EXR保存在消费端 `unity-snapshot-obvious-fixed`。传统完整Demo/golden、TMP原生整套及Player未重跑。
+
 ### 2026-10-26 停用九宫格时的编辑器缓存
 
 - 图片关闭九宫格后仍可能在 package.xml 保留 scale9grid，甚至保留负宽高。导入器之前只检查该属性是否存在，把停用的数据写入 spriteBorder，并据边框启用 Sliced；左上菜单背景因此严重变形。现在仅 Scale=NineGrid 时使用网格，其余模式导入零边框；启用中的九宫格规则保留。

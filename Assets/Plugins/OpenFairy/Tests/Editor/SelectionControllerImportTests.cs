@@ -27,7 +27,10 @@ namespace OpenFairy.UGUI.Tests
         [TestCase("Page", true)]
         [TestCase("Missing", false)]
         [TestCase(null, false)]
-        public void Import_bakes_direct_bidirectional_selection_only_for_a_named_existing_controller(string name, bool bound, bool invalidScript = false)
+        [TestCase("Page", true, false, false)]
+        [TestCase("Missing", false, false, false)]
+        [TestCase(null, false, false, false)]
+        public void Import_bakes_direct_bidirectional_selection_only_for_a_named_existing_controller(string name, bool bound, bool invalidScript = false, bool specificHome = true)
         {
             var key = "__Selection_" + Guid.NewGuid().ToString("N");
             var output = "Assets/UIProject/Assets/" + key;
@@ -80,7 +83,8 @@ namespace OpenFairy.UGUI.Tests
                 }
                 var file = sourceDirectory + "/SelectionControllerTestPanel.xml";
                 var attribute = name == null ? "" : " selectionController='" + name + "'";
-                File.WriteAllText(file, "<component size='120,80'><controller name='Page' pages='18,First,2,Second,90,Third' selected='2'/>"
+                File.WriteAllText(file, "<component size='120,80'><controller name='Page' pages='18,First,2,Second,90,Third' selected='2'"
+                    + (specificHome ? " homePageType='specific' homePage='90'" : "") + "/>"
                     + "<displayList><list id='items' name='Items' size='120,80' defaultItem='ui://" + itemKey + "'" + attribute
                     + "><item/><item/><item/></list></displayList></component>");
                 var resource = Resource(key, file);
@@ -130,7 +134,7 @@ namespace OpenFairy.UGUI.Tests
                 finally { PrefabUtility.UnloadPrefabContents(resave); }
                 var saved = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath).GetComponent<SelectionControllerTestPanel>();
                 var savedSelection = saved.m_Items.GetComponent<ListSelection>();
-                Assert.That(saved.m_Page.page, Is.EqualTo(Page.Third));
+                Assert.That(saved.m_Page.page, Is.EqualTo(specificHome ? Page.Third : Page.First));
                 Assert.That(savedSelection.selectionOwner, bound ? Is.SameAs(saved) : Is.Null);
                 Assert.That(savedSelection.selectionController, Is.EqualTo(bound ? 0 : -1));
                 if (bound)
@@ -141,6 +145,8 @@ namespace OpenFairy.UGUI.Tests
                     var panel = instance.GetComponent<SelectionControllerTestPanel>();
                     var selection = panel.m_Items.GetComponent<ListSelection>();
                     selection.Rebind();
+                    Assert.That(selection.selectedIndex, Is.EqualTo(specificHome ? 2 : 0));
+                    panel.m_Page.page = Page.Third;
                     Assert.That(selection.selectedIndex, Is.EqualTo(2));
                     panel.m_Page.page = Page.First;
                     Assert.That(selection.selectedIndex, Is.Zero);

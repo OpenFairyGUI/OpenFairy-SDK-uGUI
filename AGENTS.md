@@ -4,6 +4,8 @@
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-10-26 控制器 selected 仅表示编辑器选中页，发布缺省第一页，specific homePage 按页ID解析；不能把预览状态当运行默认页。关系需要同时保留控制器应用前的源target尺寸和最终运行基线，默认页隐藏组成员后也不能改掉构造源尺寸。Hidden 的 clipSoftness 要导入；默认Graphic软裁剪预烘焙UI Blend，按原生默认StageCamera使用softness/5屏幕像素、两轴取min，GPU在.5/1/2缩放下RGB阈值1e-6通过。Builtin Editor234/234；完整PlayMode200/201，唯一粘贴用例失败且独立GUIUtility剪贴板写读probe为false，重启仍复现；不要称整套通过。Gamma整图MAE0.533565、小地图1.331605，整体仍非浮点一致。运行测试前保存本代理专用宿主场景，避免域重载后保存弹窗挂住测试；不为此保存消费工程的用户场景。
+
 2026-10-26 scale9grid 是编辑器保留的数据，不代表九宫格已启用。仅 Scale=NineGrid 时设置 spriteBorder；停用时忽略保留的网格，包括负宽高缓存，不能钳制后启用切片。原生左上框架为4顶点普通图，错误边框使uGUI启用Sliced并严重变形。两个保留网格回归在旧版失败，新版Builtin Editor227/227、PlayMode199/199。Gamma整图RGB8 MAE降至0.605887，仍非浮点精度一致。
 
 2026-10-26 Sprite 导入必须保留透明像素的RGB，alphaIsTransparency=false。该开关会将alpha=0像素的颜色扩散成邻近颜色，双线性采样仍会使用这些数据，和原生编辑器直接解码PNG不同。原生58纹理样本中旧设置仅17张RGBA逐像素一致，修正后58/58；两项普通／平铺导入回归在旧版失败，修正后Builtin Editor225/225、PlayMode199/199。独立Gamma整图RGB8 MAE进一步降至0.757612，仍未达到浮点精度一致。
