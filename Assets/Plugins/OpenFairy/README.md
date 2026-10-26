@@ -39,6 +39,12 @@
 
 缺少上述配置时保持旧行为：类名前缀为空、成员前缀为 `m_`、不过滤默认名称。修改前缀后，手写 partial 类和业务调用需同步更新；已有 UI 应重新转换，控制器的序列化类型包含生成类名。`getMemberByName` 不影响 Prefab 引用绑定。
 
+### Linear 工程中的 Gamma UI（可选）
+
+在 **Project Settings → OpenFairy** 勾选 **Gamma UI Rendering** 并执行 **Apply / Migrate UI**，再手动在实际使用的 **Universal Renderer Data → Add Renderer Feature** 中添加并启用 **OpenFairy Gamma UI**。SDK 不自动修改 URP 配置。支持 Unity 6.6 / URP 17.6+ / Direct3D 11、12 / SDR 输出的 Screen Space Overlay UI。UI 通过原生 RendererList 绘制一次，不增加 UI 合成 RT 或全屏拷贝；增加两次命令提交。导入选项默认关闭，关闭时重新 Migrate 并停用 Feature。
+
+相机模式、混用材质和外部纹理等要求见 [GammaRendering](Documentation~/GammaRendering.md)。
+
 ## 已实现
 
 Basics / Transition 两套官方 demo 的静态渲染、主要交互（按钮/复选/单选、Slider、ComboBox 下拉、滚动、拖放、窗口/弹窗、翻页动效、文本 UBB 链接、列表填充）与 Transition 动效（路径、嵌套、滤镜、shake、循环/yoyo、倒放）均已覆盖并过 PlayMode parity 测试。

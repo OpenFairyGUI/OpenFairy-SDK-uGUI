@@ -23,6 +23,7 @@ namespace OpenFairy.UGUI.Tests
         private string _source;
         private string _output;
         private string[] _dependencies;
+        private bool _gammaRendering;
         private bool _optionsEnabled;
         private EnterPlayModeOptions _options;
 
@@ -40,6 +41,8 @@ namespace OpenFairy.UGUI.Tests
             _source = settings.sourceDirectory;
             _output = settings.outputDirectory;
             _dependencies = settings.dependencyDirectories;
+            _gammaRendering = settings.gammaRendering;
+            settings.gammaRendering = false;
             settings.sourceDirectory = Source;
             settings.outputDirectory = Output;
             settings.dependencyDirectories = Array.Empty<string>();
@@ -91,8 +94,45 @@ namespace OpenFairy.UGUI.Tests
             settings.sourceDirectory = _source;
             settings.outputDirectory = _output;
             settings.dependencyDirectories = _dependencies;
+            settings.gammaRendering = _gammaRendering;
             AssetDatabase.DeleteAsset(Output);
             Directory.Delete(Source, true);
+        }
+
+        [Test]
+        public void Gamma_import_prepares_raw_colors_and_can_return_to_project_color_space()
+        {
+            var settings = MigrationSettings.instance;
+            var path = Output + "/Gamma.png";
+            var image = new Texture2D(2, 1);
+            image.SetPixels32(new[] { new Color32(0, 51, 204, 255), new Color32(255, 51, 204, 255) });
+            image.Apply();
+            File.WriteAllBytes(path, image.EncodeToPNG());
+            Object.DestroyImmediate(image);
+            var root = new GameObject("Gamma", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            try
+            {
+                foreach (bool gamma in new[] { true, false })
+                {
+                    settings.gammaRendering = gamma;
+                    Invoke("ImportSprite", path, false, Vector4.zero, false);
+                    Assert.That(((TextureImporter)AssetImporter.GetAtPath(path)).sRGBTexture, Is.EqualTo(!gamma));
+                    if (gamma)
+                    {
+                        Invoke("ConfigureGammaRendering", root);
+                        var copy = SaveReload(root);
+                        try
+                        {
+                            Assert.That(copy.GetComponent<GammaUI>(), Is.Not.Null);
+                            var material = copy.GetComponent<UnityEngine.UI.Image>().material;
+                            Assert.That(material.shader.name, Is.EqualTo("OpenFairy/UI Blend"));
+                            Assert.That(material.GetFloat("_OpenFairyGamma"), Is.EqualTo(1));
+                        }
+                        finally { Object.DestroyImmediate(copy); }
+                    }
+                }
+            }
+            finally { Object.DestroyImmediate(root); }
         }
 
         [UnityTearDown]

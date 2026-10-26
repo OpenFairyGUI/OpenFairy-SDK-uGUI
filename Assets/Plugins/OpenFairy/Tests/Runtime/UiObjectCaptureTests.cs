@@ -136,6 +136,36 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [UnityTest]
+        public IEnumerator GammaCapturePreservesRawVertexColorInFloatTarget()
+        {
+            var root = MakeRoot();
+            root.gameObject.AddComponent<GammaUI>();
+            var material = Own(new Material(Shader.Find("OpenFairy/UI Blend")));
+            material.SetFloat("_OpenFairyGamma", 1);
+            var image = Image(root, new Vector2(100, 100), new Color(.4f, .6f, .8f, .4f));
+            image.material = material;
+            yield return null;
+            var capture = Capture(root);
+            var target = Own(new RenderTexture(128, 128, 24, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear));
+            target.Create();
+            capture.Capture(target, Render);
+            var readback = Own(new Texture2D(128, 128, TextureFormat.RGBAFloat, false, true));
+            var previous = RenderTexture.active;
+            try
+            {
+                RenderTexture.active = target;
+                readback.ReadPixels(new UnityEngine.Rect(0, 0, 128, 128), 0, 0);
+                readback.Apply();
+            }
+            finally { RenderTexture.active = previous; }
+            var pixel = readback.GetPixel(64, 64);
+            Assert.That(pixel.r, Is.EqualTo(.16f).Within(1e-6f));
+            Assert.That(pixel.g, Is.EqualTo(.24f).Within(1e-6f));
+            Assert.That(pixel.b, Is.EqualTo(.32f).Within(1e-6f));
+            Assert.That(pixel.a, Is.EqualTo(.4f).Within(1e-6f));
+        }
+
+        [UnityTest]
         public IEnumerator InternalStencilAndRectMasksAreReplayedWithoutOuterClipping()
         {
             var root = MakeRoot();

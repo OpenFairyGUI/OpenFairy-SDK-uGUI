@@ -4,6 +4,14 @@
 
 ## 当前结论
 
+### 2026-10-26 Linear 工程可选 Gamma UI
+
+- 新增 `Project Settings → OpenFairy → Gamma UI Rendering` 导入选项，默认关闭。Migrate 烘焙 raw Gamma 图片、共享 UI 材质与 `GammaUI` Canvas 标记；取消后重迁移恢复普通颜色空间。依用户要求，SDK 不自动修改 URP 配置；使用者在实际 Universal Renderer Data 中手动添加、启用 `OpenFairy Gamma UI` Renderer Feature。设置、版本、外部纹理和自定义/TMP材质要求见包内 `Documentation~/GammaRendering.md`。
+- 当前支持范围为 Unity6.6+、URP17.6+、Render Graph、DX11/12、SDR Overlay。URP 集成为可选程序集，不引入 UPM 硬依赖。World Space、Screen Space Camera、RenderTexture相机输出、XR、HDR显示输出及UI Toolkit backdrop合成不属于支持路径。
+- 实际集成修正了早期原型结论：中途 `context.Submit()` 会使 URP 提前创建的 UI RendererList 失效，原生 Overlay 不显示；`Graphics.ExecuteCommandBuffer` 虽得到正确UI，却丢失三维场景绘制。最终方案不在Render Graph内部中途Submit，以免使后续Gizmos等列表失效；在录制阶段暂时跳过URP默认Overlay pass，执行前恢复所有权；提交场景后才创建原生UI列表，使用 `sRGBWrite=false` 绘制一次并提交，finally恢复状态，随后绘制LowLevel UI。保留 Unity 原生网格、材质和批处理，不修改URP源码、无UI合成RT或全屏拷贝；相较原路径增加两次提交。只在排序后最后Base的最终相机执行，覆盖相机堆栈并避免多Base重画。
+- 6000.6.7f1 / URP17.6实测：DX12单相机、两Base加Overlay、内部HDR+4xMSAA，以及DX11的测试UI区域共72000像素，与独立Gamma基线的RGB8差均为0；白色半透明叠黑开/关/开为128/188/128，三维控制块颜色开关一致，UI提交后sRGB状态恢复。Gamma捕获另以RGBAFloat验证原始顶点色和PMA，Linear项目的RGBA误差阈值1e-6通过。这些是受控场景验证，不表示完整FairyGUI布局/字形/采样/alpha量化已达到浮点一致。Windows Player成功构建；隐藏运行没有有效屏幕渲染帧，未做Player屏幕像素验收。
+- Builtin完整Editor **235/235**，PlayMode同版最终复验 **205/205**，无失败或跳过。首轮 **204/205** 的自动滚动/滤镜时序项隔离复验通过，再跑整套205/205，未更改实现或断言来消除首轮失败。新增导入回归覆盖sRGB设置双向切换及Prefab材质/标记持久化，运行回归覆盖共享Canvas恢复、重新挂载与浮点捕获。传统完整Demo/golden和TMP整套未重跑。
+
 ### 2026-10-26 发布首页、隐藏容器柔化裁剪与源关系尺寸
 
 - 控制器的 `selected` 是编辑器当前选中页，不能用作发布默认值。现在缺省使用第一页，`homePageType="specific"` 按 `homePage` 页ID选择；实例 `controller` 指定仍按原顺序覆盖。实际战斗预制体无需比对脚本即可得到左侧三个头像 left／右侧三个 right，头像外框与蒙版同步。

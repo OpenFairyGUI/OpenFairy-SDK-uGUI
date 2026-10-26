@@ -1,0 +1,7 @@
+{
+    "name": "OpenFairy.UGUI.URP",
+    "rootNamespace": "OpenFairy.UGUI",
+    "references": ["OpenFairy.UGUI", "Unity.RenderPipelines.Core.Runtime", "Unity.RenderPipelines.Universal.Runtime"],
+    "defineConstraints": ["OPENFAIRY_URP", "UNITY_6000_6_OR_NEWER"],
+    "versionDefines": [{"name": "com.unity.render-pipelines.universal", "expression": "17.6.0", "define": "OPENFAIRY_URP"}]
+}
