@@ -265,7 +265,7 @@ namespace OpenFairy.UGUI.Editor
             var target = SpritePath(image);
             var bytes = File.ReadAllBytes(image.File);
             var border = Vector4.zero;
-            if (image.Scale9Grid != null)
+            if (image.Scale == Schema.ImageScale.NineGrid && image.Scale9Grid != null)
             {
                 var texture = new Texture2D(2, 2);
                 texture.LoadImage(bytes);
