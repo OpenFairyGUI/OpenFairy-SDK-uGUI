@@ -247,6 +247,8 @@ namespace OpenFairy.UGUI.Editor
             }
             if (aliases.TryGetValue(value, out var alias))
                 return alias;
+            if (Enum.TryParse(type, value, true, out var parsed))
+                return parsed;
             // XML 词表的标点风格（left-left / multiple_singleclick）折叠成成员名，忽略大小写（titleType="valueAndmax" 等杂写）。
             return Enum.Parse(type, value.Replace("-", "").Replace("_", ""), true);
         }
@@ -541,6 +543,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("scale")] public ImageScale Scale;
         [XmlAttribute("scale9grid")] public string Scale9Grid;
         [XmlAttribute("texture")] public string Texture;
+        [XmlAttribute("renderMode")] public UnityEngine.TextCore.LowLevel.GlyphRenderMode FontRenderMode;
         [XmlAttribute("exported")] public bool Exported;
 
         public ResourceKind Kind;

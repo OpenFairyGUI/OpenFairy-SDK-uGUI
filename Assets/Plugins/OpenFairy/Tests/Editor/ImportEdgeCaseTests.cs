@@ -113,6 +113,49 @@ namespace OpenFairy.UGUI.Tests
             return (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(path));
         }
 
+#if !FAIRYGUI_TMPRO
+        [TestCase(null, UnityEngine.TextCore.LowLevel.GlyphRenderMode.SMOOTH)]
+        [TestCase("SMOOTH_HINTED", UnityEngine.TextCore.LowLevel.GlyphRenderMode.SMOOTH_HINTED)]
+        public void File_font_rendering_is_baked_into_input_and_placeholder(string authored, UnityEngine.TextCore.LowLevel.GlyphRenderMode expected)
+        {
+            var file = Source + "/assets/BindingFixtures/package.xml";
+            var package = System.Xml.Linq.XDocument.Load(file);
+            var font = new System.Xml.Linq.XElement("font", new System.Xml.Linq.XAttribute("id", "filefont"),
+                new System.Xml.Linq.XAttribute("name", "FileFont.ttf"), new System.Xml.Linq.XAttribute("path", "/"));
+            if (authored != null) font.SetAttributeValue("renderMode", authored);
+            package.Root.Element("resources").Add(font);
+            package.Save(file);
+            File.Copy(EditorApplication.applicationContentsPath + "/Resources/Fonts/Inter-Regular.ttf", Source + "/assets/BindingFixtures/FileFont.ttf");
+            Invoke("IndexSources");
+            var parent = new GameObject("Input parent", typeof(RectTransform));
+            GameObject copy = null;
+            try
+            {
+                var controllerType = typeof(Migrate).GetNestedType("ControllerData", BindingFlags.NonPublic);
+                var controllers = Activator.CreateInstance(typeof(Dictionary<,>).MakeGenericType(typeof(string), controllerType));
+                var child = (GameObject)Invoke("CreateChild", new Schema.Display {
+                    Kind = Schema.DisplayKind.Text, Name = "Input", Size = new Vector2(180, 40),
+                    Input = true, Font = "ui://edgesrc1filefont", FontSize = 17, Text = "A", Prompt = "Hint",
+                }, (RectTransform)parent.transform, Resource("default"), controllers);
+                copy = SaveReload(child);
+                var fields = copy.GetComponentsInChildren<TextField>(true);
+                Assert.That(fields.Length, Is.EqualTo(2));
+                foreach (var field in fields)
+                {
+                    Assert.That(field.externalFont, Is.True);
+                    Assert.That(field.fontRenderMode, Is.EqualTo(expected));
+                    Assert.That(AssetDatabase.GetAssetPath(field.font), Does.StartWith(Output + "/"));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(copy);
+                Object.DestroyImmediate(parent);
+                ExternalFont.Clear();
+            }
+        }
+#endif
+
         private static void Template(string name, Vector2 size)
         {
             var root = new GameObject(name, typeof(RectTransform));

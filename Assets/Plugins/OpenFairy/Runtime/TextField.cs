@@ -4,6 +4,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using UnityEngine.TextCore.LowLevel;
 using ZLinq;
 
 namespace OpenFairy.UGUI
@@ -39,6 +40,8 @@ namespace OpenFairy.UGUI
         public bool html;
         public bool underlined;
         public BitmapFont bitmapFont;
+        [SerializeField] internal bool externalFont;
+        [SerializeField] internal GlyphRenderMode fontRenderMode = GlyphRenderMode.SMOOTH;
         public Sprite[] imageSprites;
         [SerializeField] private RectTransform[] _images = Array.Empty<RectTransform>();
 
@@ -72,6 +75,7 @@ namespace OpenFairy.UGUI
         private struct Quad
         {
             public Rect Rect;
+            public float SkewTop, SkewBottom;
             public Color32 TL, BL, TR, BR;
             public Vector2 UvBL, UvTL, UvTR, UvBR;
         }
@@ -124,7 +128,8 @@ namespace OpenFairy.UGUI
             return tag[start..stop];
         }
 
-        public override Texture mainTexture => bitmapFont != null ? bitmapFont.texture : base.mainTexture;
+        private ExternalFont FileFont => externalFont && bitmapFont == null && font != null ? ExternalFont.Get(font, fontRenderMode) : null;
+        public override Texture mainTexture => bitmapFont != null ? bitmapFont.texture : FileFont?.texture ?? base.mainTexture;
 
         protected override void OnEnable()
         {
@@ -170,6 +175,16 @@ namespace OpenFairy.UGUI
 
         private void LateUpdate()
         {
+            if (_layoutValid && _layoutFileFont != FileFont)
+            {
+                _layoutValid = false;
+                _fontRebuildPending = true;
+            }
+            else if (_layoutFileFont != null && _layoutFileFontVersion != _layoutFileFont.version)
+            {
+                _layoutValid = false;
+                _fontRebuildPending = true;
+            }
             if (!_fontRebuildPending || !IsActive()
                 || CanvasUpdateRegistry.IsRebuildingGraphics()
                 || CanvasUpdateRegistry.IsRebuildingLayout())
@@ -177,6 +192,7 @@ namespace OpenFairy.UGUI
 
             _fontRebuildPending = false;
             SetVerticesDirty();
+            SetMaterialDirty();
         }
 
         protected override void OnPopulateMesh(VertexHelper toFill)
@@ -187,10 +203,10 @@ namespace OpenFairy.UGUI
             foreach (var quad in _quads)
             {
                 var v = toFill.currentVertCount;
-                toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMin, rect.yMax - quad.Rect.yMax), quad.BL, quad.UvBL);
-                toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMin, rect.yMax - quad.Rect.yMin), quad.TL, quad.UvTL);
-                toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMax, rect.yMax - quad.Rect.yMin), quad.TR, quad.UvTR);
-                toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMax, rect.yMax - quad.Rect.yMax), quad.BR, quad.UvBR);
+                toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMin + quad.SkewBottom, rect.yMax - quad.Rect.yMax), quad.BL, quad.UvBL);
+                toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMin + quad.SkewTop, rect.yMax - quad.Rect.yMin), quad.TL, quad.UvTL);
+                toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMax + quad.SkewTop, rect.yMax - quad.Rect.yMin), quad.TR, quad.UvTR);
+                toFill.AddVert(new Vector3(rect.xMin + quad.Rect.xMax + quad.SkewBottom, rect.yMax - quad.Rect.yMax), quad.BR, quad.UvBR);
                 toFill.AddTriangle(v, v + 1, v + 2);
                 toFill.AddTriangle(v, v + 2, v + 3);
             }
@@ -213,6 +229,8 @@ namespace OpenFairy.UGUI
         private VerticalWrapMode _layoutVOverflow;
         private Font _layoutFont;
         private BitmapFont _layoutBitmapFont;
+        private ExternalFont _layoutFileFont;
+        private int _layoutFileFontVersion;
         private OverflowMode _layoutOverflowMode;
         private float _fontSizeScale = 1;
         private bool _layoutInProgress;
@@ -227,6 +245,7 @@ namespace OpenFairy.UGUI
                 && _layoutHOverflow == horizontalOverflow && _layoutVOverflow == verticalOverflow
                 && _layoutLeading == leading && _layoutLetterSpacing == letterSpacing && _layoutMaxWidth == maxWidth
                 && ReferenceEquals(_layoutFont, font) && ReferenceEquals(_layoutBitmapFont, bitmapFont)
+                && ReferenceEquals(_layoutFileFont, FileFont) && (_layoutFileFont == null || _layoutFileFontVersion == _layoutFileFont.version)
                 && _layoutOverflowMode == overflowMode)
             {
                 if (_layoutColor == color)
@@ -260,6 +279,18 @@ namespace OpenFairy.UGUI
 
         private void RequestChars(List<Run> runs)
         {
+            if (FileFont is { } fileFont)
+            {
+                foreach (var run in runs)
+                    if (run.Text != null)
+                    {
+                        fileFont.Request(run.Text, ScaledSize(run.Size));
+                        if (overflowMode == OverflowMode.Ellipsis) fileFont.Request("…", ScaledSize(run.Size));
+                    }
+                if (overflowMode == OverflowMode.Ellipsis) fileFont.Request("…", ScaledSize(fontSize));
+                if (underlined || runs.AsValueEnumerable().Any(run => run.Underline)) fileFont.Request("_", 50);
+                return;
+            }
             // A dynamic font atlas rebuild can synchronously re-enter Layout and
             // mutate the reused run list, so iterate over a stable snapshot.
             foreach (var run in runs.ToArray())
@@ -599,6 +630,7 @@ namespace OpenFairy.UGUI
             _layoutVOverflow = verticalOverflow;
             _layoutFont = font;
             _layoutBitmapFont = bitmapFont;
+            _layoutFileFont = FileFont;
             _layoutOverflowMode = overflowMode;
 
             _quads.Clear();
@@ -705,6 +737,7 @@ namespace OpenFairy.UGUI
             }
 
             UpdateImages();
+            _layoutFileFontVersion = _layoutFileFont?.version ?? 0;
             _layoutValid = true;
         }
 
@@ -815,6 +848,35 @@ namespace OpenFairy.UGUI
                 return glyph.advance * _fontSizeScale;
             }
 
+            if (FileFont is { } fileFont)
+            {
+                if (!fileFont.TryGet(ch, ScaledSize(run.Size), out var character)) return 0;
+                var metrics = character.metrics;
+                if (metrics.width == 0) return metrics.horizontalAdvance;
+                var atlasSize = (float)fileFont.texture.width;
+                var pixels = character.pixels;
+                var uv = new Rect(pixels.x / atlasSize, pixels.y / atlasSize, pixels.width / atlasSize, pixels.height / atlasSize);
+                var italic = (run.Style & FontStyle.Italic) != 0 ? .35f : 0;
+                var quad = new Quad
+                {
+                    Rect = new Rect(x + metrics.horizontalBearingX, baselineY - metrics.horizontalBearingY, metrics.width, metrics.height),
+                    SkewTop = metrics.horizontalBearingY * italic,
+                    SkewBottom = (metrics.horizontalBearingY - metrics.height) * italic,
+                    TL = run.TL, BL = run.BL, TR = run.TR, BR = run.BR,
+                    UvBL = new Vector2(uv.xMin, uv.yMin), UvTL = new Vector2(uv.xMin, uv.yMax),
+                    UvTR = new Vector2(uv.xMax, uv.yMax), UvBR = new Vector2(uv.xMax, uv.yMin),
+                };
+                _quads.Add(quad);
+                if ((run.Style & FontStyle.Bold) != 0)
+                    foreach (var offset in BoldOffsets)
+                    {
+                        var duplicate = quad;
+                        duplicate.Rect.position += offset;
+                        _quads.Add(duplicate);
+                    }
+                return metrics.horizontalAdvance;
+            }
+
             if (!font.GetCharacterInfo(ch, out var info, ScaledSize(run.Size), run.Style))
                 return 0;
             if (info.glyphWidth > 0)
@@ -834,11 +896,23 @@ namespace OpenFairy.UGUI
         {
             if (to <= from || bitmapFont != null)
                 return;
-            font.GetCharacterInfo('_', out var info, 50, FontStyle.Normal);
+            float minY;
+            Vector2 uv;
+            if (FileFont is { } fileFont)
+            {
+                if (!fileFont.TryGet('_', 50, out var character)) return;
+                minY = character.metrics.horizontalBearingY - character.metrics.height;
+                uv = new Vector2(character.pixels.center.x / fileFont.texture.width, character.pixels.center.y / fileFont.texture.height);
+            }
+            else
+            {
+                font.GetCharacterInfo('_', out var info, 50, FontStyle.Normal);
+                minY = info.minY;
+                uv = (info.uvBottomLeft + info.uvTopRight) / 2;
+            }
             var size = ScaledSize(run.Size);
             var thickness = Mathf.Max(1, size / 16f);
-            var offset = Mathf.RoundToInt(info.minY * size / 50f + thickness);
-            var uv = (info.uvBottomLeft + info.uvTopRight) / 2;
+            var offset = Mathf.RoundToInt(minY * size / 50f + thickness);
             _quads.Add(new Quad
             {
                 Rect = new Rect(from, baselineY - offset, to - from, thickness),
@@ -854,8 +928,12 @@ namespace OpenFairy.UGUI
             if (bitmapFont != null)
                 return ch == ' ' ? Mathf.RoundToInt(bitmapFont.size / 2f) * _fontSizeScale
                     : bitmapFont.TryGetGlyph(ch, out var glyph) ? glyph.advance * _fontSizeScale : 0;
+            if (FileFont is { } fileFont)
+                return fileFont.TryGet(ch, ScaledSize(run.Size), out var character) ? character.metrics.horizontalAdvance : 0;
             return font.GetCharacterInfo(ch, out var info, ScaledSize(run.Size), run.Style) ? info.advance : 0;
         }
+
+        private static readonly Vector2[] BoldOffsets = { new(-.5f, 0), new(.5f, 0), new(0, .5f), new(0, -.5f) };
 
         private (float Baseline, float Height, float Width) MeasureLine(int start, int count)
         {
