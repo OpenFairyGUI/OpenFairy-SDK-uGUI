@@ -71,7 +71,8 @@ namespace OpenFairy.UGUI
         }
 
         internal static void Apply(ref RelationGeometry owner, RelationGeometry previous, RelationGeometry target,
-            RelationBinding binding, RelationBinding[] bindings, bool parentTarget, bool ownerIsTargetParent)
+            RelationBinding binding, RelationBinding[] bindings, bool parentTarget, bool ownerIsTargetParent,
+            Vector2? constructionSize = null, Vector2 initialTargetSize = default)
         {
             var move = parentTarget ? Vector2.zero : target.origin - previous.origin;
             foreach (var rule in binding.rules)
@@ -114,7 +115,10 @@ namespace OpenFairy.UGUI
                 else if (IsSize(side))
                 {
                     var before = owner.position[axis];
-                    var value = target.size[axis] + (owner.size[axis] - previous.size[axis]) * (rule.percent ? ratio : 1);
+                    var offset = ownerIsTargetParent && constructionSize.HasValue
+                        ? constructionSize.Value[axis] - initialTargetSize[axis]
+                        : owner.size[axis] - previous.size[axis];
+                    var value = target.size[axis] + offset * (rule.percent ? ratio : 1);
                     SetSize(ref owner, axis, value, parentTarget, bindings);
                     if (parentTarget && owner.pivotAsAnchor)
                         owner.position[axis] = before;
@@ -128,6 +132,11 @@ namespace OpenFairy.UGUI
                     {
                         var value = rule.percent ? point + (owner.size[axis] - point) * ratio
                             : owner.size[axis] + difference * (1 - pivot);
+                        if (constructionSize.HasValue)
+                            value = rule.percent
+                                ? point + target.size[axis] * (1 - pivot)
+                                    + (constructionSize.Value[axis] - point - initialTargetSize[axis] * (1 - pivot)) * ratio
+                                : constructionSize.Value[axis] + (target.size[axis] - initialTargetSize[axis]) * (1 - pivot);
                         SetSize(ref owner, axis, value, false, bindings);
                         continue;
                     }

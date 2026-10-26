@@ -20,6 +20,8 @@ namespace OpenFairy.UGUI
         private bool _recorded;
         private bool _applying;
         private bool _registered;
+        private Vector2? _constructionSize;
+        private Vector2[] _constructionTargets;
 
         private static readonly List<Relation> Active = new();
         private static bool _running;
@@ -91,6 +93,19 @@ namespace OpenFairy.UGUI
             Register();
         }
 
+        internal void BeginConstruction(Vector2 sourceSize)
+        {
+            RestoreBaseline();
+            _constructionSize = sourceSize;
+            _constructionTargets = Array.ConvertAll(bindings, binding => binding.previous.size);
+        }
+
+        internal void EndConstruction()
+        {
+            _constructionSize = null;
+            _constructionTargets = null;
+        }
+
         private void Register()
         {
             if (!_registered && isActiveAndEnabled && Application.isPlaying
@@ -109,13 +124,15 @@ namespace OpenFairy.UGUI
                 return;
             var owner = Read((RectTransform)transform, pivotAsAnchor, coordinateSpace);
             var changed = false;
-            foreach (var binding in bindings)
+            for (var i = 0; i < bindings.Length; i++)
             {
+                var binding = bindings[i];
                 var target = ReadTarget(binding);
                 if (!binding.nativeAnchors && (target.origin != binding.previous.origin || target.size != binding.previous.size))
                 {
                     RelationMath.Apply(ref owner, binding.previous, target, binding, bindings,
-                        binding.target == reference, binding.target.parent == transform);
+                        binding.target == reference, binding.target.parent == transform,
+                        _constructionSize, _constructionTargets != null ? _constructionTargets[i] : default);
                     changed = true;
                 }
                 binding.previous = target;
@@ -150,11 +167,13 @@ namespace OpenFairy.UGUI
 
         protected override void OnEnable()
         {
-            if (_recorded)
-            {
-                Register();
-                return;
-            }
+            RestoreBaseline();
+            Register();
+        }
+
+        internal void RestoreBaseline()
+        {
+            if (_recorded) return;
             if (reference != null)
             {
                 // Native layout omits driven sizes from serialization. Targets without relations need their baseline too.
@@ -165,7 +184,6 @@ namespace OpenFairy.UGUI
             if (_hasBaseline)
             {
                 _recorded = true;
-                Register();
             }
             else Record();
         }

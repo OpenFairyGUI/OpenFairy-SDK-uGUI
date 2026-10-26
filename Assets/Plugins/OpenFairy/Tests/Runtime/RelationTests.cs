@@ -85,6 +85,29 @@ namespace OpenFairy.UGUI.Tests
             _objects.Clear();
         }
 
+        [Test]
+        public void Constructing_component_uses_source_size_for_child_extensions_then_tracks_runtime_changes()
+        {
+            var owner = Rect("Tooltip");
+            Size(owner, 105, 51);
+            var group = Rect("Group", owner);
+            group.anchoredPosition = new Vector2(10, -10);
+            Size(group, 85, 30);
+            var relation = Attach(owner, owner, group, false, false, new[] {
+                new RelationRule { side = RelationSide.RightExtRight },
+                new RelationRule { side = RelationSide.BottomExtBottom },
+            });
+            relation.BeginConstruction(new Vector2(105, 51));
+            Size(owner, 191, 50); // The parent document already stores the result of the title override.
+            Size(group, 171, 29);
+            relation.Sync();
+            Assert.That(owner.rect.size, Is.EqualTo(new Vector2(191, 50)));
+            relation.EndConstruction();
+            Size(group, 200, 40);
+            relation.Sync();
+            Assert.That(owner.rect.size, Is.EqualTo(new Vector2(220, 61)));
+        }
+
         [UnityTest]
         public IEnumerator Fitted_prefab_geometry_is_restored_before_recording_and_later_reflow_still_preserves_alignment()
         {
