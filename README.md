@@ -40,6 +40,10 @@ https://github.com/OpenFairyGUI/OpenFairy-SDK-uGUI.git?path=Assets/Plugins/OpenF
 FairyGUI 源目录；缺省仍为 `UIProject` 和 `Assets/UIProject`。脚本重编译后的自动续建使用同一份配置。
 跨源工程的资源包可加入 `dependencyDirectories`，仅导出主工程引用到的依赖。
 
+## Linear 工程中的 Gamma UI
+
+在 **Project Settings → OpenFairy → Gamma UI Rendering** 开启后执行 **Apply / Migrate UI**，再手动给实际使用的 Universal Renderer Data 添加并启用 **OpenFairy Gamma UI** Renderer Feature。SDK 不自动修改 URP 配置，不增加 UI 合成 RT。适用条件及材质要求见 [Gamma UI 文档](Assets/Plugins/OpenFairy/Documentation~/GammaRendering.md)。
+
 ## 全局 TextMeshPro
 
 定义 `FAIRYGUI_TMPRO` 后执行 `Tools/OpenFairy/Migrate`，所有普通文本、富文本和输入框分别使用原生 `TextMeshProUGUI` / `TMP_InputField`，无需在 XML 配置 `tmp="true"`。按钮标题、Label、进度条、滑块、文字/字号 gear 和文字动效使用同一后端；生成字段通过编译宏选择强类型。

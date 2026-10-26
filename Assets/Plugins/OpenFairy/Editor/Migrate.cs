@@ -90,6 +90,8 @@ namespace OpenFairy.UGUI.Editor
         public static void Execute()
         {
             EditorApplication.delayCall -= Execute;
+            var gammaError = RenderingSettingsProvider.GammaConfigurationError();
+            if (gammaError != null) throw new InvalidOperationException(gammaError);
             ExternalFont.Clear();
             Resources.Clear();
             MovieClips.Clear();
@@ -298,6 +300,7 @@ namespace OpenFairy.UGUI.Editor
             var changed = importer.textureType != TextureImporterType.Sprite
                 || importer.spriteImportMode != SpriteImportMode.Single
                 || importer.mipmapEnabled || importer.alphaIsTransparency
+                || importer.sRGBTexture == MigrationSettings.instance.gammaRendering
                 || importer.npotScale != TextureImporterNPOTScale.None
                 || importer.wrapMode != wrap
                 || importer.textureCompression != TextureImporterCompression.Uncompressed
@@ -308,6 +311,7 @@ namespace OpenFairy.UGUI.Editor
                 importer.spriteImportMode = SpriteImportMode.Single;
                 importer.mipmapEnabled = false;
                 importer.alphaIsTransparency = false;
+                importer.sRGBTexture = !MigrationSettings.instance.gammaRendering;
                 importer.npotScale = TextureImporterNPOTScale.None;
                 importer.wrapMode = wrap;
                 importer.textureCompression = TextureImporterCompression.Uncompressed;
@@ -879,12 +883,45 @@ namespace OpenFairy.UGUI.Editor
                 LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
                 CompleteRelations(root);
                 ConfigureSoftClipping(root, prefabPath);
+                ConfigureGammaRendering(root);
                 return root;
             }
             catch
             {
                 Object.DestroyImmediate(root);
                 throw;
+            }
+        }
+
+        private static void ConfigureGammaRendering(GameObject root)
+        {
+            bool gamma = MigrationSettings.instance.gammaRendering;
+            Material material = null;
+            if (gamma)
+            {
+                root.AddComponent<GammaUI>();
+                var path = $"{OutputRoot}/GammaUI.mat";
+                material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null)
+                {
+                    material = new Material(Shader.Find("OpenFairy/UI Blend"));
+                    AssetDatabase.CreateAsset(material, path);
+                }
+                material.SetFloat("_OpenFairyGamma", 1);
+                EditorUtility.SetDirty(material);
+            }
+            foreach (var graphic in root.GetComponentsInChildren<Graphic>(true))
+            {
+#if FAIRYGUI_TMPRO
+                if (graphic is TMPro.TMP_Text || graphic is TMPro.TMP_SubMeshUI) continue;
+#endif
+                if (gamma && graphic.material == graphic.defaultMaterial) graphic.material = material;
+                var current = graphic.material;
+                if (current.HasProperty("_OpenFairyGamma") && AssetDatabase.GetAssetPath(current).StartsWith(OutputRoot + "/", StringComparison.Ordinal))
+                {
+                    current.SetFloat("_OpenFairyGamma", gamma ? 1 : 0);
+                    EditorUtility.SetDirty(current);
+                }
             }
         }
 

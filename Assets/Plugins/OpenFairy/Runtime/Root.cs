@@ -63,6 +63,8 @@ namespace OpenFairy.UGUI
             rt.localScale = Vector3.one;
             go.GetComponent<LayoutElement>().ignoreLayout = true;
             var canvas = go.GetComponent<Canvas>();
+            if (designRoot.GetComponentInParent<Canvas>() is { } parentCanvas)
+                canvas.vertexColorAlwaysGammaSpace = parentCanvas.rootCanvas.vertexColorAlwaysGammaSpace;
             canvas.overrideSorting = true;
             canvas.sortingOrder = 10000;
             _inst = go.AddComponent<Root>();

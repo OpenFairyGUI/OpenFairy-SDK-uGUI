@@ -73,7 +73,8 @@ namespace OpenFairy.UGUI
                 if (_texture == null || _texture.width != width || _texture.height != height)
                 {
                     ReleaseTexture();
-                    _texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
+                    _texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32,
+                        GammaUI.Contains(transform) ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.Default)
                     {
                         name = "UI Object Filter", hideFlags = HideFlags.HideAndDontSave,
                         antiAliasing = 1, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp,

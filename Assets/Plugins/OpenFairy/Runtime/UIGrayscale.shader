@@ -2,6 +2,7 @@ Shader "OpenFairy/UI Grayscale"
 {
     Properties
     {
+        _OpenFairyGamma ("Gamma UI", Float) = 0
         [PerRendererData] _MainTex ("Sprite Texture", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
         _StencilComp ("Stencil Comparison", Float) = 8
@@ -73,6 +74,7 @@ Shader "OpenFairy/UI Grayscale"
             };
 
             int _UIVertexColorAlwaysGammaSpace;
+            float _OpenFairyGamma;
 
             v2f vert(appdata_t v)
             {
@@ -81,7 +83,7 @@ Shader "OpenFairy/UI Grayscale"
                 o.vertex = UnityObjectToClipPos(o.worldPosition);
                 o.texcoord = v.texcoord;
                 // 同 uGUI UI-Default：线性空间下 Canvas 已在 CPU 把顶点色转为线性，仅 vertexColorAlwaysGammaSpace 时由着色器转换。
-                if (_UIVertexColorAlwaysGammaSpace && !IsGammaSpace())
+                if (_OpenFairyGamma == 0 && _UIVertexColorAlwaysGammaSpace && !IsGammaSpace())
                     v.color.rgb = UIGammaToLinear(v.color.rgb);
                 o.color = v.color * _Color;
                 return o;

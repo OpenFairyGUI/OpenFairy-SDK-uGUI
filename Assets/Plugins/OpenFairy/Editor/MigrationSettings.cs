@@ -9,6 +9,7 @@ namespace OpenFairy.UGUI.Editor
         public string sourceDirectory = "UIProject";
         public string outputDirectory = "Assets/UIProject";
         public string[] dependencyDirectories = Array.Empty<string>();
+        public bool gammaRendering;
 
         public void Save() => Save(true);
     }

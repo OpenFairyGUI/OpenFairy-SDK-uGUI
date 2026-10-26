@@ -65,6 +65,7 @@ namespace OpenFairy.UGUI
             _root.SetActive(false);
             var canvas = _root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
+            canvas.vertexColorAlwaysGammaSpace = GammaUI.Contains(source);
             canvas.additionalShaderChannels = AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2
                 | AdditionalCanvasShaderChannels.TexCoord3 | AdditionalCanvasShaderChannels.Normal | AdditionalCanvasShaderChannels.Tangent;
             var cameraObject = new GameObject("Capture Camera", typeof(Camera));
