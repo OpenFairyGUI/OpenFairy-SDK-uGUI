@@ -140,6 +140,48 @@ namespace OpenFairy.UGUI.Tests
             }
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Imported_sprite_preserves_transparent_rgb_samples_used_by_bilinear_filtering(bool tile)
+        {
+            var folder = "Assets/__TransparentRgb_" + Guid.NewGuid().ToString("N");
+            var path = folder + "/Sprite.png";
+            var source = new Texture2D(16, 16, TextureFormat.RGBA32, false);
+            var reference = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            try
+            {
+                var samples = new Color32[16 * 16];
+                for (var i = 0; i < samples.Length; i++) samples[i] = new Color32(17, 83, 211, 0);
+                for (var y = 4; y < 12; y++)
+                    for (var x = 4; x < 12; x++) samples[y * 16 + x] = new Color32(241, 19, 53, 255);
+                source.SetPixels32(samples);
+                source.Apply();
+                Directory.CreateDirectory(folder);
+                File.WriteAllBytes(path, source.EncodeToPNG());
+                reference.LoadImage(File.ReadAllBytes(path));
+                Call("ImportSprite", path, tile, Vector4.zero, true);
+                var guid = AssetDatabase.AssetPathToGUID(path);
+                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+                importer.isReadable = true;
+                importer.SaveAndReimport();
+                var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                CollectionAssert.AreEqual(reference.GetPixels32(), texture.GetPixels32());
+                // Existing generated metadata is corrected without replacing the asset.
+                importer.alphaIsTransparency = true;
+                importer.SaveAndReimport();
+                Call("ImportSprite", path, tile, Vector4.zero, false);
+                texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                CollectionAssert.AreEqual(reference.GetPixels32(), texture.GetPixels32());
+                Assert.That(AssetDatabase.AssetPathToGUID(path), Is.EqualTo(guid));
+            }
+            finally
+            {
+                Object.DestroyImmediate(reference);
+                Object.DestroyImmediate(source);
+                AssetDatabase.DeleteAsset(folder);
+            }
+        }
+
         [Test]
         public void Audio_rerun_after_cache_reset_does_not_import_or_change_guid()
         {
