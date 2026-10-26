@@ -297,7 +297,7 @@ namespace OpenFairy.UGUI.Editor
             var wrap = tile ? TextureWrapMode.Repeat : TextureWrapMode.Clamp;
             var changed = importer.textureType != TextureImporterType.Sprite
                 || importer.spriteImportMode != SpriteImportMode.Single
-                || importer.mipmapEnabled || !importer.alphaIsTransparency
+                || importer.mipmapEnabled || importer.alphaIsTransparency
                 || importer.npotScale != TextureImporterNPOTScale.None
                 || importer.wrapMode != wrap
                 || importer.textureCompression != TextureImporterCompression.Uncompressed
@@ -307,7 +307,7 @@ namespace OpenFairy.UGUI.Editor
                 importer.textureType = TextureImporterType.Sprite;
                 importer.spriteImportMode = SpriteImportMode.Single;
                 importer.mipmapEnabled = false;
-                importer.alphaIsTransparency = true;
+                importer.alphaIsTransparency = false;
                 importer.npotScale = TextureImporterNPOTScale.None;
                 importer.wrapMode = wrap;
                 importer.textureCompression = TextureImporterCompression.Uncompressed;

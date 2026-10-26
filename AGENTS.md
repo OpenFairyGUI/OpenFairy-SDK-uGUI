@@ -4,6 +4,8 @@
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-10-26 Sprite 导入必须保留透明像素的RGB，alphaIsTransparency=false。该开关会将alpha=0像素的颜色扩散成邻近颜色，双线性采样仍会使用这些数据，和原生编辑器直接解码PNG不同。原生58纹理样本中旧设置仅17张RGBA逐像素一致，修正后58/58；两项普通／平铺导入回归在旧版失败，修正后Builtin Editor225/225、PlayMode199/199。独立Gamma整图RGB8 MAE进一步降至0.757612，仍未达到浮点精度一致。
+
 2026-10-26 编辑器导入的 ttf/otf 使用 ExternalFont/TextCore 栅格，不能继续用整数 CharacterInfo 近似。Builtin 仍是 UI.Text 派生；文件字体模式和直接 Font 引用在 Migrate 烘焙，系统字体保持原路径。图集跨字号共享，临时 FontAsset 仅生成未缓存字形，复制原始 Alpha8 样本后释放；扩容保留像素并使旧 UV 失效，Migrate/域重载/退出 Play 清理隐藏图集。私有字形矩形查询使用仍公开的 characterLookupTable；当前 ATG 公共度量 API 不提供自绘 uGUI 所需图集矩形。原生308字形度量、304非空字形栅格逐项误差0；Gamma整图RGB8 MAE为0.764650，仍未达到浮点精度一致。Builtin Editor223/223、PlayMode199/199，无失败或跳过。扩容测试必须实际超过容量（150px的62字符仍可能放得下）；枚举先按原名解析，再折叠XML标点，避免破坏SMOOTH_HINTED本身的下划线。
 
 2026-10-26 嵌套实例关系在编辑态必须显式恢复已烘焙基线，不能依赖 Play 的 OnEnable；构造期自有子内容的伸展以源尺寸计算，不能把增量重复加到父文档已保存的实例尺寸。完成布局后保存关系覆盖并退出构造期，运行时仍跟随变化。6.6.7f1 Builtin Editor215/215、PlayMode199/199。ForceRebuildLayoutImmediate 只作用于有控制器的节点，测试需驱动实际子 fitter，不能只重建无布局控制器的父根。

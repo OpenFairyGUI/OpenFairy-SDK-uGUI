@@ -4,6 +4,12 @@
 
 ## 当前结论
 
+### 2026-10-26 透明纹理的原始 RGB 样本
+
+- Sprite 导入关闭 alphaIsTransparency，保留 PNG 透明像素原有的 RGB。原生编辑器直接解码源图，Unity 此开关则将邻近颜色扩散到透明像素；alpha 相同也会在双线性采样时产生不同的边缘颜色。现有生成 metadata 经重迁移修正，GUID、原图内容、平铺和九宫格信息保留。
+- 原生批量快照中的58张可直接对照源图的纹理均与源RGBA一致；旧Unity导入仅17张一致，其余41张改变了透明RGB。修正后GPU读回58/58逐像素一致。两个保存导入与已有metadata修正回归在旧版均失败（透明蓝色被扩散为红色），新版通过；完整Builtin Editor **225/225**、PlayMode **199/199**，无失败或跳过。
+- 2560×1440 Gamma 整图RGB8 MAE由0.764650降至0.757612，差异像素387902，最大通道差255。仍有未解决的布局、混合与采样差异；未取得原生浮点读回，不把8位图改善解释为浮点精度通过。传统完整Demo/golden、TMP原生整套和Player未重跑。
+
 ### 2026-10-26 文件字体的 TextCore 栅格与小数度量
 
 - 当前 FairyGUI 编辑器对导入的 ttf/otf 使用 ExternalFont，缺省渲染模式为 SMOOTH。旧 Builtin 后端使用 Font.GetCharacterInfo 的整数度量和不同栅格，造成字宽、提示框宽度、边缘采样差异。Migrate 现在烘焙文件字体标记、renderMode 和直接 Font 引用；输入正文和 placeholder 同步保存。系统字体继续原路径，Builtin 组件仍继承 UnityEngine.UI.Text，没有替换成 TMP 组件或增加运行时资源 URL。
