@@ -874,7 +874,7 @@ namespace OpenFairy.UGUI.Editor
                 foreach (var fitter in root.GetComponentsInChildren<ContentSizeFitter>())
                     LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)fitter.transform);
                 LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
-                SyncRelations(root);
+                CompleteRelations(root);
                 return root;
             }
             catch
@@ -997,6 +997,10 @@ namespace OpenFairy.UGUI.Editor
                         element.Pivot ??= new Vector2(.5f, .5f);
                     go = (GameObject)PrefabUtility.InstantiatePrefab(LoadPrefab(dep), parent);
                     go.name = name;
+                    foreach (var relation in go.GetComponentsInChildren<Relation>(true))
+                        relation.RestoreBaseline();
+                    foreach (var relation in go.GetComponents<Relation>())
+                        relation.BeginConstruction(dep.ComponentXml.Size);
                     size ??= ((RectTransform)go.transform).sizeDelta;
                     break;
                 }
@@ -1663,6 +1667,18 @@ namespace OpenFairy.UGUI.Editor
         {
             foreach (var relation in go.GetComponentsInChildren<Relation>(true))
                 relation.Sync();
+        }
+
+        private static void CompleteRelations(GameObject go)
+        {
+            SyncRelations(go);
+            foreach (var relation in go.GetComponentsInChildren<Relation>(true))
+            {
+                relation.EndConstruction();
+                EditorUtility.SetDirty(relation);
+                if (PrefabUtility.IsPartOfPrefabInstance(relation))
+                    PrefabUtility.RecordPrefabInstancePropertyModifications(relation);
+            }
         }
 
         private static void ApplyElement(GameObject go, Schema.Display element, Resource owner)

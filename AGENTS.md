@@ -4,6 +4,8 @@
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-10-26 嵌套实例关系在编辑态必须显式恢复已烘焙基线，不能依赖 Play 的 OnEnable；构造期自有子内容的伸展以源尺寸计算，不能把增量重复加到父文档已保存的实例尺寸。完成布局后保存关系覆盖并退出构造期，运行时仍跟随变化。6.6.7f1 Builtin Editor215/215、PlayMode199/199。ForceRebuildLayoutImmediate 只作用于有控制器的节点，测试需驱动实际子 fitter，不能只重建无布局控制器的父根。
+
 2026-10-26 蒙版是内容的兄弟，不可把作者蒙版作为内容的变换/alpha 父节点。迁移器用独立 MaskShape/MaskSource 烘焙 stencil，控制器继续绑定原始节点；零宽 TextStroke 不应生成任何描边副本。6.6.7f1 Builtin Editor214/214、PlayMode198/198。Gamma 实际界面 MAE 降低不等于浮点精度一致，尤其 CanvasGroup 的8位 alpha 量化仍有已测差异。
 
 2026-10-26 图片／序列帧的原生 `TouchDisabled` 与 `GObject.touchable` 是不同条件。迁移时应关闭它们的 raycastTarget，避免装饰外框阻挡后方按钮；Loader 和组件根继续保留命中。已有产物须 Migrate。保存重载后的真实射线及点击回归替换了原先“所有图片都拦截”的错误断言；6.6.7f1 Builtin 导入边界20/20、非批处理 PlayMode196/196。

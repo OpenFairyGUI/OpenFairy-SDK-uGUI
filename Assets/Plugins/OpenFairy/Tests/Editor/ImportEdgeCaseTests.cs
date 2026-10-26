@@ -124,6 +124,62 @@ namespace OpenFairy.UGUI.Tests
             Object.DestroyImmediate(root);
         }
 
+        [UnityTest]
+        public IEnumerator Fitted_component_instance_does_not_apply_its_authored_size_increase_twice()
+        {
+            var template = new GameObject("Default", typeof(RectTransform), typeof(Component));
+            var parent = new GameObject("Parent", typeof(RectTransform));
+            GameObject child = null, copy = null;
+            try
+            {
+                var rect = (RectTransform)template.transform;
+                rect.pivot = rect.anchorMin = rect.anchorMax = new Vector2(0, 1);
+                rect.sizeDelta = new Vector2(40, 20);
+                var group = (RectTransform)new GameObject("Group", typeof(RectTransform)).transform;
+                group.SetParent(rect, false);
+                group.pivot = group.anchorMin = group.anchorMax = new Vector2(0, 1);
+                group.anchoredPosition = new Vector2(10, -5);
+                group.sizeDelta = new Vector2(20, 10);
+                var preferred = group.gameObject.AddComponent<UnityEngine.UI.LayoutElement>();
+                preferred.preferredWidth = 100;
+                preferred.preferredHeight = 30;
+                var fitter = group.gameObject.AddComponent<UnityEngine.UI.ContentSizeFitter>();
+                fitter.horizontalFit = fitter.verticalFit = UnityEngine.UI.ContentSizeFitter.FitMode.PreferredSize;
+                var relation = template.AddComponent<Relation>();
+                relation.reference = relation.coordinateSpace = rect;
+                relation.bindings = new[] { new RelationBinding { target = group, rules = new[] {
+                    new RelationRule { side = RelationSide.RightExtRight },
+                    new RelationRule { side = RelationSide.BottomExtBottom },
+                } } };
+                relation.Record();
+                PrefabUtility.SaveAsPrefabAsset(template, Output + "/Assets/BindingFixtures/Default.prefab");
+                var controllerType = typeof(Migrate).GetNestedType("ControllerData", BindingFlags.NonPublic);
+                var controllers = Activator.CreateInstance(typeof(Dictionary<,>).MakeGenericType(typeof(string), controllerType));
+                child = (GameObject)Invoke("CreateChild", new Schema.Display {
+                    Kind = Schema.DisplayKind.Component, Source = "default", Name = "Fitted", Size = new Vector2(120, 40),
+                }, (RectTransform)parent.transform, Resource("default"), controllers);
+                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)child.transform.Find("Group"));
+                Invoke("CompleteRelations", child);
+                Assert.That(((RectTransform)child.transform).rect.size, Is.EqualTo(new Vector2(120, 40)));
+                copy = SaveReload(child);
+                Assert.That(((RectTransform)copy.transform).rect.size, Is.EqualTo(new Vector2(120, 40)));
+                Assert.That(copy.GetComponent<Relation>().bindings[0].previous.size, Is.EqualTo(new Vector2(100, 30)), "Saved target baseline");
+                yield return new EnterPlayMode();
+                Assert.That(((RectTransform)copy.transform).rect.size, Is.EqualTo(new Vector2(120, 40)), "First active frame");
+                var target = copy.transform.Find("Group").GetComponent<UnityEngine.UI.LayoutElement>();
+                target.preferredWidth = 140;
+                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)target.transform);
+                copy.GetComponent<Relation>().Sync();
+                Assert.That(((RectTransform)copy.transform).rect.width, Is.EqualTo(160));
+            }
+            finally
+            {
+                Object.DestroyImmediate(template);
+                Object.DestroyImmediate(parent);
+                if (copy != null) Object.DestroyImmediate(copy);
+            }
+        }
+
         [Test]
         public void Empty_list_without_a_default_template_survives_prefab_reload()
         {
