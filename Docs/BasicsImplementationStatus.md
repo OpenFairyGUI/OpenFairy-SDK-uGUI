@@ -4,6 +4,12 @@
 
 ## 当前结论
 
+### 2026-10-26 装饰图片的指针穿透
+
+- 原生 `Image` 设置 `TouchDisabled`，`MovieClip` 继承该行为，`Container.HitTest` 始终跳过它们；不能仅凭 `GObject.touchable` 的默认值认定图片会拦截点击。迁移器现在为图片和序列帧烘焙 `raycastTarget=false`，保留 Loader、组件根及按钮的命中面。已有产物需重新执行 Migrate。
+- 修正原有图片／序列帧覆盖按钮测试中的错误原生假设。回归在保存、重载 prefab 并进入播放后检查实际 GraphicRaycaster 首命中及按钮点击；Loader 仍覆盖后方按钮。新断言在旧迁移器上两项失败，修复后导入边界套件 **20/20**，Unity 6.6.7f1 Builtin 非批处理 PlayMode **196/196**，无失败或跳过。
+- PlayMode 首轮为 193/196：三项列表用例因测试宿主仍指向视觉比对源目录而失败。宿主恢复默认 `UIProject`／`Assets/UIProject` 后同版完整重跑 196/196；没有更改这些测试断言或生产逻辑。
+
 ### 2026-10-24 Unity 6.6 布局 API 兼容
 
 - uGUI 2.6 随 Unity 6.6 引入布局最大尺寸，`LayoutGroup.SetLayoutInputForAxis` 已改为 min/max/preferred/flexible/axis 五参数。GroupLayout 原先以 Unity 6.7 为条件，导致 6.6 误走旧签名并报 CS7036；边界修正为 `UNITY_6000_6_OR_NEWER`，更早版本继续四参数调用，6.7 及后续版本保留原五参数行为。最大尺寸仍为正无穷，不改变组的尺寸和排列规则，也无需重生成脚本或 prefab。

@@ -146,12 +146,13 @@ namespace OpenFairy.UGUI.Tests
             }
         }
 
-        // FairyGUI display objects are touchable by default and cover what lies beneath them.
-        [UnityTest] public IEnumerator Image_overlay_covers_the_saved_button_beneath() => SavedHitSurface(Schema.DisplayKind.Image);
-        [UnityTest] public IEnumerator Movie_overlay_covers_the_saved_button_beneath() => SavedHitSurface(Schema.DisplayKind.MovieClip);
-        [UnityTest] public IEnumerator Loader_keeps_its_saved_hit_surface() => SavedHitSurface(Schema.DisplayKind.Loader);
+        // FairyGUI Image (also MovieClip) sets TouchDisabled. Container.HitTest skips
+        // these children even when GObject.touchable is true; GLoader remains a hit surface.
+        [UnityTest] public IEnumerator Image_overlay_allows_clicking_the_saved_button_beneath() => SavedHitSurface(Schema.DisplayKind.Image, false);
+        [UnityTest] public IEnumerator Movie_overlay_allows_clicking_the_saved_button_beneath() => SavedHitSurface(Schema.DisplayKind.MovieClip, false);
+        [UnityTest] public IEnumerator Loader_keeps_its_saved_hit_surface() => SavedHitSurface(Schema.DisplayKind.Loader, true);
 
-        private static IEnumerator SavedHitSurface(Schema.DisplayKind kind)
+        private static IEnumerator SavedHitSurface(Schema.DisplayKind kind, bool intercepts)
         {
             var type = typeof(Migrate).GetNestedType("Resource", BindingFlags.NonPublic);
             var resource = Activator.CreateInstance(type, true);
@@ -201,7 +202,7 @@ namespace OpenFairy.UGUI.Tests
                 yield return null;
                 Canvas.ForceUpdateCanvases();
                 var saved = clone.transform.Find("Overlay").GetComponent<UnityEngine.UI.Graphic>();
-                Assert.That(saved.raycastTarget, Is.True);
+                Assert.That(saved.raycastTarget, Is.EqualTo(intercepts));
                 var events = new GameObject("Events", typeof(UnityEngine.EventSystems.EventSystem));
                 try
                 {
@@ -210,7 +211,12 @@ namespace OpenFairy.UGUI.Tests
                     var hits = new List<UnityEngine.EventSystems.RaycastResult>();
                     clone.GetComponent<UnityEngine.UI.GraphicRaycaster>().Raycast(pointer, hits);
                     Assert.That(hits, Is.Not.Empty);
-                    Assert.That(hits[0].gameObject.name, Is.EqualTo("Overlay"));
+                    Assert.That(hits[0].gameObject.name, Is.EqualTo(intercepts ? "Overlay" : "Button"));
+                    var clicks = 0;
+                    clone.transform.Find("Button").GetComponent<UnityEngine.UI.Button>().onClick.AddListener(() => clicks++);
+                    UnityEngine.EventSystems.ExecuteEvents.ExecuteHierarchy(hits[0].gameObject, pointer,
+                        UnityEngine.EventSystems.ExecuteEvents.pointerClickHandler);
+                    Assert.That(clicks, Is.EqualTo(intercepts ? 0 : 1));
                 }
                 finally { Object.DestroyImmediate(events); }
             }
