@@ -1,8 +1,12 @@
 # AGENTS.md
 
+SDK 提交只保留通用实现、文档与测试结论，不保存消费工程名称、私有路径、机器账户、域名或本地工件位置；提交前检查消息、作者信息和完整差异。
+
 导入测试必须隔离源、输出和依赖目录并恢复设置，不能扫描或改写消费工程的真实资源。需要保护脚本路径/GUID 的测试使用预先编译的脚本，不在运行中的测试里导入临时 C# 触发意外程序集重载。C# enum 可以保留与类型相同的成员名；只处理实际不支持的标识符与作用域冲突。
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
+
+2026-10-26 图片／序列帧的原生 `TouchDisabled` 与 `GObject.touchable` 是不同条件。迁移时应关闭它们的 raycastTarget，避免装饰外框阻挡后方按钮；Loader 和组件根继续保留命中。已有产物须 Migrate。保存重载后的真实射线及点击回归替换了原先“所有图片都拦截”的错误断言；6.6.7f1 Builtin 导入边界20/20、非批处理 PlayMode196/196。
 
 2026-10-24 GroupLayout 的五参数 SetLayoutInputForAxis 从 Unity 6.6 / uGUI 2.6 起可用，不能以 UNITY_6000_7_OR_NEWER 为边界；保留更早版本的四参数分支。6.6.7f1 与 6.7.0b5 的 Builtin/TMP Runtime、Editor 程序集分别编译通过，Builtin 包级非批处理 PlayMode 各196/196；旧四参数参考程序集分支另编译通过，不等于完整旧版 Editor 验证。自动捕获和 WaitForEndOfFrame 测试须使用非批处理运行，批处理结果不能冒充完整通过。
 
