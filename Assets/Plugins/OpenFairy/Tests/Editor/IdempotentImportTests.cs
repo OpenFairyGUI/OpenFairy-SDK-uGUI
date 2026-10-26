@@ -182,6 +182,34 @@ namespace OpenFairy.UGUI.Tests
             }
         }
 
+        [TestCase("1,2,8,6")]
+        [TestCase("0,0,-145,-64")]
+        public void Disabled_nine_slice_ignores_its_retained_editor_grid(string grid)
+        {
+            var name = "__InactiveGrid_" + Guid.NewGuid().ToString("N");
+            var source = "UIProject/assets/" + name;
+            var output = "Assets/UIProject/Assets/" + name;
+            var texture = new Texture2D(16, 12, TextureFormat.RGBA32, false);
+            var resource = Resource(source + "/Image.png");
+            resource.GetType().GetField("Type").SetValue(resource, Schema.ResourceKind.Image);
+            resource.GetType().GetField("Scale").SetValue(resource, Schema.ImageScale.None);
+            resource.GetType().GetField("Scale9Grid").SetValue(resource, grid);
+            try
+            {
+                Directory.CreateDirectory(source);
+                File.WriteAllBytes(source + "/Image.png", texture.EncodeToPNG());
+                Call("ImportImage", resource);
+                var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(output + "/Image.png");
+                Assert.That(sprite.border, Is.EqualTo(Vector4.zero));
+            }
+            finally
+            {
+                Object.DestroyImmediate(texture);
+                AssetDatabase.DeleteAsset(output);
+                Directory.Delete(source, true);
+            }
+        }
+
         [Test]
         public void Audio_rerun_after_cache_reset_does_not_import_or_change_guid()
         {
