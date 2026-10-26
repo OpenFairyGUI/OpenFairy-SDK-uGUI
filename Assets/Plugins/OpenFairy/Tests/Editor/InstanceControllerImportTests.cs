@@ -24,6 +24,23 @@ namespace OpenFairy.UGUI.Tests
             },
         };
 
+        [TestCase("", 0)]
+        [TestCase(" homePageType='specific' homePage='7'", 1)]
+        [TestCase(" homePageType='specific' homePage='40'", 0)]
+        public void Published_home_page_is_independent_of_editor_selected_page(string home, int expected)
+        {
+            var file = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(file, "<component size='100,80'><controller name='First' pages='40,Alpha,7,Beta,2,Gamma' selected='2'"
+                    + home + "/></component>");
+                var controller = Schema.Component.Load(file).Controllers[0];
+                Assert.That(controller.Selected, Is.EqualTo(2));
+                Assert.That(controller.InitialPage, Is.EqualTo(expected));
+            }
+            finally { File.Delete(file); }
+        }
+
         [Serializable]
         private sealed class RecordAction : ControllerAction<Page>
         {

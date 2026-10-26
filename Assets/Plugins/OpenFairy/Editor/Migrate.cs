@@ -676,7 +676,7 @@ namespace OpenFairy.UGUI.Editor
                 rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
                 rt.sizeDelta = xml.Size;
                 if (xml.Overflow == Schema.Overflow.Hidden)
-                    root.AddComponent<RectMask2D>();
+                    ConfigureRectMask(root, xml.ClipSoftness);
 
                 var componentType = FindType($"{GeneratedNamespace(component)}.{ClassName(component)}");
                 var names = new GeneratedMembers(xml, ClassName(component));
@@ -696,7 +696,7 @@ namespace OpenFairy.UGUI.Editor
                         PageIds = pages.AsValueEnumerable().Select(page => page.Id).ToArray(),
                         Source = element,
                         PageValues = pages.AsValueEnumerable().Select(page => Enum.Parse(pageType, page.Member)).ToArray(),
-                        Selected = element.Selected,
+                        Selected = element.InitialPage,
                     };
                 }
 
@@ -878,12 +878,48 @@ namespace OpenFairy.UGUI.Editor
                     LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)fitter.transform);
                 LayoutRebuilder.ForceRebuildLayoutImmediate(rt);
                 CompleteRelations(root);
+                ConfigureSoftClipping(root, prefabPath);
                 return root;
             }
             catch
             {
                 Object.DestroyImmediate(root);
                 throw;
+            }
+        }
+
+        private static void ConfigureRectMask(GameObject go, string clipSoftness)
+        {
+            var mask = go.AddComponent<RectMask2D>();
+            if (clipSoftness is { } softness)
+            {
+                var parts = softness.Split(',');
+                mask.softness = new Vector2Int(int.Parse(parts[0]), int.Parse(parts[1]));
+            }
+        }
+
+        private static void ConfigureSoftClipping(GameObject root, string prefabPath)
+        {
+            Material material = null;
+            foreach (var graphic in root.GetComponentsInChildren<Graphic>(true))
+            {
+                var mask = graphic.transform.parent?.GetComponentInParent<RectMask2D>(true);
+                if (mask == null || mask.softness == Vector2Int.zero || graphic.material != graphic.defaultMaterial)
+                    continue;
+#if FAIRYGUI_TMPRO
+                if (graphic is TMPro.TMP_Text) continue;
+#endif
+                if (material == null)
+                {
+                    var path = Path.ChangeExtension(prefabPath, null) + "_SoftClip.mat";
+                    material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                    if (material == null)
+                    {
+                        material = new Material(Shader.Find("OpenFairy/UI Blend"));
+                        AssetDatabase.CreateAsset(material, path);
+                    }
+                }
+                graphic.material = material;
             }
         }
 
@@ -2002,7 +2038,7 @@ namespace OpenFairy.UGUI.Editor
         private static void BuildList(GameObject go, Schema.Display element, Resource owner)
         {
             if (element.Overflow == Schema.Overflow.Hidden)
-                go.AddComponent<RectMask2D>();
+                ConfigureRectMask(go, element.ClipSoftness);
             var size = (Vector2)element.Size;
             var prefab = element.DefaultItem != null ? LoadPrefab(Resolve(element.DefaultItem, owner.PackageId)) : null;
             var itemSize = prefab != null ? ((RectTransform)prefab.transform).rect.size : Vector2.zero;
@@ -2424,6 +2460,7 @@ namespace OpenFairy.UGUI.Editor
             host.pivotAsAnchor = element.Anchor;
             host.bindings = bindings.ToArray();
             host.Record();
+            host.RecordSourceTargets();
         }
 
         private static bool AutoSizeText(Schema.Display element) => !element.Input

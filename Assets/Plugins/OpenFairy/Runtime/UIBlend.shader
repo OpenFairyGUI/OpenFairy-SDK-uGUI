@@ -60,6 +60,7 @@ Shader "OpenFairy/UI Blend"
             fixed4 _TextureSampleAdd;
             float4 _ClipRect;
             float _ColorOption;
+            float _UIMaskSoftnessX, _UIMaskSoftnessY;
 
             struct appdata_t
             {
@@ -83,6 +84,7 @@ Shader "OpenFairy/UI Blend"
                 v2f o;
                 o.worldPosition = v.vertex;
                 o.vertex = UnityObjectToClipPos(o.worldPosition);
+                o.worldPosition.zw = 2 * abs(o.vertex.w / mul((float2x2)UNITY_MATRIX_P, _ScreenParams.xy));
                 o.texcoord = v.texcoord;
                 // 同 uGUI UI-Default：线性空间下 Canvas 已在 CPU 把顶点色转为线性，仅 vertexColorAlwaysGammaSpace 时由着色器转换。
                 if (_UIVertexColorAlwaysGammaSpace && !IsGammaSpace())
@@ -94,7 +96,14 @@ Shader "OpenFairy/UI Blend"
             fixed4 frag(v2f i) : SV_Target
             {
                 fixed4 color = (tex2D(_MainTex, i.texcoord) + _TextureSampleAdd) * i.color;
-                color.a *= UnityGet2DClipping(i.worldPosition.xy, _ClipRect);
+                float2 distance = min(i.worldPosition.xy - _ClipRect.xy, _ClipRect.zw - i.worldPosition.xy);
+                float2 softness = float2(_UIMaskSoftnessX, _UIMaskSoftnessY);
+                // FairyGUI's default stage camera has an orthographic half-height of five.
+                // Its soft-clip ramp spans softness / 5 screen pixels and uses the minimum axis.
+                float2 factor = float2(
+                    softness.x > 0 ? distance.x * 5 / (softness.x * i.worldPosition.z) : step(0, distance.x),
+                    softness.y > 0 ? distance.y * 5 / (softness.y * i.worldPosition.w) : step(0, distance.y));
+                color.a *= saturate(min(factor.x, factor.y));
                 if (_ColorOption != 0)
                     color.rgb *= color.a;
 #ifdef UNITY_UI_ALPHACLIP

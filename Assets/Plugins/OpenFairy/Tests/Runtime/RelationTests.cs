@@ -85,8 +85,9 @@ namespace OpenFairy.UGUI.Tests
             _objects.Clear();
         }
 
-        [Test]
-        public void Constructing_component_uses_source_size_for_child_extensions_then_tracks_runtime_changes()
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Constructing_component_uses_source_size_for_child_extensions_then_tracks_runtime_changes(bool hiddenIcon)
         {
             var owner = Rect("Tooltip");
             Size(owner, 105, 51);
@@ -97,6 +98,18 @@ namespace OpenFairy.UGUI.Tests
                 new RelationRule { side = RelationSide.RightExtRight },
                 new RelationRule { side = RelationSide.BottomExtBottom },
             });
+            relation.RecordSourceTargets();
+            if (hiddenIcon)
+            {
+                Size(group, 55, 29);
+                relation.Sync();
+                relation.Record();
+                Assert.That(owner.rect.size, Is.EqualTo(new Vector2(75, 50)));
+            }
+            owner = UnityEngine.Object.Instantiate(owner);
+            _objects.Add(owner.gameObject);
+            group = (RectTransform)owner.GetChild(0);
+            relation = owner.GetComponent<Relation>();
             relation.BeginConstruction(new Vector2(105, 51));
             Size(owner, 191, 50); // The parent document already stores the result of the title override.
             Size(group, 171, 29);
