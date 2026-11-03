@@ -93,7 +93,7 @@ namespace OpenFairy.UGUI.Editor
         private static CommonSettings _settings;
         private static CodeGenerationSettings _codeGenerationSettings;
 
-        [MenuItem("Tools/OpenFairy/Migrate %e")]
+        [MenuItem("Tools/OpenFairyGUI Migrate %m")]
         public static void Execute()
         {
             EditorApplication.delayCall -= Execute;

@@ -6,6 +6,7 @@
 
 ### 2026-11-03 Migrate 发布阶段与工程定制性能
 
+- 迁移入口改为 `Tools/OpenFairyGUI Migrate`，默认快捷键为 Windows `Ctrl+M`，替换旧 `Ctrl+E`。
 - 新增 `[MigratePrefabPostProcess] static void Method(GameObject root)`：typed 绑定、本地化、布局及 SDK 材质完成后、首次保存前调用。子依赖的工程定制结果会先保存，再供父组件实例化。原 `[MigratePostProcess]` 保留，用于跨资源/场景收尾。消费端无需再重开全部生成 Prefab、遍历全部嵌套组件并二次保存。
 - SDK 直接利用构造期 gears/actions 列表分配稳定的 managed-reference ID，保留共享引用与循环 display partner，不在 SerializedProperty 图中递归搜索。按依赖层发布与原生资源预先导入的边界未改。依用户要求，没有增加整个 Prefab 的保存前比较、输入指纹或跳过构建的缓存。
 - 独立 Builtin Editor **237/237**、PlayMode同版完整复验 **205/205**，均无失败/跳过。Play首轮204/205的原生滚动/滤镜时序项隔离复验通过，再整套复验通过；未修改实现或断言。Editor batch首轮236/237的无Player渲染帧项改用交互Editor后整套通过。新增回归覆盖首次保存前定制、父层继承、循环/共享 managed reference 及字节重复性。
@@ -183,7 +184,7 @@
 - `Basics` demo 的静态渲染、主要交互、窗口/弹窗、拖拽、滚动、下拉、文本链接、列表填充、翻页动效已完成。
 - `Transition` demo 的主要动效已完成，路径、嵌套 transition、滤镜、shake、循环/yoyo 等运行时行为已覆盖。
 - 当前公开 Unity 菜单只保留：
-  - `Tools/OpenFairy/Migrate`
+  - `Tools/OpenFairyGUI Migrate`
   - `Tools/OpenFairy/Generate Golden References`
   - `Tools/OpenFairy/Run PlayMode Tests`
 - 最近一次验证：2026-07-10 `Migrate` 成功迁移 `101` 个组件，`Run PlayMode Tests` 通过 `134/134`；静态 golden、真实射线交互、转换完整性、池化复用及 `RelationSide` 全枚举回归均通过。
@@ -213,7 +214,7 @@
 
 ## 标准验证流程
 
-1. 修改转换器、生成脚本结构或序列化字段后，先跑 `Tools/OpenFairy/Migrate`。
+1. 修改转换器、生成脚本结构或序列化字段后，先跑 `Tools/OpenFairyGUI Migrate`。
 2. 修改渲染参照、测试目录、FairyGUI 侧 dump 或首次缺少参照时，跑 `Tools/OpenFairy/Generate Golden References`。
 3. 最后跑 `Tools/OpenFairy/Run PlayMode Tests`，结果写入 `Temp/OpenFairyPlayModeResults.txt`。
 

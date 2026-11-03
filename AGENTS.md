@@ -132,7 +132,7 @@ OpenFairy 是基于 uGUI 的 FairyGUI Runtime SDK。目标是让用户继续用 
 
 Unity 菜单 `Tools/OpenFairy` 下只保留三个公开功能：
 
-1. `Tools/OpenFairy/Migrate`
+1. `Tools/OpenFairyGUI Migrate`
 2. `Tools/OpenFairy/Generate Golden References`
 3. `Tools/OpenFairy/Run PlayMode Tests`
 
@@ -144,7 +144,7 @@ Unity 菜单 `Tools/OpenFairy` 下只保留三个公开功能：
 
 AI 操作流程：
 
-1. 通过 unity mcp 执行菜单 `Tools/OpenFairy/Migrate`。
+1. 通过 unity mcp 执行菜单 `Tools/OpenFairyGUI Migrate`。
 2. 如果本次修改影响生成脚本，Migrate 会设置 `OpenFairy.Migrate.Pending`，等待 Unity 域重载后自动继续构建 prefab；这段期间不要插入其它 Unity 命令打断 `DidReloadScripts` 的 `delayCall`。
 3. Migrate 完成后会自动跑 `[MigratePostProcess]`，例如 Basics demo 的 prefab 引用配置，不要手动调用旧的配置菜单。
 4. 关注 Console 里的 `OpenFairy migrated ...` 日志；若失败，先修编译错误或转换器错误，再重跑 Migrate。

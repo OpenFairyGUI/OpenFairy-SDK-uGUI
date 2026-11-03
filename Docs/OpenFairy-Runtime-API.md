@@ -6,7 +6,7 @@
 
 典型入口：
 
-1. 通过 `Tools/OpenFairy/Migrate` 生成 prefab 和 C# 组件类。
+1. 通过 `Tools/OpenFairyGUI Migrate` 生成 prefab 和 C# 组件类。
 2. 在生成类字段上访问子控件，例如 `m_btn_OK`、`m_title`。
 
 OpenFairy 是 bake-first 的 FairyGUI→uGUI Runtime SDK：绝大多数结构、样式与交互在 Migrate 期烘进 prefab，

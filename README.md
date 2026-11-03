@@ -31,7 +31,7 @@ https://github.com/OpenFairyGUI/OpenFairy-SDK-uGUI.git?path=Assets/Plugins/OpenF
 ## 使用
 
 1. 把 FairyGUI 工程放在 Unity 工程根目录的 `UIProject/`（与 `Assets/` 同级）。
-2. 菜单 `Tools/OpenFairy/Migrate`：转换生成 `Assets/UIProject/Assets/` 下的 prefab/资源和 `Assets/UIProject/Scripts/` 下的 C# 代码。
+2. 菜单 `Tools/OpenFairyGUI Migrate`（Windows 默认快捷键 `Ctrl+M`）：转换生成 `Assets/UIProject/Assets/` 下的 prefab/资源和 `Assets/UIProject/Scripts/` 下的 C# 代码。
 3. 把生成的 prefab 挂到你的 Canvas 下即可使用；按钮 tab/单选组、滚动、下拉、窗口拖动等交互已烘焙进 prefab，开箱即用。
 
 源工程与输出位置可通过 `OpenFairy.UGUI.Editor.MigrationSettings.instance` 的
@@ -46,7 +46,7 @@ FairyGUI 源目录；缺省仍为 `UIProject` 和 `Assets/UIProject`。脚本重
 
 ## 全局 TextMeshPro
 
-定义 `FAIRYGUI_TMPRO` 后执行 `Tools/OpenFairy/Migrate`，所有普通文本、富文本和输入框分别使用原生 `TextMeshProUGUI` / `TMP_InputField`，无需在 XML 配置 `tmp="true"`。按钮标题、Label、进度条、滑块、文字/字号 gear 和文字动效使用同一后端；生成字段通过编译宏选择强类型。
+定义 `FAIRYGUI_TMPRO` 后执行 `Tools/OpenFairyGUI Migrate`，所有普通文本、富文本和输入框分别使用原生 `TextMeshProUGUI` / `TMP_InputField`，无需在 XML 配置 `tmp="true"`。按钮标题、Label、进度条、滑块、文字/字号 gear 和文字动效使用同一后端；生成字段通过编译宏选择强类型。
 
 字体优先使用可选 `tmpFont` 指定的 TMP Font Asset；其次按 FairyGUI `font` 匹配 TMP 字体资源；未指定字体时使用 `TMP Settings` 的默认字体。字体必须覆盖需要显示的字符，缺失配置会在发布时报错。`tmpFont` 仅用于字体覆盖，不是启用 TMP 的条件。
 
