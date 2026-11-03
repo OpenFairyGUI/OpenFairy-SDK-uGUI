@@ -255,9 +255,11 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(File.ReadAllBytes(Fixture.RootPath), Is.EqualTo(first));
         }
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public void Auxiliary_names_preserve_identifiers_on_repeated_publication(bool colorFilters)
+        [TestCase(false, false, false)]
+        [TestCase(true, false, false)]
+        [TestCase(false, true, false)]
+        [TestCase(false, true, true)]
+        public void Names_preserve_identifiers_on_repeated_publication(bool colorFilters, bool repeatedNames, bool rootRelations)
         {
             using var fixture = new Fixture();
             foreach (var name in new[] { "LeafA", "LeafB" })
@@ -273,6 +275,21 @@ namespace OpenFairy.UGUI.Tests
                         xml.Element("displayList").Add(new XElement("graph", new XAttribute("id", item),
                             new XAttribute("name", item), new XAttribute("size", "20,20"),
                             new XAttribute("type", "rect"), new XAttribute("grayed", "true")));
+                if (repeatedNames)
+                    foreach (var item in new[] { "First", "RepeatedA", "RepeatedB" })
+                        xml.Element("displayList").Add(new XElement("graph", new XAttribute("id", item),
+                            new XAttribute("name", item == "First" ? item : "Repeated"),
+                            new XAttribute("size", "20,20"), new XAttribute("type", "rect")));
+                if (rootRelations)
+                    xml.Add(new XElement("relation", new XAttribute("target", "image"), new XAttribute("sidePair", "width-width")));
+                xml.Save(path);
+            }
+            if (repeatedNames)
+            {
+                var path = Fixture.Source + "/assets/Publication/Branch.xml";
+                var xml = XElement.Load(path);
+                xml.Element("displayList").Element("component").Add(new XElement("relation",
+                    new XAttribute("target", ""), new XAttribute("sidePair", "width-width")));
                 xml.Save(path);
             }
             fixture.Prepare();
@@ -288,6 +305,32 @@ namespace OpenFairy.UGUI.Tests
                 Assert.That(File.ReadAllBytes(Fixture.RootPath), Is.EqualTo(rootBytes));
                 Assert.That(mask.source.name, Is.EqualTo("Mask"));
                 Assert.That(mask.name, Is.Not.EqualTo(mask.source.name));
+            }
+            if (repeatedNames)
+            {
+                foreach (var name in new[] { "LeafA", "LeafB" })
+                {
+                    var path = Fixture.Source + "/assets/Publication/" + name + ".xml";
+                    var xml = XElement.Load(path);
+                    foreach (var item in xml.Element("displayList").Elements())
+                        if ((string)item.Attribute("id") == "RepeatedB")
+                        {
+                            item.SetAttributeValue("name", "ChangedName");
+                            item.SetAttributeValue("size", "33,21");
+                        }
+                    xml.Save(path);
+                }
+                fixture.Prepare();
+                fixture.Build(true);
+                VerifyReloaded();
+                var leaf = AssetDatabase.LoadAssetAtPath<GameObject>(leafPath);
+                var changed = Array.Find(leaf.GetComponentsInChildren<Graph>(true), item => item.name == "ChangedName");
+                Assert.That(((RectTransform)changed.transform).rect.size, Is.EqualTo(new Vector2(33, 21)));
+                leafBytes = File.ReadAllBytes(leafPath);
+                rootBytes = File.ReadAllBytes(Fixture.RootPath);
+                fixture.Build(true);
+                Assert.That(File.ReadAllBytes(leafPath), Is.EqualTo(leafBytes));
+                Assert.That(File.ReadAllBytes(Fixture.RootPath), Is.EqualTo(rootBytes));
             }
         }
 

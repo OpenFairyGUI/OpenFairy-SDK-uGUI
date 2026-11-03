@@ -64,6 +64,7 @@ namespace OpenFairy.UGUI.Editor
             // The generated public field belongs to the first authored name. Repeated names
             // remain distinct display objects, including those reparented into authored groups.
             var resolved = new Dictionary<string, Transform>();
+            var names = PrefabChildNames(prefab.name, Array.ConvertAll(xml.DisplayList, child => (child.Id, child.Name)));
             string ParentId(Schema.Display child) => !string.IsNullOrEmpty(child.Group) ? child.Group
                 : !string.IsNullOrEmpty(xml.Mask) && child.Id != xml.Mask ? xml.Mask : null;
             Transform Resolve(Schema.Display child)
@@ -89,8 +90,18 @@ namespace OpenFairy.UGUI.Editor
                 for (var index = 0; index < parent.childCount; index++)
                 {
                     var candidate = parent.GetChild(index);
-                    if (candidate.name != child.Name) continue;
-                    if (actualCount++ == ordinal) found = candidate;
+                    if (candidate.name == child.Name)
+                    {
+                        if (actualCount++ == ordinal) found = candidate;
+                        continue;
+                    }
+                    foreach (var sibling in xml.DisplayList)
+                        if (sibling.Name == child.Name && ParentId(sibling) == parentId && candidate.name == names[sibling.Id])
+                        {
+                            actualCount++;
+                            if (sibling.Id == child.Id) found = candidate;
+                            break;
+                        }
                 }
                 if (actualCount != expectedCount || found == null)
                     throw new InvalidOperationException($"Authored display '{child.Id}' does not match the published hierarchy in '{prefab.name}'. Regenerate its bindings before refreshing shadows.");

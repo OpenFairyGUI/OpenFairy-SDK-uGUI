@@ -201,7 +201,8 @@ namespace OpenFairy.UGUI.Tests
                 Assert.That(panel.GetType().GetField("my_page_2").FieldType.Namespace, Is.EqualTo("Example._class.Name_Fixtures_2"));
                 var names = new List<string>(); for (var i = 0; i < instance.transform.childCount; i++) names.Add(instance.transform.GetChild(i).name);
                 Assert.That(names, Does.Contain("foo bar").And.Contain("foo-bar").And.Contain(""));
-                Assert.That(names.FindAll(name => name == "同名").Count, Is.EqualTo(2));
+                Assert.That(names, Does.Contain("同名").And.Contain("同名 [g13]"));
+                Assert.That(new HashSet<string>(names).Count, Is.EqualTo(names.Count));
                 var transitions = instance.GetComponents<Transition>(); Assert.That(transitions.Length, Is.EqualTo(3));
                 Assert.That(transitions[0].transitionName, Is.EqualTo("class")); Assert.That(transitions[1].transitionName, Is.EqualTo("_class"));
                 Assert.That(GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(instance), Is.Zero);

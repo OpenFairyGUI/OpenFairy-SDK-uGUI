@@ -896,6 +896,7 @@ namespace OpenFairy.UGUI.Editor
                 ConfigureGammaRendering(root);
                 foreach (var method in PrefabPostProcessors)
                     method.Invoke(null, new object[] { root });
+                NamePrefabObjects(root, children);
                 var references = new List<object>();
                 foreach (var controller in controllers.Values)
                 {

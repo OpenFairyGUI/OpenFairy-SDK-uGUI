@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using UnityEditor;
+using UnityEngine;
 using ZLinq;
 using Schema = OpenFairy.UGUI.Editor.Schema;
 
@@ -8,6 +10,56 @@ namespace OpenFairy.UGUI.Editor
 {
     public static partial class Migrate
     {
+        private static void NamePrefabObjects(GameObject root, IReadOnlyList<(Schema.Display Xml, GameObject Go)> children)
+        {
+            // Native prefab overwrites match by name, including nested-instance overrides.
+            var nodes = root.GetComponentsInChildren<Transform>(true);
+            var names = PrefabChildNames(root.name, children.AsValueEnumerable().Select(child => (child.Xml.Id, child.Go.name)).ToArray());
+            var reserved = new HashSet<string>(nodes.AsValueEnumerable().Select(node => node.name).ToArray(), StringComparer.Ordinal);
+            reserved.UnionWith(names.Values);
+            var used = new HashSet<string>(StringComparer.Ordinal) { root.name };
+            var authored = new HashSet<Transform>();
+            foreach (var (element, go) in children)
+            {
+                authored.Add(go.transform);
+                Rename(go.transform, names[element.Id]);
+                used.Add(go.name);
+            }
+            foreach (var node in nodes)
+                if (node != root.transform && !authored.Contains(node) && !used.Add(node.name))
+                {
+                    Rename(node, UniqueName(reserved, node.name));
+                    used.Add(node.name);
+                }
+
+            void Rename(Transform node, string name)
+            {
+                if (node.name == name) return;
+                node.name = name;
+                if (PrefabUtility.IsPartOfPrefabInstance(node))
+                    PrefabUtility.RecordPrefabInstancePropertyModifications(node.gameObject);
+            }
+        }
+
+        private static Dictionary<string, string> PrefabChildNames(string root, (string Id, string Name)[] children)
+        {
+            // Authored aliases must not depend on inherited/helper names; shadow refresh uses them too.
+            var reserved = new HashSet<string>(children.AsValueEnumerable().Select(child => child.Name).ToArray(), StringComparer.Ordinal) { root };
+            var used = new HashSet<string>(StringComparer.Ordinal) { root };
+            var names = new Dictionary<string, string>();
+            foreach (var child in children)
+            {
+                var name = child.Name;
+                if (!used.Add(name))
+                {
+                    name = UniqueName(reserved, name + " [" + child.Id + "]");
+                    used.Add(name);
+                }
+                names.Add(child.Id, name);
+            }
+            return names;
+        }
+
         private static string UniqueName(HashSet<string> used, string proposed)
         {
             var name = proposed;

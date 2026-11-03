@@ -42,10 +42,16 @@ namespace OpenFairy.UGUI.Tests
             }
         }
 
-        [TestCase(0)]
-        [TestCase(1)]
-        [TestCase(2)]
-        public void Refresh_repeated_names_resolves_authored_groups_and_sibling_order_without_relaxing_bindings(int invalid)
+        [TestCase(0, 0)]
+        [TestCase(1, 0)]
+        [TestCase(2, 0)]
+        [TestCase(0, 1)]
+        [TestCase(1, 1)]
+        [TestCase(2, 1)]
+        [TestCase(0, 2)]
+        [TestCase(1, 2)]
+        [TestCase(2, 2)]
+        public void Refresh_repeated_names_resolves_authored_groups_and_sibling_order_without_relaxing_bindings(int invalid, int naming)
         {
             using var scope = new SourceScope();
             var key = "__DuplicateShadow_" + Guid.NewGuid().ToString("N");
@@ -69,6 +75,7 @@ namespace OpenFairy.UGUI.Tests
                     + "<text id='second' name='Title' group='firstGroup' fontSize='40' shadowColor='#ff0000' shadowOffset='2,1'/>"
                     + "<group id='secondGroup' name='SecondGroup'/>"
                     + "<text id='third' name='Title' group='secondGroup' fontSize='40' shadowColor='#0000ff' shadowOffset='3,2'/>"
+                    + (naming == 2 ? "<graph id='collision' name='Title [second]'/>" : "")
                     + "</displayList></component>");
                 var firstGroup = new GameObject("FirstGroup", typeof(RectTransform)); firstGroup.transform.SetParent(root.transform, false);
                 var secondGroup = new GameObject("SecondGroup", typeof(RectTransform)); secondGroup.transform.SetParent(root.transform, false);
@@ -81,6 +88,25 @@ namespace OpenFairy.UGUI.Tests
                     texts[i].font = TMP_Settings.defaultFontAsset; texts[i].fontSize = 40; texts[i].text = "TEXT";
                 }
                 root.GetComponent<ShadowRefreshTestPanel>().m_Title = texts[invalid == 1 ? 2 : 0];
+                if (naming != 0)
+                {
+                    var children = new System.Collections.Generic.List<(OpenFairy.UGUI.Editor.Schema.Display, GameObject)>
+                    {
+                        (null, firstGroup), (null, texts[0].gameObject), (null, texts[1].gameObject),
+                        (null, secondGroup), (null, texts[2].gameObject),
+                    };
+                    if (naming == 2)
+                    {
+                        var collision = new GameObject("Title [second]", typeof(RectTransform));
+                        collision.transform.SetParent(root.transform, false);
+                        children.Add((null, collision));
+                    }
+                    var xml = OpenFairy.UGUI.Editor.Schema.Component.Load(source + "/Panel.xml");
+                    for (var i = 0; i < children.Count; i++) children[i] = (xml.DisplayList[i], children[i].Item2);
+                    typeof(Migrate).GetMethod("NamePrefabObjects", BindingFlags.Static | BindingFlags.NonPublic)
+                        .Invoke(null, new object[] { root, children });
+                    Assert.That(texts[1].name, Is.EqualTo(naming == 2 ? "Title [second]_2" : "Title [second]"));
+                }
                 if (invalid == 2) texts[2].name = "Stale";
                 var path = output + "/Panel.prefab";
                 var saved = PrefabUtility.SaveAsPrefabAsset(root, path);
