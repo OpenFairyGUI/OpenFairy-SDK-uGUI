@@ -6,6 +6,8 @@ SDK 提交只保留通用实现、文档与测试结论，不保存消费工程�
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-11-03 Migrate 性能：工程逐 Prefab 的组件、字段、材质定制使用 `[MigratePrefabPostProcess] static void Method(GameObject root)`，在首次保存前执行；不要在总后处理中再加载、遍历和保存所有 UI。跨资源/场景收尾继续用原 `[MigratePostProcess]`。控制器 gears/actions 按构造顺序指定 managed-reference ID，不能遍历 SerializedProperty 的整个图来找引用，display partner 存在循环。依用户要求保持正向构建与原生保存，不增加整 Prefab 比对或指纹缓存；原有按依赖层发布的边界保留，新原生资源必须先导入才可构建父层。
+
 2026-10-26 可选 Gamma UI：导入开关默认关闭，Migrate 仅准备 raw Gamma 图片、共享材质和 Canvas 标记；URP Renderer Feature 必须手动添加启用，不自动改管线资产。当前范围 Unity6.6/URP17.6+/DX11/12/SDR/Overlay。真实集成否定“只前置Submit并保留URP原pass”的原型：Submit使预建UI RendererList失效；Graphics.ExecuteCommandBuffer虽使UI正确却丢三维场景。最终Feature在录制阶段暂时跳过默认Overlay，只记录已有屏幕目标；endCameraRendering中等原相机/场景/Gizmos提交完成，再创建原生UI列表绘制一次并提交，finally恢复sRGBWrite，随后正常绘制LowLevel UI；无合成RT/全屏拷贝，额外两次Submit。按实际排序后的最后Base/最终Stack相机执行，避免重画。DX12单相机、两Base加Overlay、内部HDR+4xMSAA和DX11对照的72000 UI像素与Gamma基线RGB差0，三维控制块开关不变；不能据此称完整FairyGUI浮点一致。Linear下Gamma捕获的RGBAFloat专项阈值1e-6通过。Builtin Editor235/235，PlayMode首轮204/205（自动滤镜时序项），隔离该项及同版整套复验205/205；不改断言。Windows Player构建成功，隐藏运行未提供有效屏幕帧，不冒称Player屏幕验收通过。详见GammaRendering文档及状态文档。
 
 2026-10-26 控制器 selected 仅表示编辑器选中页，发布缺省第一页，specific homePage 按页ID解析；不能把预览状态当运行默认页。关系需要同时保留控制器应用前的源target尺寸和最终运行基线，默认页隐藏组成员后也不能改掉构造源尺寸。Hidden 的 clipSoftness 要导入；默认Graphic软裁剪预烘焙UI Blend，按原生默认StageCamera使用softness/5屏幕像素、两轴取min，GPU在.5/1/2缩放下RGB阈值1e-6通过。Builtin Editor234/234；完整PlayMode200/201，唯一粘贴用例失败且独立GUIUtility剪贴板写读probe为false，重启仍复现；不要称整套通过。Gamma整图MAE0.533565、小地图1.331605，整体仍非浮点一致。运行测试前保存本代理专用宿主场景，避免域重载后保存弹窗挂住测试；不为此保存消费工程的用户场景。

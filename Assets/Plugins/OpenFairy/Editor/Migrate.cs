@@ -30,6 +30,12 @@ namespace OpenFairy.UGUI.Editor
     {
     }
 
+    // Static callback accepting the completed GameObject, before its first save.
+    [AttributeUsage(AttributeTargets.Method)]
+    public sealed class MigratePrefabPostProcessAttribute : Attribute
+    {
+    }
+
     public static partial class Migrate
     {
         private static string UiRoot => MigrationSettings.instance.sourceDirectory;
@@ -83,6 +89,7 @@ namespace OpenFairy.UGUI.Editor
         private static readonly Dictionary<Resource, Font> DynamicFonts = new();
         private static readonly Dictionary<Resource, AudioClip> Sounds = new();
         private static readonly Dictionary<string, GameObject> Prefabs = new();
+        private static readonly TypeCache.MethodCollection PrefabPostProcessors = TypeCache.GetMethodsWithAttribute<MigratePrefabPostProcessAttribute>();
         private static CommonSettings _settings;
         private static CodeGenerationSettings _codeGenerationSettings;
 
@@ -884,6 +891,15 @@ namespace OpenFairy.UGUI.Editor
                 CompleteRelations(root);
                 ConfigureSoftClipping(root, prefabPath);
                 ConfigureGammaRendering(root);
+                foreach (var method in PrefabPostProcessors)
+                    method.Invoke(null, new object[] { root });
+                var references = new List<object>();
+                foreach (var controller in controllers.Values)
+                {
+                    references.AddRange(controller.Gears);
+                    references.AddRange(controller.Actions);
+                }
+                StabilizeManagedReferences(comp, references);
                 return root;
             }
             catch
@@ -891,6 +907,15 @@ namespace OpenFairy.UGUI.Editor
                 Object.DestroyImmediate(root);
                 throw;
             }
+        }
+
+        private static void StabilizeManagedReferences(Component component, IEnumerable<object> values)
+        {
+            var references = values.AsValueEnumerable().Distinct().ToArray();
+            // Use the construction order instead of Unity's per-import reference IDs.
+            for (var i = 0; i < references.Length; i++)
+                if (!UnityEngine.Serialization.ManagedReferenceUtility.SetManagedReferenceIdForObject(component, references[i], long.MaxValue - i))
+                    throw new InvalidOperationException($"OpenFairy failed to assign a managed reference ID on '{component.name}'.");
         }
 
         private static void ConfigureGammaRendering(GameObject root)

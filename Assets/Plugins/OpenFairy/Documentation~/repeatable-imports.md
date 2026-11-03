@@ -12,6 +12,30 @@ by one import with its final settings. Repeating the same resource input and
 settings should produce no further image or sound imports. This does not skip
 prefab generation or claim that a complete migration performs no asset work.
 
+Prefab customization can run before the first save instead of reopening and
+resaving every generated prefab in a final postprocessor:
+
+```csharp
+[MigratePrefabPostProcess]
+static void Customize(UnityEngine.GameObject root)
+{
+    // Assign project bindings, components and materials here.
+}
+```
+
+The method must be static and accept one `GameObject`. Typed child/controller
+bindings, localization, layout and SDK materials are ready. Each dependency is
+customized before its consumers are built, so parents inherit the completed
+prefab. Temporary roots are destroyed after publication; do not retain them.
+Asset creation is allowed here because imports have not yet been paused.
+Keep cross-resource work and scene integration in `[MigratePostProcess]`.
+
+Controller gears and actions receive repeatable managed-reference IDs in their
+construction order. Shared references and cyclic display partners remain shared.
+This does not guarantee stable native fileIDs for newly added components on
+nested prefab instances. Migrate always constructs and saves the result; it does
+not compare entire prefabs or maintain a source/output fingerprint cache.
+
 Editor tests observe native import callbacks, preserve GUIDs and verify tiled
 cropping, nine-slice borders, audio and bitmap fonts after clearing transient
 lookup caches. They require Unity; offline compilation does not execute them.

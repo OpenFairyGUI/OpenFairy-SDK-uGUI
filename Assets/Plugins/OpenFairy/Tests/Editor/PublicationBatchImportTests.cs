@@ -17,6 +17,72 @@ namespace OpenFairy.UGUI.Tests
 {
     public sealed class PublicationBatchImportTests
     {
+        private static bool customize;
+        private static int customized;
+
+        [MigratePrefabPostProcess]
+        private static void Customize(GameObject root)
+        {
+            if (!customize || root.GetComponent<Component>().GetType().Namespace != "OpenFairyPublicationFixtures.Publication") return;
+            customized++;
+            if (root.name is not ("LeafA" or "LeafB")) return;
+            var component = root.GetComponent<Component>();
+            Assert.That(component.GetType().GetField("m_Picture").GetValue(component), Is.Not.Null);
+            root.AddComponent<CanvasGroup>().alpha = .75f;
+        }
+
+        [Test]
+        public void Prefab_customization_runs_once_before_publication_and_is_inherited_by_parents()
+        {
+            using var fixture = new Fixture();
+            customize = true;
+            customized = 0;
+            try
+            {
+                fixture.Build(true);
+                Assert.That(customized, Is.EqualTo(4));
+                var root = VerifyReloaded();
+                foreach (var name in new[] { "First", "Second" })
+                    Assert.That(root.transform.Find("Body/" + name).GetComponent<CanvasGroup>().alpha, Is.EqualTo(.75f));
+                var first = File.ReadAllBytes(Fixture.RootPath);
+                fixture.Build(true);
+                Assert.That(customized, Is.EqualTo(8));
+                Assert.That(File.ReadAllBytes(Fixture.RootPath), Is.EqualTo(first));
+            }
+            finally { customize = false; }
+        }
+
+        [Test]
+        public void Managed_reference_ids_are_repeatable_and_preserve_shared_cycles()
+        {
+            using var fixture = new Fixture();
+            var path = Fixture.Output + "/Cycle.prefab";
+            byte[] first = null;
+            for (var i = 0; i < 2; i++)
+            {
+                var root = new GameObject("Cycle", typeof(RectTransform), typeof(SelectionControllerTestPanel));
+                try
+                {
+                    var panel = root.GetComponent<SelectionControllerTestPanel>();
+                    var a = new GearDisplay<SelectionControllerTestPanel.Page> { target = root, pages = new[] { SelectionControllerTestPanel.Page.First } };
+                    var b = new GearDisplay<SelectionControllerTestPanel.Page> { target = root, pages = new[] { SelectionControllerTestPanel.Page.Second } };
+                    a.partner = b;
+                    b.partner = a;
+                    panel.m_Page.gears = new Gear<SelectionControllerTestPanel.Page>[] { a, b, a };
+                    Fixture.Call("StabilizeManagedReferences", panel, new object[] { a, b, a });
+                    PrefabUtility.SaveAsPrefabAsset(root, path);
+                }
+                finally { Object.DestroyImmediate(root); }
+                var loaded = AssetDatabase.LoadAssetAtPath<GameObject>(path).GetComponent<SelectionControllerTestPanel>();
+                var gears = loaded.m_Page.gears;
+                Assert.That(((GearDisplay<SelectionControllerTestPanel.Page>)gears[0]).partner, Is.SameAs(gears[1]));
+                Assert.That(((GearDisplay<SelectionControllerTestPanel.Page>)gears[1]).partner, Is.SameAs(gears[0]));
+                Assert.That(gears[2], Is.SameAs(gears[0]));
+                if (first == null) first = File.ReadAllBytes(path);
+                else Assert.That(File.ReadAllBytes(path), Is.EqualTo(first));
+            }
+        }
+
         private sealed class Fixture : IDisposable
         {
             public const string Source = "Temp/OpenFairyPublicationSource";

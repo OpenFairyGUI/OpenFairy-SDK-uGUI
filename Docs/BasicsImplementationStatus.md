@@ -4,6 +4,13 @@
 
 ## 当前结论
 
+### 2026-11-03 Migrate 发布阶段与工程定制性能
+
+- 新增 `[MigratePrefabPostProcess] static void Method(GameObject root)`：typed 绑定、本地化、布局及 SDK 材质完成后、首次保存前调用。子依赖的工程定制结果会先保存，再供父组件实例化。原 `[MigratePostProcess]` 保留，用于跨资源/场景收尾。消费端无需再重开全部生成 Prefab、遍历全部嵌套组件并二次保存。
+- SDK 直接利用构造期 gears/actions 列表分配稳定的 managed-reference ID，保留共享引用与循环 display partner，不在 SerializedProperty 图中递归搜索。按依赖层发布与原生资源预先导入的边界未改。依用户要求，没有增加整个 Prefab 的保存前比较、输入指纹或跳过构建的缓存。
+- 独立 Builtin Editor **237/237**、PlayMode同版完整复验 **205/205**，均无失败/跳过。Play首轮204/205的原生滚动/滤镜时序项隔离复验通过，再整套复验通过；未修改实现或断言。Editor batch首轮236/237的无Player渲染帧项改用交互Editor后整套通过。新增回归覆盖首次保存前定制、父层继承、循环/共享 managed reference 及字节重复性。
+- 原生嵌套Prefab新增组件仍可能产生不同的内部fileID；不把稳定 managed-reference ID 或资源GUID解释为完整工程零文本变化。
+
 ### 2026-10-26 Linear 工程可选 Gamma UI
 
 - 新增 `Project Settings → OpenFairy → Gamma UI Rendering` 导入选项，默认关闭。Migrate 烘焙 raw Gamma 图片、共享 UI 材质与 `GammaUI` Canvas 标记；取消后重迁移恢复普通颜色空间。依用户要求，SDK 不自动修改 URP 配置；使用者在实际 Universal Renderer Data 中手动添加、启用 `OpenFairy Gamma UI` Renderer Feature。设置、版本、外部纹理和自定义/TMP材质要求见包内 `Documentation~/GammaRendering.md`。
