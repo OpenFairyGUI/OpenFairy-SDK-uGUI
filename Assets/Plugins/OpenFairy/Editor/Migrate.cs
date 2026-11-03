@@ -727,7 +727,10 @@ namespace OpenFairy.UGUI.Editor
                 if (xml.Mask is { } mask)
                 {
                     var maskGo = children.AsValueEnumerable().First(child => child.Xml.Id == mask).Go;
-                    var carrier = new GameObject("Mask", typeof(RectTransform), typeof(MaskShape), typeof(Mask));
+                    // SaveAsPrefabAsset matches objects by name, including authored mask shapes.
+                    var carrierName = ObjectNames.GetUniqueName(root.GetComponentsInChildren<Transform>(true)
+                        .AsValueEnumerable().Select(child => child.name).ToArray(), "Mask");
+                    var carrier = new GameObject(carrierName, typeof(RectTransform), typeof(MaskShape), typeof(Mask));
                     carrier.layer = root.layer;
                     var carrierRect = (RectTransform)carrier.transform;
                     carrierRect.SetParent(rt, false);

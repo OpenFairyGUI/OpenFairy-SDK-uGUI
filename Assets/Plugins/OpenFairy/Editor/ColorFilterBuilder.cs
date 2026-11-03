@@ -1,5 +1,7 @@
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
+using ZLinq;
 
 namespace OpenFairy.UGUI.Editor
 {
@@ -16,7 +18,9 @@ namespace OpenFairy.UGUI.Editor
                 var presentation = filter.presentation;
                 if (presentation == null)
                 {
-                    var go = new GameObject("Color Filter Presentation", typeof(RectTransform), typeof(RawImage));
+                    var name = ObjectNames.GetUniqueName(source.transform.root.GetComponentsInChildren<Transform>(true)
+                        .AsValueEnumerable().Select(child => child.name).ToArray(), "Color Filter Presentation");
+                    var go = new GameObject(name, typeof(RectTransform), typeof(RawImage));
                     go.transform.SetParent(source.transform.parent, false);
                     presentation = go.GetComponent<RawImage>();
                 }

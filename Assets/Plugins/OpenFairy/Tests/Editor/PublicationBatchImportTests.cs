@@ -255,6 +255,42 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(File.ReadAllBytes(Fixture.RootPath), Is.EqualTo(first));
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Auxiliary_names_preserve_identifiers_on_repeated_publication(bool colorFilters)
+        {
+            using var fixture = new Fixture();
+            foreach (var name in new[] { "LeafA", "LeafB" })
+            {
+                var path = Fixture.Source + "/assets/Publication/" + name + ".xml";
+                var xml = XElement.Load(path);
+                xml.SetAttributeValue("mask", "mask");
+                xml.Element("displayList").AddFirst(new XElement("graph",
+                    new XAttribute("id", "mask"), new XAttribute("name", "Mask"),
+                    new XAttribute("size", "120,100"), new XAttribute("type", "rect")));
+                if (colorFilters)
+                    foreach (var item in new[] { "FilteredA", "FilteredB" })
+                        xml.Element("displayList").Add(new XElement("graph", new XAttribute("id", item),
+                            new XAttribute("name", item), new XAttribute("size", "20,20"),
+                            new XAttribute("type", "rect"), new XAttribute("grayed", "true")));
+                xml.Save(path);
+            }
+            fixture.Prepare();
+            fixture.Build(true);
+            var leafPath = Fixture.Output + "/Assets/Publication/LeafA.prefab";
+            var leafBytes = File.ReadAllBytes(leafPath);
+            var rootBytes = File.ReadAllBytes(Fixture.RootPath);
+            for (var i = 0; i < 3; i++)
+            {
+                fixture.Build(true);
+                var mask = AssetDatabase.LoadAssetAtPath<GameObject>(leafPath).GetComponentInChildren<MaskShape>(true);
+                Assert.That(File.ReadAllBytes(leafPath), Is.EqualTo(leafBytes));
+                Assert.That(File.ReadAllBytes(Fixture.RootPath), Is.EqualTo(rootBytes));
+                Assert.That(mask.source.name, Is.EqualTo("Mask"));
+                Assert.That(mask.name, Is.Not.EqualTo(mask.source.name));
+            }
+        }
+
         [Test]
         public void Independent_leaf_saves_coalesce_existing_downstream_imports()
         {

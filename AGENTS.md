@@ -6,6 +6,8 @@ SDK 提交只保留通用实现、文档与测试结论，不保存消费工程�
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-11-03 生成辅助节点必须避开既有层级名称：Mask载体不能与作者Mask重名，多个Color Filter Presentation也不能同名。SaveAsPrefabAsset按名字匹配对象，重名会让内部fileID变动并触发下游导入；使用ObjectNames.GetUniqueName和当前根层级名称，作者节点名不改。新增两种三层嵌套重复生成字节一致回归，Builtin Editor239/239、蒙版GPU专项Play1/1。不增加整Prefab比对、指纹缓存或连接/解包保存机制。
+
 2026-11-03 Migrate 性能：工程逐 Prefab 的组件、字段、材质定制使用 `[MigratePrefabPostProcess] static void Method(GameObject root)`，在首次保存前执行；不要在总后处理中再加载、遍历和保存所有 UI。跨资源/场景收尾继续用原 `[MigratePostProcess]`。控制器 gears/actions 按构造顺序指定 managed-reference ID，不能遍历 SerializedProperty 的整个图来找引用，display partner 存在循环。依用户要求保持正向构建与原生保存，不增加整 Prefab 比对或指纹缓存；原有按依赖层发布的边界保留，新原生资源必须先导入才可构建父层。
 
 2026-10-26 可选 Gamma UI：导入开关默认关闭，Migrate 仅准备 raw Gamma 图片、共享材质和 Canvas 标记；URP Renderer Feature 必须手动添加启用，不自动改管线资产。当前范围 Unity6.6/URP17.6+/DX11/12/SDR/Overlay。真实集成否定“只前置Submit并保留URP原pass”的原型：Submit使预建UI RendererList失效；Graphics.ExecuteCommandBuffer虽使UI正确却丢三维场景。最终Feature在录制阶段暂时跳过默认Overlay，只记录已有屏幕目标；endCameraRendering中等原相机/场景/Gizmos提交完成，再创建原生UI列表绘制一次并提交，finally恢复sRGBWrite，随后正常绘制LowLevel UI；无合成RT/全屏拷贝，额外两次Submit。按实际排序后的最后Base/最终Stack相机执行，避免重画。DX12单相机、两Base加Overlay、内部HDR+4xMSAA和DX11对照的72000 UI像素与Gamma基线RGB差0，三维控制块开关不变；不能据此称完整FairyGUI浮点一致。Linear下Gamma捕获的RGBAFloat专项阈值1e-6通过。Builtin Editor235/235，PlayMode首轮204/205（自动滤镜时序项），隔离该项及同版整套复验205/205；不改断言。Windows Player构建成功，隐藏运行未提供有效屏幕帧，不冒称Player屏幕验收通过。详见GammaRendering文档及状态文档。

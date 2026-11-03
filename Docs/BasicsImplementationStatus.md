@@ -4,6 +4,18 @@
 
 ## 当前结论
 
+### 2026-11-03 生成辅助节点的稳定标识
+
+- 修复Mask载体与作者Mask重名、多个Color Filter Presentation重名。生成辅助节点时根据当前根层级使用ObjectNames.GetUniqueName；设计XML、作者节点名、生成字段和运行时引用方式不变，没有加入保存前整Prefab比较、指纹缓存或连接/解包发布机制。生产改动只在两处辅助节点创建时分配名字。
+- 原版在不变输入的重复发布中改变辅助节点及组件fileID。新增蒙版、蒙版加两处滤镜两个回归，检查三层嵌套产物连续三次字节一致并保留作者Mask名称；原版分别在字节比较处失败，修复版完整Builtin Editor239/239通过。蒙版alpha/翻转/内容父级GPU专项Play1/1通过。导入传播的检查采用实际消费工程日志；动态字体依赖等也会影响导入，不能把任何一次父导入都当成Prefab源字节变化。
+
+### 2026-11-03 单次 AssetEditingScope 探索
+
+- 在独立 Builtin 宿主中，把实际 CreatePrefab/SaveAsPrefabAsset 的全部依赖构建放进一个 scope：首次导入在 Branch 实例化尚未导入的 Leaf 时失败；已有产物仅修改文字时，父层在统一导入后正确继承新文字；同时把 Leaf 从120×100改为200×150时，Leaf资产更新但Root/Body/First仍为120×100，构建期旧尺寸成为实例覆盖值。不能把所有Prefab引用都解释为需要逐层导入，也不能直接外提scope就宣称首次和更新均正确。
+- 另测 SaveAsPrefabAssetAndConnect 和内存复制：首次保存返回success=true，但实例为MissingAsset、对应资产为空，PrefabUtility.InstantiatePrefab不能使用它；Object.Instantiate复制完整内容却丢失Prefab连接。GameObjectUtility.DuplicateGameObject在首次缺失资产时也丢失连接，更新时复制中看不到新加入源Prefab但尚未导入的子节点。保存另一个Prefab时，将外部内存模板作为ListSource.itemPrefab，重载后该引用为空。观察日志用例不等于这些候选方案通过了正确性验收。
+- 本轮未找到同时保留现有嵌套Prefab/持久化引用、保证首次与更新正确且只需简单改动的单scope方案；这些候选未进入SDK发布逻辑。结果来自隔离探针，不是新增完整套件、消费工程性能或像素验证。后续若继续探索，应同时覆盖首次资源、结构增删、尺寸与布局、直接资产引用和保存重载后的生成字段。
+- 定向刷新补测：Editing内ImportAsset(ForceSynchronousImport|ForceUpdate)与实验性ForceProduceArtifact均未使新Prefab立即可用或旧Prefab更新；Stop后才可读到新内容。另用相同Leaf对照“嵌套父Prefab”与“仅ListSource.itemPrefab引用的父Prefab”：三轮真实变化每轮导入计数为Leaf=1/嵌套父=1/引用父=0；第四轮保存相同内容均0。加DisallowAutoRefresh后结果相同，两用例通过。Stop不是无条件重导全部资源，也没有公开资源白名单；不能用普通资产引用的数据资产导入流程直接推断嵌套UI的导入传播。
+
 ### 2026-11-03 Migrate 发布阶段与工程定制性能
 
 - 迁移入口改为 `Tools/OpenFairyGUI Migrate`，默认快捷键为 Windows `Ctrl+M`，替换旧 `Ctrl+E`。
