@@ -39,7 +39,7 @@ namespace OpenFairy.UGUI
 
         public Color modalColor = new(0, 0, 0, 0.4f);
 
-        public Vector2 size => rect.rect.size;
+        public Vector2 size => new(Mathf.Ceil(rect.rect.width), Mathf.Ceil(rect.rect.height));
 
         protected override void Awake()
         {
@@ -98,7 +98,7 @@ namespace OpenFairy.UGUI
             obj.anchorMin = obj.anchorMax = obj.pivot = new Vector2(0, 1);
             var s = obj.rect.size;
             var r = size;
-            obj.anchoredPosition = new Vector2(Mathf.Round((r.x - s.x) / 2), -Mathf.Round((r.y - s.y) / 2));
+            obj.anchoredPosition = new Vector2((int)((r.x - s.x) / 2), -(int)((r.y - s.y) / 2));
         }
 
         public bool hasAnyPopup => _popups.Count > 0;

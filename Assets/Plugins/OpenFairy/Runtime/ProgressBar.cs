@@ -29,9 +29,9 @@ namespace OpenFairy.UGUI
             return type switch
             {
                 ProgressTitleType.Percent => Mathf.FloorToInt(percent * 100).ToString() + "%",
-                ProgressTitleType.ValueAndMax => Mathf.RoundToInt(value).ToString() + "/" + Mathf.RoundToInt(max).ToString(),
-                ProgressTitleType.Value => Mathf.RoundToInt(value).ToString(),
-                _ => Mathf.RoundToInt(max).ToString(),
+                ProgressTitleType.ValueAndMax => System.Math.Round(value).ToString() + "/" + System.Math.Round(max).ToString(),
+                ProgressTitleType.Value => System.Math.Round(value).ToString(),
+                _ => System.Math.Round(max).ToString(),
             };
         }
     }

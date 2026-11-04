@@ -149,8 +149,10 @@ namespace OpenFairy.UGUI.Tests
                 method.Invoke(null, new object[] { root, new List<(Schema.Display, GameObject)> {
                     (new Schema.Display { Name = "bar" }, track.gameObject),
                     (new Schema.Display { Name = "grip" }, grip.gameObject),
-                } });
+                }, new Schema.Extension { FixedGripSize = true } });
                 var bar = root.GetComponent<AuthoredScrollbar>();
+                Assert.IsTrue(bar.fixedGripSize);
+                Assert.That(bar.authoredGripSize, Is.EqualTo(25));
                 Assert.AreSame(grip, bar.handleRect);
                 Assert.AreSame(track, grip.parent);
                 Assert.That(bar.size, Is.EqualTo(.25f).Within(.0001f));

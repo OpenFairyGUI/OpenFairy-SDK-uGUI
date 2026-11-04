@@ -6,6 +6,7 @@ using UnityEngine.UI;
 
 namespace OpenFairy.UGUI
 {
+    [DefaultExecutionOrder(-31999)]
     public sealed class ScrollPane : ScrollRect, IPointerEnterHandler, IPointerExitHandler
     {
         public bool mouseWheelEnabled = true;
@@ -21,8 +22,11 @@ namespace OpenFairy.UGUI
 
         private bool _loop, _dragging, _updating, _notifying, _autoAxes, _needsSnap;
         private Vector2? _explicitSize;
+        [SerializeField] private Vector2 _contentSize;
         private Vector2 _previousPosition, _notifiedPosition, _notifiedSize, _notifiedView;
         private Vector2 _scrollStart, _scrollTarget;
+        private Vector2 _layoutPosition, _renderedPosition;
+        private bool _renderAligned, _positionRecorded;
         private Tween _scrollTween;
         private bool _hovered, _barDragging;
         private MovementType _boundedMovement = MovementType.Elastic;
@@ -56,9 +60,13 @@ namespace OpenFairy.UGUI
         }
 
         public Vector2 viewportSize => viewport.rect.size;
-        public Vector2 contentSize => content.rect.size;
-        public Vector2 maxScroll => Vector2.Max(Vector2.zero, contentSize - viewportSize);
-        public Vector2 position => new(-content.anchoredPosition.x, content.anchoredPosition.y);
+        public Vector2 contentSize => source != null && source.hasNativeRowLayout
+            ? new Vector2(Mathf.Round(source.rowLayout.preferredWidth), Mathf.Round(source.rowLayout.preferredHeight)) : _contentSize;
+        public Vector2 maxScroll => new(Mathf.Ceil(Mathf.Max(0, contentSize.x - viewportSize.x)),
+            Mathf.Ceil(Mathf.Max(0, contentSize.y - viewportSize.y)));
+        private Vector2 LogicalPosition => _positionRecorded && content.anchoredPosition.Equals(_renderedPosition)
+            ? _layoutPosition : content.anchoredPosition;
+        public Vector2 position => new(-LogicalPosition.x, LogicalPosition.y);
         public float percX { get => maxScroll.x > 0 ? Mathf.Clamp01(position.x / maxScroll.x) : 0; set => SetPosition(new(value * maxScroll.x, position.y)); }
         public float percY { get => maxScroll.y > 0 ? Mathf.Clamp01(position.y / maxScroll.y) : 0; set => SetPosition(new(position.x, value * maxScroll.y)); }
         internal bool updatingPage => _notifying;
@@ -125,7 +133,17 @@ namespace OpenFairy.UGUI
                     var corner = Relation.TopLeft(child);
                     size = Vector2.Max(size, new(corner.x + child.rect.width, child.rect.height - corner.y));
                 }
-            if (source == null || !source.hasNativeRowLayout) content.sizeDelta = size;
+            size = new Vector2(Mathf.Round(size.x), Mathf.Round(size.y));
+            _contentSize = size;
+            // ScrollRect's physical range must include the native ceiled overlap without changing authored child sizes.
+            var physicalSize = viewportSize + new Vector2(Mathf.Ceil(Mathf.Max(0, size.x - viewportSize.x)),
+                Mathf.Ceil(Mathf.Max(0, size.y - viewportSize.y)));
+            if (source != null && source.hasNativeRowLayout)
+            {
+                source.rowMinimum.minWidth = physicalSize.x;
+                source.rowMinimum.minHeight = physicalSize.y;
+            }
+            else content.sizeDelta = physicalSize;
             if (_autoAxes && !_loop)
             {
                 horizontal = size.x > viewportSize.x;
@@ -136,6 +154,7 @@ namespace OpenFairy.UGUI
 
         public void SetPosition(Vector2 value, bool animated = false)
         {
+            RestorePosition();
             StopMovement();
             if (!_loop) value.x = Mathf.Clamp(value.x, 0, maxScroll.x);
             value.y = Mathf.Clamp(value.y, 0, maxScroll.y);
@@ -147,7 +166,8 @@ namespace OpenFairy.UGUI
                 var progress = 0f;
                 _scrollTween = DOTween.To(() => progress, t => {
                     progress = t;
-                    MoveTo(Vector2.LerpUnclamped(_scrollStart, _scrollTarget, t));
+                    var delta = (_scrollTarget - _scrollStart) * t;
+                    MoveTo(t == 1 ? _scrollTarget : _scrollStart + new Vector2((int)delta.x, (int)delta.y));
                 }, 1, .3f).SetEase(Ease.OutCubic).SetUpdate(UpdateType.Normal, true).OnComplete(() => _scrollTween = null);
             }
             else
@@ -158,13 +178,18 @@ namespace OpenFairy.UGUI
 
         private void MoveTo(Vector2 value)
         {
+            RestorePosition();
             content.anchoredPosition = value;
+            _layoutPosition = value;
+            _renderedPosition = content.anchoredPosition;
+            _positionRecorded = true;
             UpdateBounds();
             Notify();
         }
 
         internal void Rebase(Vector2 shift)
         {
+            RestorePosition();
             var delta = new Vector2(shift.x, -shift.y);
             var current = content.anchoredPosition + delta;
             m_ContentStartPosition += delta;
@@ -189,7 +214,8 @@ namespace OpenFairy.UGUI
             var start = new Vector2(bounds.min.x - content.rect.xMin, content.rect.yMax - bounds.max.y);
             var value = position;
             for (var axis = 0; axis < 2; axis++)
-                if (start[axis] < value[axis]) value[axis] = start[axis];
+                if (pageMode) value[axis] = Mathf.Floor(start[axis] / viewportSize[axis]) * viewportSize[axis];
+                else if (start[axis] < value[axis]) value[axis] = start[axis];
                 else if (start[axis] + bounds.size[axis] > value[axis] + viewportSize[axis])
                     value[axis] = start[axis] + bounds.size[axis] - viewportSize[axis];
             SetPosition(value, animated);
@@ -232,7 +258,14 @@ namespace OpenFairy.UGUI
 
         public override void OnInitializePotentialDrag(PointerEventData data) { if (touchEffect) base.OnInitializePotentialDrag(data); }
 
-        public override void OnDrag(PointerEventData data) { if (touchEffect) base.OnDrag(data); }
+        public override void OnDrag(PointerEventData data)
+        {
+            if (!touchEffect) return;
+            RestorePosition();
+            base.OnDrag(data);
+            var point = content.anchoredPosition;
+            content.anchoredPosition = new Vector2((int)point.x, (int)point.y);
+        }
         public override void OnEndDrag(PointerEventData data)
         {
             if (!_dragging || data.button != PointerEventData.InputButton.Left) return;
@@ -253,6 +286,7 @@ namespace OpenFairy.UGUI
 
         protected override void SetNormalizedPosition(float value, int axis)
         {
+            RestorePosition();
             StopMovement();
             base.SetNormalizedPosition(value, axis);
             Notify();
@@ -261,12 +295,15 @@ namespace OpenFairy.UGUI
         protected override void OnEnable()
         {
             base.OnEnable();
+            Canvas.preWillRenderCanvases += Queue;
             onValueChanged.AddListener(OnChanged);
             _previousPosition = content != null ? content.anchoredPosition : Vector2.zero;
             ShowBars();
         }
         protected override void OnDisable()
         {
+            Canvas.preWillRenderCanvases -= Queue;
+            RestorePosition();
             onValueChanged.RemoveListener(OnChanged);
             StopMovement();
             _dragging = false;
@@ -278,6 +315,7 @@ namespace OpenFairy.UGUI
         protected override void LateUpdate()
         {
             if (content == null) return;
+            RestorePosition();
             if (source == null && _explicitSize == null) RefreshContent();
             _updating = true;
             try { base.LateUpdate(); }
@@ -290,10 +328,47 @@ namespace OpenFairy.UGUI
             if (pageMode)
             {
                 var axis = horizontal ? 0 : 1;
-                value[axis] = Mathf.Round(value[axis] / viewportSize[axis]) * viewportSize[axis];
+                value[axis] = PageIndex(value[axis], viewportSize[axis]) * viewportSize[axis];
             }
             else if (source != null) value = source.SnapPosition(value);
             SetPosition(value, true);
+        }
+
+        internal static int PageIndex(float position, float pageSize)
+        {
+            var page = Mathf.FloorToInt(position / pageSize);
+            return position - page * pageSize > pageSize * .5f ? page + 1 : page;
+        }
+
+        private void Update() => RestorePosition();
+
+        private void RestorePosition()
+        {
+            if (!_renderAligned) return;
+            if (content.anchoredPosition.Equals(_renderedPosition))
+            {
+                content.anchoredPosition = _layoutPosition;
+                _renderedPosition = content.anchoredPosition;
+            }
+            _renderAligned = false;
+        }
+
+        private void Queue()
+        {
+            RestorePosition();
+            CanvasUpdateRegistry.RegisterCanvasElementForLayoutRebuild(this);
+        }
+
+        public override void Rebuild(CanvasUpdate executing)
+        {
+            base.Rebuild(executing);
+            if (executing != CanvasUpdate.PostLayout || content == null) return;
+            _layoutPosition = LogicalPosition;
+            _renderedPosition = new Vector2((int)_layoutPosition.x, (int)_layoutPosition.y);
+            content.anchoredPosition = _renderedPosition;
+            _renderedPosition = content.anchoredPosition;
+            _renderAligned = true;
+            _positionRecorded = true;
         }
 
         private void OnChanged(Vector2 _) => Notify();
@@ -308,7 +383,7 @@ namespace OpenFairy.UGUI
                 if (Application.isPlaying && pageOwner != null && !pageOwner.IsControllerChanging(pageController))
                 {
                     var pagePosition = _scrollTween != null ? new Vector2(-_scrollTarget.x, _scrollTarget.y) : position;
-                    pageOwner.SetControllerPage(pageController, Mathf.Clamp(Mathf.RoundToInt((horizontal ? pagePosition.x : pagePosition.y) / (horizontal ? viewportSize.x : viewportSize.y)), 0, pageCount - 1));
+                    pageOwner.SetControllerPage(pageController, Mathf.Clamp(PageIndex(horizontal ? pagePosition.x : pagePosition.y, horizontal ? viewportSize.x : viewportSize.y), 0, pageCount - 1));
                 }
             }
             finally

@@ -54,6 +54,49 @@ namespace OpenFairy.UGUI.Tests
             finally { File.Delete(file); UnityEngine.Object.DestroyImmediate(root); }
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Fixed_group_rounding_keeps_original_proportions_after_prefab_reload(bool vertical)
+        {
+            var path = "Assets/__NativeGroup_" + Guid.NewGuid().ToString("N") + ".prefab";
+            var root = new GameObject("Group", typeof(RectTransform));
+            GameObject instance = null;
+            try
+            {
+                var rect = (RectTransform)root.transform;
+                rect.sizeDelta = new Vector2(103.5f, 103.5f);
+                for (var i = 0; i < 3; i++)
+                {
+                    var child = new GameObject("Item" + i, typeof(RectTransform)).GetComponent<RectTransform>();
+                    child.SetParent(rect, false);
+                    child.sizeDelta = Vector2.one * (20.25f + i * 7.125f);
+                }
+                GroupLayoutBuilder.Configure(root, new Schema.Display { Advanced = true, LayoutSpecified = true,
+                    Layout = vertical ? Schema.ListLayout.SingleColumn : Schema.ListLayout.SingleRow,
+                    AutoSizeDisabled = true, ColGap = 3, LineGap = 3 });
+                Assert.IsNull(root.GetComponent<ContentSizeFitter>());
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rect);
+                PrefabUtility.SaveAsPrefabAsset(root, path);
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+                instance = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(path));
+                rect = (RectTransform)instance.transform;
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rect);
+                var axis = vertical ? RectTransform.Axis.Vertical : RectTransform.Axis.Horizontal;
+                var expected = new[] { 24f, 33f, 41f };
+                for (var i = 0; i < 3; i++) Assert.That(((RectTransform)rect.GetChild(i)).rect.size[(int)axis], Is.EqualTo(expected[i]));
+                rect.SetSizeWithCurrentAnchors(axis, 150.75f);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rect);
+                expected = new[] { 36f, 48f, 61f };
+                for (var i = 0; i < 3; i++) Assert.That(((RectTransform)rect.GetChild(i)).rect.size[(int)axis], Is.EqualTo(expected[i]));
+            }
+            finally
+            {
+                if (instance != null) UnityEngine.Object.DestroyImmediate(instance);
+                UnityEngine.Object.DestroyImmediate(root);
+                AssetDatabase.DeleteAsset(path);
+            }
+        }
+
         [Test]
         public void Real_prefab_import_bakes_the_group_after_reparenting_its_members()
         {

@@ -270,17 +270,22 @@ namespace OpenFairy.UGUI.Tests
                     + "char id=65 x=0 y=0 width=8 height=12 xoffset=1 yoffset=2 xadvance=9\n"
                     + "char id=67 x=8 y=0 width=8 height=12 xoffset=0 yoffset=2 xadvance=8\n");
                 var asset = (BitmapFont)Call("ImportFont", font);
+                Assert.IsFalse(asset.resizable);
                 Assert.That(asset.TryGetGlyph('A', out var before), Is.True);
                 Assert.That(before.advance, Is.EqualTo(9));
                 Assert.That(asset.TryGetGlyph('C', out _), Is.True);
                 Assert.That(asset.TryGetGlyph('B', out _), Is.False);
                 var guid = AssetDatabase.AssetPathToGUID(output + "/Font.asset");
                 var textureGuid = AssetDatabase.AssetPathToGUID(output + "/Atlas.png");
-                File.WriteAllText(source + "/Font.fnt", header
+                File.WriteAllText(source + "/Font.fnt", header.Replace("info size=16", "info size=16 resizable=true")
                     + "char id=65 x=0 y=0 width=12 height=12 xoffset=1 yoffset=2 xadvance=15\n"
                     + "char id=66 x=12 y=0 width=8 height=12 xoffset=0 yoffset=2 xadvance=8\n");
                 Forget("FontAssets", font);
                 var updated = (BitmapFont)Call("ImportFont", font);
+                Assert.IsTrue(updated.resizable);
+                AssetDatabase.SaveAssetIfDirty(updated);
+                AssetDatabase.ImportAsset(output + "/Font.asset", ImportAssetOptions.ForceUpdate);
+                Assert.IsTrue(AssetDatabase.LoadAssetAtPath<BitmapFont>(output + "/Font.asset").resizable);
                 Assert.That(updated, Is.SameAs(asset));
                 Assert.That(updated.TryGetGlyph('A', out var after), Is.True);
                 Assert.That(after.width, Is.EqualTo(12));

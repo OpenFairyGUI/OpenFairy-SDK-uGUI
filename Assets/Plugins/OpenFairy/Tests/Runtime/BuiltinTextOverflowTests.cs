@@ -72,6 +72,22 @@ namespace OpenFairy.UGUI.Tests
             }
         }
 
+        [TestCase(21, 10)]
+        [TestCase(23, 12)]
+        public void Resizable_bitmap_advances_round_after_scaling_and_keep_fractional_glyph_geometry(int size, int advance)
+        {
+            var text = MakeText(true, false, new Vector2(300, 100));
+            text.bitmapFont.resizable = true;
+            var glyphs = text.bitmapFont.glyphs;
+            for (var i = 0; i < glyphs.Length; i++) glyphs[i].advance = 15;
+            text.bitmapFont.InvalidateLookup();
+            text.fontSize = size;
+            text.text = "AA";
+            var vertices = Mesh(text);
+            Assert.That(vertices[4].position.x - vertices[0].position.x, Is.EqualTo(advance).Within(.001f));
+            Assert.That(Mathf.Abs(vertices[0].position.x - vertices[2].position.x), Is.EqualTo(16f * size / 30).Within(.001f));
+        }
+
         [TearDown]
         public void TearDown()
         {

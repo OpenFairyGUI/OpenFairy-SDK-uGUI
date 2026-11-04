@@ -868,7 +868,7 @@ namespace OpenFairy.UGUI.Editor
                     label.iconLoader = IconLoader(Child(children, "icon"));
                 }
                 else if (xml.Extension == Schema.ComponentExtension.ScrollBar)
-                    SetupScrollBar(root, children);
+                    SetupScrollBar(root, children, xml.ScrollBarExtension);
 
                 var byName = new Dictionary<string, GameObject>();
                 foreach (var (element, field) in PublishedChildFields(xml, ClassName(component)))
@@ -1993,7 +1993,7 @@ namespace OpenFairy.UGUI.Editor
             vr.pivot = new Vector2(0, 1);
             vr.anchorMin = Vector2.zero;
             vr.anchorMax = Vector2.one;
-            vr.offsetMin = new Vector2(margin.Left + (left ? insetX : 0), margin.Bottom + insetY);
+            vr.offsetMin = new Vector2(left && vt != null && !floating ? Mathf.Floor(margin.Left + insetX) : margin.Left, margin.Bottom + insetY);
             vr.offsetMax = new Vector2(-(margin.Right + (left ? 0 : insetX)), -margin.Top);
             viewport.GetComponent<Image>().color = Color.clear;
             viewport.GetComponent<RectMask2D>().enabled = !flags.HasFlag(Schema.ScrollFlags.MaskDisabled);
@@ -2078,7 +2078,7 @@ namespace OpenFairy.UGUI.Editor
                 view.Pane.horizontalScrollbar.size = Mathf.Min(1, view.ViewportSize.x / Mathf.Max(1, size.x));
         }
 
-        private static void SetupScrollBar(GameObject root, List<(Schema.Display Xml, GameObject Go)> children)
+        private static void SetupScrollBar(GameObject root, List<(Schema.Display Xml, GameObject Go)> children, Schema.Extension extension)
         {
             var track = (RectTransform)Child(children, "bar").transform;
             var grip = (RectTransform)Child(children, "grip").transform;
@@ -2090,6 +2090,8 @@ namespace OpenFairy.UGUI.Editor
             var start = horizontal ? point.x - track.rect.xMin : track.rect.yMax - point.y;
             var percent = extent > handle ? start / (extent - handle) : 0;
             var bar = root.AddComponent<AuthoredScrollbar>();
+            bar.fixedGripSize = extension?.FixedGripSize ?? false;
+            bar.authoredGripSize = handle;
             bar.direction = horizontal ? Scrollbar.Direction.LeftToRight : Scrollbar.Direction.BottomToTop;
             bar.size = handle / extent;
             bar.value = horizontal ? percent : 1 - percent;
@@ -2138,6 +2140,8 @@ namespace OpenFairy.UGUI.Editor
             source.lineGap = lineGap;
             source.colGap = colGap;
             source.lineItemCount = element.LineItemCount;
+            source.lineItemCount2 = element.LineItemCount2;
+            source.foldInvisibleItems = element.FoldInvisibleItems;
             source.alignment = TextAlignment(element);
             source.layout = layout switch
             {
@@ -2159,9 +2163,8 @@ namespace OpenFairy.UGUI.Editor
             if (view.Pane != null) view.Pane.source = source;
 
             var variants = new List<GameObject>();
-            var content = Vector2.zero;
-            float x = 0, y = 0, lineExtent = 0;
-            var lineCount = 0;
+            var items = new List<RectTransform>();
+            var sourceSizes = new List<Vector2>();
             foreach (var item in element.Items)
             {
                 var resource = Resolve(item.Url ?? element.DefaultItem, owner.PackageId);
@@ -2171,56 +2174,11 @@ namespace OpenFairy.UGUI.Editor
                 ConfigureButton(itemGo, item, owner.PackageId);
                 ConfigureInstanceControllers(itemGo.GetComponent<Component>(), resource.ComponentXml, item.Controllers);
                 var itemRect = (RectTransform)itemGo.transform;
-                if (element.AutoItemSize && layout == Schema.ListLayout.SingleColumn)
-                    itemRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, viewSize.x);
-                else if (element.AutoItemSize && layout == Schema.ListLayout.SingleRow)
-                    itemRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, viewSize.y);
+                sourceSizes.Add(((RectTransform)itemPrefab.transform).rect.size);
                 LayoutRebuilder.ForceRebuildLayoutImmediate(itemRect);
-                var actualSize = itemRect.rect.size;
-                Vector2 position;
-                switch (layout)
-                {
-                    case Schema.ListLayout.SingleRow:
-                        position = new Vector2(x, 0);
-                        x += actualSize.x + colGap;
-                        break;
-                    case Schema.ListLayout.FlowHorizontal:
-                    case Schema.ListLayout.Pagination: // 分页吸附不做：按 flow_hz 排布
-                        if (lineCount > 0 && (element.LineItemCount > 0
-                            ? lineCount == element.LineItemCount : x + actualSize.x > viewSize.x))
-                        {
-                            x = 0;
-                            y += lineExtent + lineGap;
-                            lineExtent = 0;
-                            lineCount = 0;
-                        }
-                        position = new Vector2(x, y);
-                        x += actualSize.x + colGap;
-                        lineExtent = Mathf.Max(lineExtent, actualSize.y);
-                        lineCount++;
-                        break;
-                    case Schema.ListLayout.FlowVertical:
-                        if (lineCount > 0 && (element.LineItemCount > 0
-                            ? lineCount == element.LineItemCount : y + actualSize.y > viewSize.y))
-                        {
-                            y = 0;
-                            x += lineExtent + colGap;
-                            lineExtent = 0;
-                            lineCount = 0;
-                        }
-                        position = new Vector2(x, y);
-                        y += actualSize.y + lineGap;
-                        lineExtent = Mathf.Max(lineExtent, actualSize.x);
-                        lineCount++;
-                        break;
-                    default: // SingleColumn
-                        position = new Vector2(0, y);
-                        y += actualSize.y + lineGap;
-                        break;
-                }
-                content = Vector2.Max(content, position + actualSize);
-                itemRect.anchoredPosition = new Vector2(position.x, -position.y);
+                items.Add(itemRect);
             }
+            var content = ListLayout.Arrange(source, items, viewSize, sourceSizes);
             source.variantItems = variants.ToArray();
             SetGrips(view, content);
             ListLayoutBuilder.Configure(source);
@@ -2955,12 +2913,16 @@ namespace OpenFairy.UGUI.Editor
             var glyphs = new List<BitmapFont.Glyph>();
             var size = 0;
             float scaleW = 0, scaleH = 0;
+            var resizable = false;
             var charLines = new List<Dictionary<string, string>>();
             foreach (var line in File.ReadAllLines(fontResource.File))
             {
                 var attrs = ParseFntLine(line);
-                if (line.StartsWith("info") && attrs.TryGetValue("size", out var infoSize))
-                    size = int.Parse(infoSize);
+                if (line.StartsWith("info"))
+                {
+                    if (attrs.TryGetValue("size", out var infoSize)) size = int.Parse(infoSize);
+                    resizable = attrs.GetValueOrDefault("resizable") == "true";
+                }
                 else if (line.StartsWith("common"))
                 {
                     scaleW = float.Parse(attrs.GetValueOrDefault("scaleW", "0"), CultureInfo.InvariantCulture);
@@ -3051,10 +3013,11 @@ namespace OpenFairy.UGUI.Editor
             var textureAsset = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePath);
             var glyphArray = glyphs.ToArray();
             var canTint = fontResource.Texture != null;
-            if (asset.size != size || asset.canTint != canTint || asset.texture != textureAsset
+            if (asset.size != size || asset.resizable != resizable || asset.canTint != canTint || asset.texture != textureAsset
                 || asset.glyphs == null || !asset.glyphs.AsValueEnumerable().SequenceEqual(glyphArray))
             {
                 asset.size = size;
+                asset.resizable = resizable;
                 asset.canTint = canTint;
                 asset.texture = textureAsset;
                 asset.glyphs = glyphArray;

@@ -30,7 +30,7 @@ namespace OpenFairy.UGUI.Tests
             source.layout = ListLayoutType.SingleRow; source.autoItemSize = autoItemSize;
             if (scrolling) source.scrollPane = ScrollPane.Attach(rect);
             source.content = scrolling ? source.scrollPane.content : rect;
-            source.rowLayout = source.content.gameObject.AddComponent<HorizontalLayoutGroup>();
+            source.rowLayout = source.content.gameObject.AddComponent<ListRowLayout>();
             source.rowLayout.childControlWidth = source.rowLayout.childControlHeight = false;
             source.rowLayout.childForceExpandWidth = source.rowLayout.childForceExpandHeight = false;
             source.rowLayout.childAlignment = TextAnchor.UpperLeft; source.rowLayout.spacing = 5;
@@ -124,10 +124,10 @@ namespace OpenFairy.UGUI.Tests
             source.rowLayout.childAlignment = TextAnchor.MiddleCenter;
             source.Fill(2, (go, _) => go.GetComponent<LayoutElement>().preferredWidth = 40, false);
             yield return null; yield return null;
-            Assert.That(Items(source)[0].anchoredPosition.x, Is.EqualTo(57.5f).Within(.01));
+            Assert.That(Items(source)[0].anchoredPosition.x, Is.EqualTo(57).Within(.01));
             ((RectTransform)source.transform).sizeDelta = new Vector2(300, 90);
             yield return null; yield return null;
-            Assert.That(Items(source)[0].anchoredPosition.x, Is.EqualTo(107.5f).Within(.01));
+            Assert.That(Items(source)[0].anchoredPosition.x, Is.EqualTo(107).Within(.01));
             Assert.That(Items(source)[0].rect.height, Is.EqualTo(90).Within(.01));
         }
 

@@ -589,6 +589,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlElement("ComboBox")] public Extension ComboBox;
         [XmlElement("ProgressBar")] public Extension ProgressBar;
         [XmlElement("Slider")] public Extension Slider;
+        [XmlElement("ScrollBar")] public Extension ScrollBarExtension;
 
         public static Component Load(string file) => OpenFairy.UGUI.Editor.FairyXml.LoadComponent(file);
     }
@@ -636,6 +637,8 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("src")] public string Src;
         [XmlAttribute("pkg")] public string Package;
         [XmlAttribute("lineItemCount")] public int LineItemCount;
+        [XmlAttribute("lineItemCount2")] public int LineItemCount2;
+        [XmlAttribute("foldInvisibleItems")] public bool FoldInvisibleItems;
         [XmlAttribute("renderOrder")] public OpenFairy.UGUI.ListRenderOrder RenderOrder;
         [XmlAttribute("restrictSize")] public int[] RestrictSize; // minWidth,maxWidth,minHeight,maxHeight
         [XmlAttribute("apex")] public int Apex;
@@ -643,6 +646,8 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("group")] public string Group;
         [XmlAttribute("advanced")] public bool Advanced;
         [XmlAttribute("excludeInvisibles")] public bool ExcludeInvisibles;
+        [XmlAttribute("autoSizeDisabled")] public bool AutoSizeDisabled;
+        [XmlAttribute("mainGridIndex")] public int MainGridIndex = -1;
         public bool LayoutSpecified;
         [XmlAttribute("defaultItem")] public string DefaultItem;
         [XmlAttribute("xy")] public Vector2? Position;
@@ -794,6 +799,7 @@ namespace OpenFairy.UGUI.Editor.Schema
         [XmlAttribute("reverse")] public bool Reverse;
         [XmlAttribute("wholeNumbers")] public bool WholeNumbers;
         [XmlAttribute("changeOnClick")] public bool ChangeOnClick = true;
+        [XmlAttribute("fixedGripSize")] public bool FixedGripSize;
         [XmlAttribute("dropdown")] public string Dropdown;
         [XmlAttribute("visibleItemCount")] public int VisibleItemCount = 10;
         [XmlAttribute("autoClearItems")] public bool AutoClearItems;

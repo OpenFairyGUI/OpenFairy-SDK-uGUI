@@ -6,6 +6,8 @@ SDK 提交只保留通用实现、文档与测试结论，不保存消费工程�
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-11-04 原 SDK 取整审计：扫描原版 SDK 的171份源文件，含未激活预处理分支、shader与整数cast，共305点逐项记录；142点对应已实现规则、43点后端替代/能力边界、24点缺失功能、96点非显示坐标转换，不能把“审计完整”称为全部原生功能一致。五种列表布局由Migrate和Fill共用算术：横流Ceil宽/行高、纵流非自动保留逐项高度小数、比例尺寸逐项Round（sourceWidth/sourceHeight本身为int）、分页固定行高Floor、内容居中int截断。虚拟固定格及显式测高行先Ceil测量再推进，自动分配尺寸int截断；不冒称支持任意itemRenderer变宽/交叉尺寸。分组保存原比例及成员基线，防Prefab重载后再次归一化产生1px漂移；固定组初次布局也要分配，空间小于gap时按原生SetSize钳到0。滚动逻辑保留精确小数、显示/拖动截断，Ceil overlap须同步无图形content物理范围，否则ScrollRect会把最后半像素弹回；tween截断delta再加start。Scrollbar沿轴保持基类anchors，仅用offset补偿Floor长度/Round原点，避免基类UpdateVisuals重复叠加尺寸；自排队Rebuild不能调用会发onValueChanged的Editor Prelayout。固定grip、左侧非floating条偏移Floor、Root尺寸Ceil/Center截断、位图字体resizable与缩放后Round、捕获RT Round、数值标题Math.Round均覆盖。原SDK实际180列表+18分组+144条数据对照全在.001内；Builtin Editor244/244、Play280/280，TMP Editor268/268、Play307/307。规则与明确边界见Documentation~/PixelRounding.md。
+
 2026-11-04 makePixelPerfect 是持久化 Migrate 选项，默认关闭；开关只控制本地显示位置 Round，不把尺寸、缩放或UV取整。PixelAlignment 必须跳过作者组辅助层，滚动项使用content坐标；.5边界禁止用世界矩阵往返计算，否则实测可偏整像素。恢复原始布局位置时保留精确副本，旋转判断不能使用Quaternion近似相等。Loader 编辑器中心Floor独立于该开关；不要混同原SDK默认小数居中。Builtin Editor242/242、Play213/213；原版SDK288组实际变换全部在.001阈值内（最大3.14568e-5），隔离170组件开关两态、连续1246文件稳定验证通过；整体截图仍非像素一致，尚未完成全部布局取整审计。
 
 2026-11-03 重复Migrate必须产生相同内容，作者重名也要处理。首次保存前统一分配整个Prefab层级的唯一名称：根和本组件作者节点优先，重复作者名用稳定XML id构成别名，继承及辅助节点按确定遍历顺序去重；嵌套实例名称覆盖须RecordPrefabInstancePropertyModifications。源XML、生成公开字段、控制器/动效和直接引用不改。TMP阴影刷新复用同一作者别名分配，保留旧层级和错误绑定的严格检查。仅修Mask/Color Filter辅助节点的75f60c5仍有31个Prefab变化，已被此次完整命名修正取代。Builtin Editor241/241、Play205/205、TMP Editor265/265通过；TMP宿主先补齐Essential Resources和默认字体sourceFontFile。不得引入整Prefab保存前比较、指纹跳过或连接/解包保存机制；校验用快照仅在外部测量工具中。

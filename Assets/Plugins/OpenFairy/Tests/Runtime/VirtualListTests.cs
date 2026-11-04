@@ -41,6 +41,77 @@ namespace OpenFairy.UGUI.Tests.PlayMode
             return source;
         }
 
+        [TestCase(ListLayoutType.SingleColumn, 0f, 16f)]
+        [TestCase(ListLayoutType.SingleRow, 29f, 0f)]
+        [TestCase(ListLayoutType.FlowHorizontal, 0f, 16f)]
+        [TestCase(ListLayoutType.FlowVertical, 29f, 0f)]
+        [TestCase(ListLayoutType.Pagination, 0f, 34f)]
+        public void Fractional_virtual_items_use_ceiled_cells_and_truncated_auto_partitions(ListLayoutType mode, float x, float y)
+        {
+            var source = MakeList(new Vector2(103.5f, 67.5f), new Vector2(25.25f, 13.75f), mode);
+            source.lineItemCount = 3;
+            source.lineItemCount2 = 2;
+            source.colGap = 3;
+            source.lineGap = 2;
+            source.SetVirtual();
+            source.Fill(12, (_, _) => { });
+            var index = mode is ListLayoutType.SingleColumn or ListLayoutType.SingleRow ? 1 : 3;
+            var item = (RectTransform)source.GetItemAt(index).transform;
+            Assert.That(item.anchoredPosition.x, Is.EqualTo(x).Within(.001f));
+            Assert.That(-item.anchoredPosition.y, Is.EqualTo(y).Within(.001f));
+            if (mode is ListLayoutType.SingleColumn or ListLayoutType.FlowHorizontal or ListLayoutType.Pagination)
+                Assert.That(item.rect.width, Is.EqualTo(mode == ListLayoutType.SingleColumn ? 103 : 32));
+            if (mode == ListLayoutType.Pagination)
+            {
+                Assert.That(item.rect.height, Is.EqualTo(32));
+                Assert.That(((RectTransform)source.GetItemAt(6).transform).anchoredPosition.x, Is.EqualTo(103.5f));
+                Assert.That(source.scrollPane.contentSize.x, Is.EqualTo(207));
+            }
+        }
+
+        [Test]
+        public void Fractional_measured_height_stays_on_the_object_but_uses_a_ceiled_virtual_cell()
+        {
+            var source = MakeList(new Vector2(100, 100), new Vector2(100, 13.25f), ListLayoutType.SingleColumn);
+            source.lineGap = 2;
+            source.SetVirtual();
+            source.Fill(30, (_, _) => { }, measureHeight: (_, i) => 13.25f + i * .125f);
+            Assert.That(((RectTransform)source.GetItemAt(0).transform).rect.height, Is.EqualTo(13.25f));
+            Assert.That(((RectTransform)source.GetItemAt(1).transform).anchoredPosition.y, Is.EqualTo(-16));
+        }
+
+        [Test]
+        public void Scroll_render_truncation_keeps_the_exact_logical_position()
+        {
+            var source = MakeList(new Vector2(100, 100), new Vector2(100, 20), ListLayoutType.SingleColumn);
+            source.SetVirtual();
+            source.Fill(30, (_, _) => { });
+            var pane = source.scrollPane;
+            pane.SetPosition(new Vector2(0, 9.75f));
+            pane.Rebuild(CanvasUpdate.PostLayout);
+            Assert.That(pane.content.anchoredPosition.y, Is.EqualTo(9));
+            Assert.That(pane.position.y, Is.EqualTo(9.75f));
+            pane.SetPosition(new Vector2(0, 9.750001f));
+            Assert.That(pane.position.y, Is.EqualTo(9.750001f));
+        }
+
+        [UnityTest]
+        public IEnumerator Ceiled_overlap_remains_reachable_with_a_fractional_viewport()
+        {
+            var source = MakeList(new Vector2(100, 50.5f), new Vector2(100, 20), ListLayoutType.SingleColumn);
+            source.SetVirtual();
+            source.Fill(5, (_, _) => { });
+            var pane = source.scrollPane;
+            pane.bounceEffect = false;
+            Assert.That(pane.contentSize.y, Is.EqualTo(100));
+            Assert.That(pane.maxScroll.y, Is.EqualTo(50));
+            pane.SetPosition(new Vector2(0, 50));
+            yield return null;
+            yield return null;
+            Assert.That(pane.position.y, Is.EqualTo(50));
+            Assert.That(pane.contentSize.y, Is.EqualTo(100));
+        }
+
         [UnityTearDown]
         public IEnumerator TearDown()
         {

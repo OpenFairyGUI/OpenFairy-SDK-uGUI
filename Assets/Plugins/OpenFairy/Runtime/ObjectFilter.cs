@@ -68,8 +68,8 @@ namespace OpenFairy.UGUI
                 }
                 _capture ??= new UiObjectCapture(source, captureShader, captureLayer);
                 float padding = Padding;
-                int width = Mathf.Max(1, Mathf.CeilToInt((source.rect.width + padding * 2) * resolutionScale));
-                int height = Mathf.Max(1, Mathf.CeilToInt((source.rect.height + padding * 2) * resolutionScale));
+                int width = Mathf.Max(1, Mathf.RoundToInt((source.rect.width + padding * 2) * resolutionScale));
+                int height = Mathf.Max(1, Mathf.RoundToInt((source.rect.height + padding * 2) * resolutionScale));
                 if (_texture == null || _texture.width != width || _texture.height != height)
                 {
                     ReleaseTexture();

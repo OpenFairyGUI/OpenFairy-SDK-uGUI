@@ -12,10 +12,11 @@ namespace OpenFairy.UGUI.Editor
         {
             if (source.layout != ListLayoutType.SingleRow || source.renderOrder == ListRenderOrder.Arch) return;
             var content = source.content;
-            if (!content.TryGetComponent<HorizontalLayoutGroup>(out var layout)) layout = content.gameObject.AddComponent<HorizontalLayoutGroup>();
+            if (!content.TryGetComponent<ListRowLayout>(out var layout)) layout = content.gameObject.AddComponent<ListRowLayout>();
             if (!content.TryGetComponent<ContentSizeFitter>(out var size)) size = content.gameObject.AddComponent<ContentSizeFitter>();
             if (!content.TryGetComponent<LayoutElement>(out var minimum)) minimum = content.gameObject.AddComponent<LayoutElement>();
             source.rowLayout = layout; source.rowSize = size; source.rowMinimum = minimum;
+            layout.foldInvisibleItems = source.foldInvisibleItems;
             layout.spacing = source.colGap;
             layout.childAlignment = source.alignment;
             layout.childControlWidth = layout.childControlHeight = false;

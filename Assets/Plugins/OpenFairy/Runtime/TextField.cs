@@ -826,27 +826,30 @@ namespace OpenFairy.UGUI
                 _links.Add((new Rect(from, lineY, to - from, lineHeight), run.Href));
         }
 
+        private float BitmapScale(Run run) => (bitmapFont.resizable ? (float)run.Size / bitmapFont.size : 1) * _fontSizeScale;
+
         private float DrawChar(char ch, Run run, float x, float baselineY)
         {
             if (bitmapFont != null)
             {
+                var scale = BitmapScale(run);
                 if (ch == ' ')
-                    return Mathf.RoundToInt(bitmapFont.size / 2f) * _fontSizeScale;
+                    return Mathf.RoundToInt(bitmapFont.size * scale / 2);
                 if (!bitmapFont.TryGetGlyph(ch, out var glyph))
                     return 0;
-                var top = baselineY + (glyph.y - glyph.lineHeight) * _fontSizeScale;
+                var top = baselineY + (glyph.y - glyph.lineHeight) * scale;
                 var tint = bitmapFont.canTint;
                 Color32 white = Color.white;
                 _quads.Add(new Quad
                 {
-                    Rect = new Rect(x + glyph.x * _fontSizeScale, top, glyph.width * _fontSizeScale, glyph.height * _fontSizeScale),
+                    Rect = new Rect(x + glyph.x * scale, top, glyph.width * scale, glyph.height * scale),
                     TL = tint ? run.TL : white, BL = tint ? run.BL : white, TR = tint ? run.TR : white, BR = tint ? run.BR : white,
                     UvBL = new Vector2(glyph.uv.xMin, glyph.uv.yMin),
                     UvTL = new Vector2(glyph.uv.xMin, glyph.uv.yMax),
                     UvTR = new Vector2(glyph.uv.xMax, glyph.uv.yMax),
                     UvBR = new Vector2(glyph.uv.xMax, glyph.uv.yMin),
                 });
-                return glyph.advance * _fontSizeScale;
+                return Mathf.RoundToInt(glyph.advance * scale);
             }
 
             if (FileFont is { } fileFont)
@@ -927,8 +930,8 @@ namespace OpenFairy.UGUI
             if (run.Image >= 0)
                 return imageSprites[run.Image].rect.width + 2;
             if (bitmapFont != null)
-                return ch == ' ' ? Mathf.RoundToInt(bitmapFont.size / 2f) * _fontSizeScale
-                    : bitmapFont.TryGetGlyph(ch, out var glyph) ? glyph.advance * _fontSizeScale : 0;
+                return ch == ' ' ? Mathf.RoundToInt(bitmapFont.size * BitmapScale(run) / 2)
+                    : bitmapFont.TryGetGlyph(ch, out var glyph) ? Mathf.RoundToInt(glyph.advance * BitmapScale(run)) : 0;
             if (FileFont is { } fileFont)
                 return fileFont.TryGet(ch, ScaledSize(run.Size), out var character) ? character.metrics.horizontalAdvance : 0;
             return font.GetCharacterInfo(ch, out var info, ScaledSize(run.Size), run.Style) ? info.advance : 0;
@@ -958,7 +961,7 @@ namespace OpenFairy.UGUI
                     glyphHeight = bitmapFont.TryGetGlyph(character.Value, out var glyph)
                         ? Mathf.Max(bitmapFont.size, glyph.lineHeight)
                         : bitmapFont.size;
-                    glyphHeight *= _fontSizeScale;
+                    glyphHeight = Mathf.RoundToInt(glyphHeight * BitmapScale(run));
                     glyphBaseline = glyphHeight;
                 }
                 else

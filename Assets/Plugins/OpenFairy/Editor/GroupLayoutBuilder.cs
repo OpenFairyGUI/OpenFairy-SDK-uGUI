@@ -12,8 +12,13 @@ namespace OpenFairy.UGUI.Editor
             layout.axis = source.Layout == Schema.ListLayout.SingleRow ? GroupLayoutAxis.Horizontal : GroupLayoutAxis.Vertical;
             layout.spacing = layout.axis == GroupLayoutAxis.Horizontal ? source.ColGap : source.LineGap;
             layout.excludeInvisibles = source.ExcludeInvisibles;
-            var fitter = group.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            layout.mainGridIndex = source.MainGridIndex;
+            layout.autoSizeDisabled = source.AutoSizeDisabled;
+            if (!source.AutoSizeDisabled)
+            {
+                var fitter = group.AddComponent<ContentSizeFitter>();
+                fitter.horizontalFit = fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
         }
     }
 }

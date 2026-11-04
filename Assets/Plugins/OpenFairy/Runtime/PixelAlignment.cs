@@ -59,10 +59,8 @@ namespace OpenFairy.UGUI
             if (executing != CanvasUpdate.PostLayout || importing || !IsActive()) return;
             var space = coordinateSpace != null ? coordinateSpace : _rect.parent as RectTransform;
             if (space == null || _rect.localEulerAngles != Vector3.zero) return;
-            var topLeft = _rect.localPosition + Vector3.Scale(_rect.localScale, new Vector3(_rect.rect.xMin, _rect.rect.yMax));
-            for (var parent = _rect.parent; parent != space; parent = parent.parent)
-                topLeft = parent.localPosition + parent.localRotation * Vector3.Scale(parent.localScale, topLeft);
-            topLeft -= new Vector3(space.rect.xMin, space.rect.yMax);
+            var topLeft = LocalPoint(_rect, new Vector3(_rect.rect.xMin, _rect.rect.yMax), space)
+                - new Vector3(space.rect.xMin, space.rect.yMax);
             var delta = space.TransformVector(new Vector3(Mathf.Round(topLeft.x) - topLeft.x, Mathf.Round(topLeft.y) - topLeft.y));
             _offset = _rect.parent != null ? _rect.parent.InverseTransformVector(delta) : delta;
             _layoutPosition = _rect.localPosition;
@@ -73,5 +71,12 @@ namespace OpenFairy.UGUI
         public void LayoutComplete() { }
         public void GraphicUpdateComplete() { }
         bool ICanvasElement.IsDestroyed() => this == null;
+
+        internal static Vector3 LocalPoint(Transform rect, Vector3 point, Transform space)
+        {
+            for (var current = rect; current != space; current = current.parent)
+                point = current.localPosition + current.localRotation * Vector3.Scale(current.localScale, point);
+            return point;
+        }
     }
 }

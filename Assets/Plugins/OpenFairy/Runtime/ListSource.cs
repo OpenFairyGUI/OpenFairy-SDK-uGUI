@@ -16,10 +16,12 @@ namespace OpenFairy.UGUI
         public float colGap;
         public ListLayoutType layout;
         public int lineItemCount;
+        public int lineItemCount2;
+        public bool foldInvisibleItems;
         public bool autoItemSize = true;
         public ListRenderOrder renderOrder;
         public int apexIndex;
-        [SerializeField] internal HorizontalLayoutGroup rowLayout;
+        [SerializeField] internal ListRowLayout rowLayout;
         [SerializeField] internal ContentSizeFitter rowSize;
         [SerializeField] internal LayoutElement rowMinimum;
         internal bool hasNativeRowLayout => !_virtual && rowLayout != null && rowLayout.enabled;
@@ -45,6 +47,8 @@ namespace OpenFairy.UGUI
         private bool _virtual;
         private bool _loop;
         private int _lanes = 1;
+        private int _pageColumns = 1, _pageRows = 1;
+        private Vector2 _virtualItemSize;
         private int _physicalCount;
         private int _centerCycle;
 
@@ -59,6 +63,7 @@ namespace OpenFairy.UGUI
         {
             if (loop && layout != ListLayoutType.SingleRow)
                 throw new InvalidOperationException("Loop lists must use SingleRow layout.");
+            itemSize = new Vector2(Mathf.Ceil(itemSize.x), Mathf.Ceil(itemSize.y));
             _virtual = true;
             if (rowLayout != null) { rowLayout.enabled = false; rowSize.enabled = false; rowMinimum.enabled = false; }
             _loop = loop;
@@ -120,45 +125,25 @@ namespace OpenFairy.UGUI
             Vector2 viewSize = pane != null ? pane.viewportSize : container.rect.size;
             ReleaseChildren();
             _indices.Clear();
-            var stepX = itemSize.x + colGap;
-            var stepY = itemSize.y + lineGap;
-            var columns = lineItemCount > 0 ? lineItemCount
-                : stepX > 0 ? Mathf.Max(1, Mathf.FloorToInt((viewSize.x + colGap) / stepX)) : 1;
-            var rows = lineItemCount > 0 ? lineItemCount
-                : stepY > 0 ? Mathf.Max(1, Mathf.FloorToInt((viewSize.y + lineGap) / stepY)) : 1;
+            var items = new List<RectTransform>(count);
             for (var i = 0; i < count; i++)
             {
                 var item = GetItem(container);
-                var rt = (RectTransform)item.transform;
-                var (col, row) = layout switch
-                {
-                    ListLayoutType.SingleRow => (i, 0),
-                    ListLayoutType.FlowHorizontal or ListLayoutType.Pagination => (i % columns, i / columns),
-                    ListLayoutType.FlowVertical => (i / rows, i % rows),
-                    _ => (0, i),
-                };
-                if (!hasNativeRowLayout) rt.anchoredPosition = new Vector2(col * stepX, -row * stepY);
                 _indices[item] = i;
                 setup(item, i);
+                items.Add((RectTransform)item.transform);
             }
             if (hasNativeRowLayout)
             {
                 UpdateNativeRowItemSizes();
                 UpdateNativeRowSize(viewSize);
                 LayoutRebuilder.ForceRebuildLayoutImmediate(container);
-                if (rebindSelection && list.GetComponent<ListSelection>() is { enabled: true } rowSelection) rowSelection.Rebind();
-                return;
             }
-            var contentSize = Vector2.zero;
-            foreach (var item in _indices.Keys)
+            else
             {
-                var rt = (RectTransform)item.transform;
-                contentSize = Vector2.Max(contentSize, new Vector2(rt.anchoredPosition.x + rt.rect.width,
-                    -rt.anchoredPosition.y + rt.rect.height));
+                var extent = ListLayout.Arrange(this, items, viewSize, null);
+                scrollPane?.SetContentSize(extent);
             }
-            Vector2 offset = _contentOffset = AlignmentOffset(viewSize, contentSize);
-            foreach (var item in _indices.Keys)
-                ((RectTransform)item.transform).anchoredPosition += new Vector2(offset.x, -offset.y);
             ApplyRenderOrder();
             if (_poolRoot != null)
                 _poolRoot.SetAsLastSibling();
@@ -167,17 +152,34 @@ namespace OpenFairy.UGUI
                 selection.Rebind();
         }
 
-        private bool Horizontal => layout == ListLayoutType.SingleRow || layout == ListLayoutType.FlowVertical;
+        private bool Horizontal => layout is ListLayoutType.SingleRow or ListLayoutType.FlowVertical or ListLayoutType.Pagination;
         private float Position => Horizontal ? scrollPane.position.x : scrollPane.position.y;
         private float ViewExtent => Horizontal ? _viewport.x : _viewport.y;
-        private float ItemExtent => Horizontal ? itemSize.x : itemSize.y;
+        private float ItemExtent => Horizontal ? _virtualItemSize.x : _virtualItemSize.y;
         private float Gap => Horizontal ? colGap : lineGap;
         private float MainOffset => Horizontal ? _contentOffset.x : _contentOffset.y;
 
         private void ConfigureExtent()
         {
             _viewport = scrollPane.viewportSize;
-            float crossSize = Horizontal ? itemSize.y : itemSize.x;
+            _virtualItemSize = itemSize;
+            _pageColumns = lineItemCount > 0 ? lineItemCount : Mathf.Max(1, Mathf.FloorToInt((_viewport.x + colGap) / (itemSize.x + colGap)));
+            _pageRows = lineItemCount2 > 0 ? lineItemCount2 : Mathf.Max(1, Mathf.FloorToInt((_viewport.y + lineGap) / (itemSize.y + lineGap)));
+            if (autoItemSize)
+            {
+                if (layout == ListLayoutType.SingleColumn || layout == ListLayoutType.FlowHorizontal && lineItemCount > 0)
+                    _virtualItemSize.x = (int)((_viewport.x - colGap * (layout == ListLayoutType.SingleColumn ? 0 : lineItemCount - 1))
+                        / (layout == ListLayoutType.SingleColumn ? 1 : lineItemCount));
+                else if (layout == ListLayoutType.SingleRow || layout == ListLayoutType.FlowVertical && lineItemCount > 0)
+                    _virtualItemSize.y = (int)((_viewport.y - lineGap * (layout == ListLayoutType.SingleRow ? 0 : lineItemCount - 1))
+                        / (layout == ListLayoutType.SingleRow ? 1 : lineItemCount));
+                else if (layout == ListLayoutType.Pagination)
+                {
+                    if (lineItemCount > 0) _virtualItemSize.x = (int)((_viewport.x - colGap * (_pageColumns - 1)) / _pageColumns);
+                    if (lineItemCount2 > 0) _virtualItemSize.y = (int)((_viewport.y - lineGap * (_pageRows - 1)) / _pageRows);
+                }
+            }
+            float crossSize = Horizontal ? _virtualItemSize.y : _virtualItemSize.x;
             float crossGap = Horizontal ? lineGap : colGap;
             float crossView = Horizontal ? _viewport.y : _viewport.x;
             _lanes = layout == ListLayoutType.SingleRow || layout == ListLayoutType.SingleColumn ? 1
@@ -195,28 +197,45 @@ namespace OpenFairy.UGUI
             int crossLanes = Math.Min(count, _lanes);
             float cross = crossLanes == 0 ? 0 : crossLanes * crossSize + (crossLanes - 1) * crossGap;
             var size = Horizontal ? new Vector2(extent, cross) : new Vector2(cross, extent);
+            if (layout == ListLayoutType.Pagination)
+                size = new Vector2(Mathf.Ceil((float)count / (_pageColumns * _pageRows)) * _viewport.x, _viewport.y);
             _contentOffset = AlignmentOffset(_viewport, size);
             scrollPane.SetContentSize(size);
         }
 
-        private Vector2 AlignmentOffset(Vector2 view, Vector2 size) => new(
-            Mathf.Max(0, view.x - size.x) * ((int)alignment % 3) / 2,
-            Mathf.Max(0, view.y - size.y) * ((int)alignment / 3) / 2);
+        private Vector2 AlignmentOffset(Vector2 view, Vector2 size)
+        {
+            var gap = Vector2.Max(Vector2.zero, view - size);
+            var horizontal = (int)alignment % 3;
+            var vertical = (int)alignment / 3;
+            return new(horizontal == 1 ? (int)(gap.x / 2) : horizontal == 2 ? gap.x : 0,
+                vertical == 1 ? (int)(gap.y / 2) : vertical == 2 ? gap.y : 0);
+        }
 
         private Vector2 ItemPosition(int physical)
         {
             if (_measureHeight != null)
                 return _contentOffset + new Vector2(0, _starts[Math.Clamp(physical, 0, _starts.Length - 1)]);
+            if (layout == ListLayoutType.Pagination)
+            {
+                var capacity = _pageColumns * _pageRows;
+                var index = physical % capacity;
+                return _contentOffset + new Vector2(physical / capacity * _viewport.x
+                    + index % _pageColumns * (_virtualItemSize.x + colGap), index / _pageColumns * (_virtualItemSize.y + lineGap));
+            }
             int line = physical / _lanes;
             int lane = physical % _lanes;
-            return _contentOffset + (Horizontal ? new Vector2(line * (itemSize.x + colGap), lane * (itemSize.y + lineGap))
-                : new Vector2(lane * (itemSize.x + colGap), line * (itemSize.y + lineGap)));
+            return _contentOffset + (Horizontal ? new Vector2(line * (_virtualItemSize.x + colGap), lane * (_virtualItemSize.y + lineGap))
+                : new Vector2(lane * (_virtualItemSize.x + colGap), line * (_virtualItemSize.y + lineGap)));
         }
 
         private int FirstPhysicalIndex()
         {
             if (count == 0)
                 return 0;
+            if (layout == ListLayoutType.Pagination)
+                return Math.Min(count - 1, Mathf.Max(0, Mathf.FloorToInt(Position / _viewport.x)) * _pageColumns * _pageRows
+                    + Mathf.Max(0, Mathf.FloorToInt(Position % _viewport.x / (_virtualItemSize.x + colGap))));
             return _measureHeight != null
                 ? VirtualListLayout.VariableRange(_starts, Gap, Position - MainOffset, ViewExtent, 0).First
                 : VirtualListLayout.FixedRange(_physicalCount, _lanes, ItemExtent, Gap, Position - MainOffset, ViewExtent, 0).First;
@@ -299,6 +318,12 @@ namespace OpenFairy.UGUI
             UpdateVisible(true);
         }
 
+        private (int First, int End) PageRange()
+        {
+            var first = Mathf.Max(0, Mathf.FloorToInt(Position / _viewport.x)) * _pageColumns * _pageRows;
+            return (Math.Min(count, first), Math.Min(count, first + _pageColumns * _pageRows * 2));
+        }
+
         private void UpdateVisible(bool rebindSelection)
         {
             // At most one overscan line at either edge. Measurements can expose
@@ -307,7 +332,7 @@ namespace OpenFairy.UGUI
             do
             {
                 repeat = false;
-                var range = _measureHeight != null
+                var range = layout == ListLayoutType.Pagination ? PageRange() : _measureHeight != null
                     ? VirtualListLayout.VariableRange(_starts, Gap, Position - MainOffset, ViewExtent)
                     : VirtualListLayout.FixedRange(_physicalCount, _lanes, ItemExtent, Gap, Position - MainOffset, ViewExtent);
                 _release.Clear();
@@ -333,11 +358,21 @@ namespace OpenFairy.UGUI
                     _visible.Add(slot, item);
                     _indices[item] = index;
                     SetItemPosition(item, slot);
+                    var rect = (RectTransform)item.transform;
+                    if (autoItemSize)
+                    {
+                        if (layout == ListLayoutType.SingleColumn || layout is ListLayoutType.FlowHorizontal or ListLayoutType.Pagination && lineItemCount > 0)
+                            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, _virtualItemSize.x);
+                        if (layout == ListLayoutType.SingleRow || layout == ListLayoutType.FlowVertical && lineItemCount > 0
+                            || layout == ListLayoutType.Pagination && lineItemCount2 > 0)
+                            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, _virtualItemSize.y);
+                    }
                     _setup(item, index);
                     if (_measureHeight != null)
                     {
-                        float height = _measureHeight(item, index);
-                        ((RectTransform)item.transform).SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+                        float measured = _measureHeight(item, index);
+                        ((RectTransform)item.transform).SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, measured);
+                        float height = Mathf.Ceil(measured);
                         if (_heights[index] != height)
                         {
                             _heights[index] = height;
@@ -494,6 +529,7 @@ namespace OpenFairy.UGUI
 
         private void UpdateNativeRowSize(Vector2 viewport)
         {
+            rowLayout.foldInvisibleItems = foldInvisibleItems;
             rowMinimum.minWidth = viewport.x;
             rowMinimum.minHeight = viewport.y;
             if (autoItemSize)
@@ -522,11 +558,12 @@ namespace OpenFairy.UGUI
                 foreach (var pair in _visible)
                 {
                     int index = _indices[pair.Value];
-                    float height = _measureHeight(pair.Value, index);
+                    float measured = _measureHeight(pair.Value, index);
+                    ((RectTransform)pair.Value.transform).SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, measured);
+                    float height = Mathf.Ceil(measured);
                     if (_heights[index] == height)
                         continue;
                     _heights[index] = height;
-                    ((RectTransform)pair.Value.transform).SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
                     changed = true;
                 }
                 if (changed)
@@ -597,7 +634,8 @@ namespace OpenFairy.UGUI
             {
                 if (_poolRoot == null)
                 {
-                    var go = new GameObject(PoolName, typeof(RectTransform));
+                    var go = new GameObject(PoolName, typeof(RectTransform), typeof(LayoutElement));
+                    go.GetComponent<LayoutElement>().ignoreLayout = true;
                     _poolRoot = (RectTransform)go.transform;
                     _poolRoot.SetParent(transform, false);
                     _poolRoot.anchorMin = _poolRoot.anchorMax = _poolRoot.pivot = new Vector2(0, 1);
