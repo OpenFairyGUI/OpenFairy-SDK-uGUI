@@ -144,6 +144,7 @@ namespace OpenFairy.UGUI.Tests
             var popup = Rect("DropdownTemplate", _canvas, new Vector2(160, 82));
             var list = Rect("list", popup, new Vector2(160, 80));
             var source = list.gameObject.AddComponent<ListSource>();
+            popup.gameObject.AddComponent<PopupContent>().list = source;
             var item = Make<GrayedTestButton>();
             source.itemPrefab = item.gameObject; source.itemSize = new Vector2(160, 40); source.layout = ListLayoutType.SingleColumn;
             item.gameObject.SetActive(false);

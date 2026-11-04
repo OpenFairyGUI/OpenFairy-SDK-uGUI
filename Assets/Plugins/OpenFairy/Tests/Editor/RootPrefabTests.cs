@@ -69,6 +69,18 @@ namespace OpenFairy.UGUI.Tests
                 Assert.That(Root.inst, Is.SameAs(root));
                 Assert.That(root.rect, Is.SameAs(root.transform));
                 Assert.That(root.soundSource, Is.SameAs(root.GetComponent<AudioSource>()));
+                var modal = root.GetComponentInChildren<UnityEngine.UI.Image>(true);
+                Assert.That(modal, Is.Not.Null);
+                Assert.That(modal.gameObject.activeSelf, Is.False);
+                var window = new GameObject("Modal window", typeof(RectTransform), typeof(Window)).GetComponent<Window>();
+                OpenFairy.UGUI.Editor.WindowBuilder.Configure(window, null, null);
+                window.modal = true;
+                window.Show();
+                Assert.That(modal.gameObject.activeSelf, Is.True);
+                Assert.That(root.GetComponentsInChildren<UnityEngine.UI.Image>(true), Has.Length.EqualTo(1));
+                window.HideImmediately();
+                Assert.That(modal.gameObject.activeSelf, Is.False);
+                Object.Destroy(window.gameObject);
                 var source = canvasRoot ? (RectTransform)instance.transform : (RectTransform)instance.transform.Find("Design");
                 Assert.That(root.size, Is.EqualTo(source.rect.size));
                 source.sizeDelta = new Vector2(180, 100);

@@ -21,7 +21,7 @@ namespace OpenFairy.UGUI
         public UnityEvent onScroll = new();
 
         private bool _loop, _dragging, _updating, _notifying, _autoAxes, _needsSnap;
-        private Vector2? _explicitSize;
+        [SerializeField] internal bool autoContentSize = true;
         [SerializeField] private Vector2 _contentSize;
         private Vector2 _previousPosition, _notifiedPosition, _notifiedSize, _notifiedView;
         private Vector2 _scrollStart, _scrollTarget;
@@ -117,22 +117,25 @@ namespace OpenFairy.UGUI
 
         public void SetContentSize(Vector2 size)
         {
-            _explicitSize = size;
+            autoContentSize = false;
+            _contentSize = size;
             RefreshContent();
         }
 
         public void RefreshContent()
         {
-            var size = Vector2.zero;
-            if (source != null && source.hasNativeRowLayout) size = content.rect.size;
-            else if (_explicitSize is { } explicitSize) size = explicitSize;
-            else
+            var size = _contentSize;
+            if (source != null && source.hasNativeRowLayout) size = contentSize;
+            else if (autoContentSize)
+            {
+                size = Vector2.zero;
                 for (var i = 0; i < content.childCount; i++)
                 {
                     var child = (RectTransform)content.GetChild(i);
                     var corner = Relation.TopLeft(child);
                     size = Vector2.Max(size, new(corner.x + child.rect.width, child.rect.height - corner.y));
                 }
+            }
             size = new Vector2(Mathf.Round(size.x), Mathf.Round(size.y));
             _contentSize = size;
             // ScrollRect's physical range must include the native ceiled overlap without changing authored child sizes.
@@ -316,7 +319,7 @@ namespace OpenFairy.UGUI
         {
             if (content == null) return;
             RestorePosition();
-            if (source == null && _explicitSize == null) RefreshContent();
+            if (source == null && autoContentSize) RefreshContent();
             _updating = true;
             try { base.LateUpdate(); }
             finally { _updating = false; }

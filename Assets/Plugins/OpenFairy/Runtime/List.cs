@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace OpenFairy.UGUI
 {
-    // 复刻 FairyGUI ListLayoutType。Pagination 仅按 FlowHorizontal 排布（分页吸附不做）。
+    // FairyGUI authored list layouts.
     public enum ListLayoutType
     {
         SingleColumn,

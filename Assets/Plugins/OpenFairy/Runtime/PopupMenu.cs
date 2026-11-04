@@ -7,8 +7,7 @@ using UnityEngine.Pool;
 
 namespace OpenFairy.UGUI
 {
-    // 复刻 FairyGUI PopupMenu：内容 pane（背景 + 名为 "list" 的竖排列表），AddItem 建项，Show 经 Root 定位。瞬时无 tween。
-    // itemPrefab 显式传入（避免为动态 list 重跑 Migrate 烘焙 ListSource；ComboBox/Window1 列表要通用化时再补 ListSource）。
+    // Popup content carries a baked list reference; AddItem supplies dynamic menu entries.
     public sealed class PopupMenu : IDisposable
     {
         public bool hideOnClickItem = true;
@@ -31,7 +30,7 @@ namespace OpenFairy.UGUI
         {
             _content = UnityEngine.Object.Instantiate(contentPrefab);
             _contentRt = (RectTransform)_content.transform;
-            _list = (RectTransform)_contentRt.Find("list");
+            _list = (RectTransform)_content.GetComponent<PopupContent>().list.transform;
             _items = List.Container(_list);
             _itemPrefab = itemPrefab;
             _itemSize = ((RectTransform)itemPrefab.transform).sizeDelta;

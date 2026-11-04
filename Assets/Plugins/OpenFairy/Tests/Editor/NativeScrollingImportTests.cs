@@ -15,6 +15,71 @@ namespace OpenFairy.UGUI.Tests
 {
     public class NativeScrollingImportTests
     {
+        [Test]
+        public void Popup_list_is_baked_and_remapped_after_prefab_reload_without_name_lookup()
+        {
+            const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Static;
+            var key = "__PopupContent_" + Guid.NewGuid().ToString("N");
+            var source = "Temp/" + key;
+            var output = "Assets/" + key;
+            var settings = MigrationSettings.instance;
+            var previousSource = settings.sourceDirectory;
+            var previousOutput = settings.outputDirectory;
+            var previousDependencies = settings.dependencyDirectories;
+            var common = typeof(Migrate).GetField("_codeGenerationSettings", flags);
+            var previousCommon = common.GetValue(null);
+            var resources = (IDictionary)typeof(Migrate).GetField("Resources", flags).GetValue(null);
+            var prefabs = (IDictionary)typeof(Migrate).GetField("Prefabs", flags).GetValue(null);
+            var path = output + "/Assets/Views/Component.prefab";
+            GameObject instance = null;
+            try
+            {
+                settings.sourceDirectory = source;
+                settings.outputDirectory = output;
+                settings.dependencyDirectories = Array.Empty<string>();
+                Directory.CreateDirectory(source + "/assets/Views");
+                var file = source + "/assets/Views/Component.xml";
+                File.WriteAllText(file, "<component size='100,80'><displayList>"
+                    + "<list id='items' name='list' size='100,60' selectionMode='none'/>"
+                    + "</displayList></component>");
+                var codeSettings = Activator.CreateInstance(common.FieldType);
+                common.FieldType.GetField("packageName").SetValue(codeSettings, "OpenFairy");
+                common.SetValue(null, codeSettings);
+                var type = typeof(Migrate).GetNestedType("Resource", BindingFlags.NonPublic);
+                var resource = Activator.CreateInstance(type);
+                type.GetField("Id").SetValue(resource, key);
+                type.GetField("File").SetValue(resource, file);
+                type.GetField("Type").SetValue(resource, Schema.ResourceKind.Component);
+                type.GetField("Package").SetValue(resource, "UGUI");
+                type.GetField("PackageId").SetValue(resource, key);
+                resources.Add(key, resource);
+                using var localization = new ImportLocalizationFixture();
+                localization.Prepare(resource);
+                typeof(Migrate).GetMethod("BuildPrefab", flags).Invoke(null, new[] { resource });
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                Assert.That(prefab.GetComponent<PopupContent>().list, Is.Not.Null);
+                instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+                var list = instance.GetComponent<PopupContent>().list;
+                Assert.That(list.transform.IsChildOf(instance.transform), Is.True);
+                Assert.That(list, Is.Not.SameAs(prefab.GetComponent<PopupContent>().list));
+                list.name = "Renamed list";
+                Assert.That(instance.GetComponent<PopupContent>().list, Is.SameAs(list));
+            }
+            finally
+            {
+                if (instance != null) Object.DestroyImmediate(instance);
+                common.SetValue(null, previousCommon);
+                settings.sourceDirectory = previousSource;
+                settings.outputDirectory = previousOutput;
+                settings.dependencyDirectories = previousDependencies;
+                prefabs.Remove(path);
+                resources.Remove(key);
+                AssetDatabase.DeleteAsset(output);
+                Directory.Delete(source, true);
+            }
+        }
+
         [TestCase("image", "NotXml.png")]
         [TestCase("font", "NotXml.ttf")]
         [TestCase("component", "Plain.xml")]
@@ -61,9 +126,11 @@ namespace OpenFairy.UGUI.Tests
                 Assert.That(components.Count, Is.EqualTo(1));
                 root = new GameObject("View", typeof(RectTransform));
                 ((RectTransform)root.transform).sizeDelta = new Vector2(200, 120);
-                typeof(Migrate).GetMethod("BuildScrollView", flags, null,
+                var view = typeof(Migrate).GetMethod("BuildScrollView", flags, null,
                     new[] { typeof(GameObject), typeof(Schema.Component), typeof(Vector2) }, null)
                     .Invoke(null, new object[] { root, Schema.Component.Load(viewPath), new Vector2(200, 120) });
+                Rect("Dynamic content", root.GetComponent<ScrollPane>().content, new Vector2(200, 300), Vector2.zero);
+                typeof(Migrate).GetMethod("SetGrips", flags).Invoke(null, new[] { view, new Vector2(200, 300) });
                 AssetDatabase.Refresh();
                 var prefabPath = output + "/View.prefab";
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath, out var saved);
@@ -76,6 +143,10 @@ namespace OpenFairy.UGUI.Tests
                 Assert.That(pane.verticalScrollbar, Is.Null);
                 Assert.That(pane.horizontalScrollbar, Is.Null);
                 Assert.That(pane.viewport.rect.size, Is.EqualTo(new Vector2(200, 120)));
+                Assert.That(pane.contentSize, Is.EqualTo(new Vector2(200, 300)));
+                ((RectTransform)pane.content.GetChild(0)).sizeDelta = new Vector2(200, 450);
+                pane.RefreshContent();
+                Assert.That(pane.contentSize, Is.EqualTo(new Vector2(200, 450)));
             }
             finally
             {

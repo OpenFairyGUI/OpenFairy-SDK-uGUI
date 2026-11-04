@@ -4,6 +4,13 @@
 
 ## 当前结论
 
+### 2026-11-04 烘焙与静态绑定质量复核
+
+- 检索Runtime83份C#及29处GameObject/AddComponent创建，重点复核Migrate、列表、分组、滚动、弹窗与像素对齐；未发现运行时反射成员解析。ComboBox与PopupMenu的作者list名称现在仅在Migrate解析，Prefab保存PopupContent直接引用；改名后仍可使用。剩余Find("viewport")属于显式的程序化ScrollPane.Attach，导入视图不走此路径。
+- 静态列表保存逻辑内容尺寸及测量模式，重载不遍历子节点重建范围；非列表滚动组件继续测量运行时变化的子内容，native row按preferred extent刷新，不把终点物理补偿当逻辑尺寸。Root.Create提前创建并保存停用的模态遮罩，窗口直接复用；合并分组权重/成员基线数组，删除横排基类重复测量及滚动条Update/Late几何重复。更新SDK后须重新Migrate，未增加旧产物运行时重建兜底。
+- 原SDK180列表、18分组、144滚动条再次对照无超阈值。Builtin Editor **246/246**、PlayMode **281/281**；TMP Editor **270/270**、PlayMode **308/308**，无失败或跳过。包含新BuildPrefab/重载/引用重映射、静态列表与动态内容、改名后菜单/下拉、Root保存重载后同一遮罩显隐的回归。首次新增测试夹具配置字段错误及临时Root分部类类型编译错误均已修正；最终源码通过完整重跑。
+- 仍保留合法可选配置、构造期、对象池、回调重入、GPU资源生命周期及uGUI重建限制的判断；本轮不宣称所有SDK分支均有自动化覆盖，也未重跑传统Demo/golden或Player。说明见[BakedBindings.md](../Assets/Plugins/OpenFairy/Documentation~/BakedBindings.md)。
+
 ### 2026-11-04 原 SDK 取整规则审计
 
 - 对旧 FairyGUI Unity SDK 的171份源文件做语法树检索，合并正常与未激活预处理分支，并记录shader、整数cast：共305点，无未审阅项。其中142点映射已实现规则、43点后端替代/能力边界、24点尚无对应功能、96点枚举/索引/编码/alpha等非显示坐标转换。完整审计不表示全部原生特性已移植。

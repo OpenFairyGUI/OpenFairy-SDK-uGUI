@@ -196,6 +196,8 @@ namespace OpenFairy.UGUI.Tests
             var dropdown = Make("Dropdown");
             var list = Make("list", dropdown.transform);
             var source = list.AddComponent<ListSource>();
+            dropdown.AddComponent<PopupContent>().list = source;
+            list.name = "Renamed dropdown list";
             var item = Make("Item");
             item.AddComponent<GrayedTestButton>();
             source.itemPrefab = item;

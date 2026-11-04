@@ -29,6 +29,8 @@ namespace OpenFairy.UGUI.Tests
                     var list = new GameObject("list", typeof(RectTransform), typeof(ListSource));
                     list.transform.SetParent(content.transform, false);
                     list.GetComponent<ListSource>().content = (RectTransform)list.transform;
+                    content.AddComponent<PopupContent>().list = list.GetComponent<ListSource>();
+                    list.name = "Renamed menu list";
                     var authored = new GameObject("Authored item", typeof(RectTransform));
                     authored.transform.SetParent(list.transform, false);
                     menu = new PopupMenu(content, item);

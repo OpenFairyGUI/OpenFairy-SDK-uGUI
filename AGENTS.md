@@ -6,6 +6,8 @@ SDK 提交只保留通用实现、文档与测试结论，不保存消费工程�
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-11-04 代码质量复核：检索Runtime83份C#、逐项检查29处GameObject/AddComponent创建，运行时反射查成员为0；导入界面的ComboBox/PopupMenu不再Find("list")，Migrate烘焙PopupContent直接引用。仅ScrollPane.Attach的程序化UI路径仍识别viewport。静态列表逻辑contentSize和测量模式必须保存，不能只改content.sizeDelta；普通非列表滚动组件仍需跟随动态子内容，native row读取preferred extent而非包含终点补偿的物理尺寸。Root.Create预建并序列化隐藏模态Image，窗口只复用，旧生成物需Migrate。Group比例和成员基线合并为一个序列化数组，保留原权重；ListRowLayout不再先执行随后丢弃的基类测量；Scrollbar移除Update/LateUpdate重复几何，Late只处理合法时机显隐。342组原SDK对照无超阈值；Builtin Editor246/246、Play281/281，TMP Editor270/270、Play308/308全通过。新回归含完整BuildPrefab/重载/引用重映射、改名后菜单与下拉操作、静态列表与动态滚动测量模式、Root重载后复用模态层。未声称SDK全部分支覆盖。
+
 2026-11-04 原 SDK 取整审计：扫描原版 SDK 的171份源文件，含未激活预处理分支、shader与整数cast，共305点逐项记录；142点对应已实现规则、43点后端替代/能力边界、24点缺失功能、96点非显示坐标转换，不能把“审计完整”称为全部原生功能一致。五种列表布局由Migrate和Fill共用算术：横流Ceil宽/行高、纵流非自动保留逐项高度小数、比例尺寸逐项Round（sourceWidth/sourceHeight本身为int）、分页固定行高Floor、内容居中int截断。虚拟固定格及显式测高行先Ceil测量再推进，自动分配尺寸int截断；不冒称支持任意itemRenderer变宽/交叉尺寸。分组保存原比例及成员基线，防Prefab重载后再次归一化产生1px漂移；固定组初次布局也要分配，空间小于gap时按原生SetSize钳到0。滚动逻辑保留精确小数、显示/拖动截断，Ceil overlap须同步无图形content物理范围，否则ScrollRect会把最后半像素弹回；tween截断delta再加start。Scrollbar沿轴保持基类anchors，仅用offset补偿Floor长度/Round原点，避免基类UpdateVisuals重复叠加尺寸；自排队Rebuild不能调用会发onValueChanged的Editor Prelayout；显隐在preWillRender/Update/LateUpdate处理，布局或图形重建循环内禁止SetActive，真实Canvas+Image+PixelAlignment回归覆盖。固定grip、左侧非floating条偏移Floor、Root尺寸Ceil/Center截断、位图字体resizable与缩放后Round、捕获RT Round、数值标题Math.Round均覆盖。原SDK实际180列表+18分组+144条数据对照全在.001内；Builtin Editor244/244、Play281/281，TMP Editor268/268、Play308/308。规则与明确边界见Documentation~/PixelRounding.md。
 
 2026-11-04 makePixelPerfect 是持久化 Migrate 选项，默认关闭；开关只控制本地显示位置 Round，不把尺寸、缩放或UV取整。PixelAlignment 必须跳过作者组辅助层，滚动项使用content坐标；.5边界禁止用世界矩阵往返计算，否则实测可偏整像素。恢复原始布局位置时保留精确副本，旋转判断不能使用Quaternion近似相等。Loader 编辑器中心Floor独立于该开关；不要混同原SDK默认小数居中。Builtin Editor242/242、Play213/213；原版SDK288组实际变换全部在.001阈值内（最大3.14568e-5），隔离170组件开关两态、连续1246文件稳定验证通过；整体截图仍非像素一致，尚未完成全部布局取整审计。
@@ -127,6 +129,7 @@ OpenFairy 是基于 uGUI 的 FairyGUI Runtime SDK。目标是让用户继续用 
 - 缓动/补间用 **DOTween**（`DG.Tweening`，缓动直接调 `DG.Tweening.Core.Easing.EaseManager.Evaluate`）；曲线求值用官方 **com.unity.splines**（`UnityEngine.Splines.BezierCurve`+`CurveUtility`，`TransitionPath` 在其上保持 FairyGUI GPath 的参数化与段长口径，勿换成 Spline 类的真弧长求值——那会偏离 FairyGUI 轨迹）；golden 图像断言用官方 **com.unity.testframework.graphics** 的 `ImageAssert`（口径见 `StaticGoldenTests`），不要再手写像素对比。
 
 **静态化**
+- **代码审查准则（2026-11-04）**：偏好烘焙与直接引用。源工程按合法数据处理；不要为损坏或陈旧的生成物增加运行时重建/查名兜底，应修源或重跑Migrate。新增或保留防御分支须能指出真实的合法配置、输入或Unity生命周期触发路径，不能只用“以防万一”解释；构造期未接线、停启/对象池、重入回调、重建队列限制与可选功能要区别于非法源数据。动态列表、程序化UI与按实际尺寸创建的GPU资源仍按其真实生命周期处理。
 - 静态结构优于动态解析；不要滥用 `string`。只有真实文本内容才用 `string`，有限选项用 enum，结构化值用 struct/class 字段等能保持静态引用和编译期检查的表达方式。
 - 能通过明确的正向函数调用完成的流程，不引入 `Action` 回调等动态分发方式。
 - 能在烘焙 prefab 阶段生成并序列化保存的数据，不放到运行时生成。

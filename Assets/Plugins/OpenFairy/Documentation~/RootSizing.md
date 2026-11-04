@@ -2,6 +2,8 @@
 
 `Root.Create(canvasRect)` creates an overlay under that Canvas with native stretch anchors and zero edge offsets. Canvas layout and resolution changes therefore resize it through native layout.
 
+Call `Root.Create` while baking a host prefab to save its overlay, audio source and inactive modal blocker with direct references. Opening a modal window reuses that blocker. Programmatically created hosts can still call the same API at runtime.
+
 `Root.Create(designRoot)` for a non-Canvas design root keeps the overlay as a sibling. Putting it inside the design root would incorrectly apply that root's mask and opacity to popups. `RootSizeBinding` copies the design root's native anchors, pivot, size delta, anchored position, rotation and scale. It responds to dimension-change callbacks and checks the source rectangle and local-to-world matrix in `LateUpdate`, synchronizing when either changes. This includes position, rotation, scale and ancestor-layout changes. The overlay ignores its parent's layout group.
 
 The public design-coordinate APIs retain a top-left origin even when the source pivot is not top-left. Coordinate conversion uses the overlay's actual rectangle; it does not assume a particular pivot. Change the design root rather than independently resizing or moving its bound overlay. The singleton continues to use the coordinate host supplied on its initial creation. Pure transform changes made after the binding's `LateUpdate` are not guaranteed to propagate in the same frame.

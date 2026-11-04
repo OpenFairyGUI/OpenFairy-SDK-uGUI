@@ -27,7 +27,7 @@ namespace OpenFairy.UGUI
 
         public RectTransform rect;
         private readonly List<Window> _windows = new();
-        private GameObject _modalLayer;
+        [SerializeField] private UnityEngine.UI.Image _modalLayer;
         private Label _tooltipTemplate;
         private Label _tooltipView;
         private Tooltip _tooltipOwner;
@@ -71,6 +71,15 @@ namespace OpenFairy.UGUI
             _inst.rect = rt;
             _inst._soundSource = go.GetComponent<AudioSource>();
             _inst._soundSource.playOnAwake = false;
+            var modal = new GameObject("ModalLayer", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
+            modal.layer = go.layer;
+            var modalRect = (RectTransform)modal.transform;
+            modalRect.SetParent(rt, false);
+            modalRect.anchorMin = Vector2.zero;
+            modalRect.anchorMax = Vector2.one;
+            modalRect.offsetMin = modalRect.offsetMax = Vector2.zero;
+            _inst._modalLayer = modal.GetComponent<UnityEngine.UI.Image>();
+            modal.SetActive(false);
             if (isCanvas)
             {
                 rt.anchorMin = Vector2.zero;
@@ -290,21 +299,11 @@ namespace OpenFairy.UGUI
             var top = TopModalWindow();
             if (top == null)
             {
-                if (_modalLayer != null)
-                    _modalLayer.SetActive(false);
+                _modalLayer.gameObject.SetActive(false);
                 return;
             }
-            if (_modalLayer == null)
-            {
-                _modalLayer = new GameObject("ModalLayer", typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image));
-                var mrt = (RectTransform)_modalLayer.transform;
-                mrt.SetParent(rect, false);
-                mrt.anchorMin = Vector2.zero;
-                mrt.anchorMax = Vector2.one;
-                mrt.offsetMin = mrt.offsetMax = Vector2.zero;
-            }
-            _modalLayer.GetComponent<UnityEngine.UI.Image>().color = modalColor; // 可接收射线，拦截下层
-            _modalLayer.SetActive(true);
+            _modalLayer.color = modalColor; // 可接收射线，拦截下层
+            _modalLayer.gameObject.SetActive(true);
             _modalLayer.transform.SetAsLastSibling(); // 先移到末尾，再插到模态窗位（窗口序号不受移除影响）
             _modalLayer.transform.SetSiblingIndex(top.contentPane.GetSiblingIndex());
         }

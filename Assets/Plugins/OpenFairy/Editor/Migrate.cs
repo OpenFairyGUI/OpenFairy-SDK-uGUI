@@ -719,6 +719,13 @@ namespace OpenFairy.UGUI.Editor
                     children.Add((element, CreateChild(element, rt, component, controllers)));
 
                 foreach (var (element, go) in children)
+                    if (element.Kind == Schema.DisplayKind.List && element.Name == "list")
+                    {
+                        root.AddComponent<PopupContent>().list = go.GetComponent<ListSource>();
+                        break;
+                    }
+
+                foreach (var (element, go) in children)
                     if (element.Kind == Schema.DisplayKind.Group)
                     {
                         foreach (var (member, memberGo) in children)
@@ -2071,7 +2078,8 @@ namespace OpenFairy.UGUI.Editor
         private static void SetGrips(ScrollView view, Vector2 size)
         {
             if (view.Pane == null) return;
-            view.Content.sizeDelta = size;
+            view.Pane.SetContentSize(size);
+            view.Pane.autoContentSize = view.Pane.source == null;
             if (view.Pane.verticalScrollbar != null)
                 view.Pane.verticalScrollbar.size = Mathf.Min(1, view.ViewportSize.y / Mathf.Max(1, size.y));
             if (view.Pane.horizontalScrollbar != null)

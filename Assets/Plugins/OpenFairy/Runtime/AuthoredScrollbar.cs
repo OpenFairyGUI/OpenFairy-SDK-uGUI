@@ -32,8 +32,7 @@ namespace OpenFairy.UGUI
             if (executing == CanvasUpdate.PostLayout) ApplyGeometry();
         }
 
-        protected override void Update() { base.Update(); ApplyGeometry(); }
-        private void LateUpdate() => ApplyGeometry();
+        private void LateUpdate() => UpdateVisibility();
         public override void SetValueWithoutNotify(float input) { base.SetValueWithoutNotify(input); ApplyGeometry(); }
 
         private void ApplyGeometry()

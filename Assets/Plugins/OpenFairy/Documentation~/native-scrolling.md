@@ -16,6 +16,12 @@ Programmatically assembled views can still call `ScrollPane.Attach`. This path
 expects the SDK's viewport structure; imported views do not discover children or
 add scrolling components at runtime.
 
+The initial logical content size and its measurement mode are serialized. Static
+lists use the size calculated by Migrate; `Fill` replaces it when their items
+change. Ordinary scrolling components still measure changing child bounds, and
+native row layouts use their current preferred extent. Physical padding for a
+ceiled scroll endpoint does not become the row's logical content size.
+
 Scrolling uses native unscaled timing and native elastic/inertial behavior.
 Programmatic animated moves use an unscaled tween. Track clicks preserve the
 authored four-step increment, while grip dragging uses Unity's native pointer

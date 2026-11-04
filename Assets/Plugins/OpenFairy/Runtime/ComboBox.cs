@@ -16,7 +16,7 @@ namespace OpenFairy.UGUI
     }
 
     // 复刻 FairyGUI GComboBox：继承 Button<T> 复用 up/down/over 视觉态；点击弹下拉列表，选项设标题、发 onChanged。
-    // items 与 dropdownPrefab(ComboBoxPopup，含名为 "list" 的列表) 由 Migrate 烘焙；下拉列表用其 ListSource 填 items。
+    // Items and popup list references are baked by Migrate.
     public abstract class ComboBox<T> : Button<T>, IComboBox where T : struct, Enum
     {
         public int visibleItemCount = 10; // 下拉最多同屏项数，超出则裁剪并滚动（复刻 GComboBox.visibleItemCount）
@@ -187,8 +187,8 @@ namespace OpenFairy.UGUI
             _dropdown = Instantiate(dropdownPrefab);
             _dropdownRt = (RectTransform)_dropdown.transform;
             _itemsChanged = false;
-            var list = _list = (RectTransform)_dropdownRt.Find("list");
-            var source = list.GetComponent<ListSource>();
+            var source = _dropdown.GetComponent<PopupContent>().list;
+            var list = _list = (RectTransform)source.transform;
             // 下拉项点击 + 滚动由 ComboBox 自管，去掉列表自带的选择接线。
             if (list.TryGetComponent<ListSelection>(out var listSelection))
                 listSelection.enabled = false;

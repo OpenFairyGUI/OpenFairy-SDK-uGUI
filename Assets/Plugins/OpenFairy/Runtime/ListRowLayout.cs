@@ -11,7 +11,7 @@ namespace OpenFairy.UGUI
 
         public override void CalculateLayoutInputHorizontal()
         {
-            base.CalculateLayoutInputHorizontal();
+            m_Tracker.Clear();
             rectChildren.Clear();
             var ignorers = ListPool<UnityEngine.Component>.Get();
             foreach (RectTransform child in rectTransform)

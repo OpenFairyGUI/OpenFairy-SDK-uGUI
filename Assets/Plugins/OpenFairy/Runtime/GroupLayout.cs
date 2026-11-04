@@ -14,8 +14,8 @@ namespace OpenFairy.UGUI
         [SerializeField] private bool _excludeInvisibles;
         [SerializeField] private int _mainGridIndex = -1;
         [SerializeField] private float _mainGridMinSize = 50;
-        public int mainGridIndex { get => _mainGridIndex; set { if (_mainGridIndex == value) return; _percent = null; SetProperty(ref _mainGridIndex, value); } }
-        public float mainGridMinSize { get => _mainGridMinSize; set { if (_mainGridMinSize == value) return; _percent = null; SetProperty(ref _mainGridMinSize, value); } }
+        public int mainGridIndex { get => _mainGridIndex; set { if (_mainGridIndex == value) return; _members = null; SetProperty(ref _mainGridIndex, value); } }
+        public float mainGridMinSize { get => _mainGridMinSize; set { if (_mainGridMinSize == value) return; _members = null; SetProperty(ref _mainGridMinSize, value); } }
         public bool autoSizeDisabled;
         private Vector2 _previousSize;
         private bool _resizing;
@@ -23,9 +23,8 @@ namespace OpenFairy.UGUI
         private struct Member
         {
             public RectTransform rect;
-            public float size;
+            public float size, percent;
         }
-        [SerializeField] private float[] _percent;
         [SerializeField] private Member[] _members;
         [SerializeField] private float _totalSize;
 
@@ -37,7 +36,7 @@ namespace OpenFairy.UGUI
 
         protected override void OnTransformChildrenChanged()
         {
-            _percent = null;
+            _members = null;
             base.OnTransformChildrenChanged();
         }
 
@@ -56,23 +55,23 @@ namespace OpenFairy.UGUI
         {
             var size = rectTransform.rect.size;
             var axis = (int)_axis;
-            if (_percent != null && _percent.Length == rectChildren.Count)
+            if (_members != null && _members.Length == rectChildren.Count)
                 for (var i = 0; i < rectChildren.Count; i++)
                     if (_members[i].rect != rectChildren[i] || _members[i].size != rectChildren[i].rect.size[axis])
                     {
-                        _percent = null;
+                        _members = null;
                         break;
                     }
-            if (_percent == null || _percent.Length != rectChildren.Count)
+            if (_members == null || _members.Length != rectChildren.Count)
             {
                 _totalSize = 0;
-                _percent = new float[rectChildren.Count];
                 _members = new Member[rectChildren.Count];
                 for (var i = 0; i < rectChildren.Count; i++)
                     _totalSize += rectChildren[i].GetSiblingIndex() == mainGridIndex ? mainGridMinSize : rectChildren[i].rect.size[axis];
                 for (var i = 0; i < rectChildren.Count; i++)
-                    _percent[i] = _totalSize > 0 ? (rectChildren[i].GetSiblingIndex() == mainGridIndex
-                        ? mainGridMinSize : rectChildren[i].rect.size[axis]) / _totalSize : 0;
+                    _members[i] = new Member { rect = rectChildren[i], size = rectChildren[i].rect.size[axis],
+                        percent = _totalSize > 0 ? (rectChildren[i].GetSiblingIndex() == mainGridIndex
+                            ? mainGridMinSize : rectChildren[i].rect.size[axis]) / _totalSize : 0 };
             }
             _resizing = true;
             try
@@ -86,7 +85,7 @@ namespace OpenFairy.UGUI
                         main = rectChildren[i];
                         main.SetSizeWithCurrentAnchors((RectTransform.Axis)axis, remaining - (_totalSize - mainGridMinSize));
                         remaining -= main.rect.size[axis];
-                        percent -= _percent[i];
+                        percent -= _members[i].percent;
                         break;
                     }
                 for (var i = 0; i < rectChildren.Count; i++)
@@ -94,19 +93,19 @@ namespace OpenFairy.UGUI
                     var child = rectChildren[i];
                     if (child == main) continue;
                     child.SetSizeWithCurrentAnchors((RectTransform.Axis)axis,
-                        Mathf.Max(0, Mathf.Round(_percent[i] / percent * remaining)));
-                    percent -= _percent[i];
+                        Mathf.Max(0, Mathf.Round(_members[i].percent / percent * remaining)));
+                    percent -= _members[i].percent;
                     remaining -= child.rect.size[axis];
                 }
                 foreach (RectTransform child in rectTransform)
                     child.SetSizeWithCurrentAnchors((RectTransform.Axis)(1 - axis), Mathf.Max(0, child.rect.size[1 - axis] + delta[1 - axis]));
                 Arrange(axis);
-                for (var i = 0; i < rectChildren.Count; i++) _members[i] = new Member { rect = rectChildren[i], size = rectChildren[i].rect.size[axis] };
+                for (var i = 0; i < rectChildren.Count; i++) _members[i].size = rectChildren[i].rect.size[axis];
             }
             finally { _resizing = false; }
         }
 
-        public GroupLayoutAxis axis { get => _axis; set { if (_axis == value) return; _percent = null; SetProperty(ref _axis, value); } }
+        public GroupLayoutAxis axis { get => _axis; set { if (_axis == value) return; _members = null; SetProperty(ref _axis, value); } }
         public float spacing { get => _spacing; set => SetProperty(ref _spacing, value); }
         public bool excludeInvisibles { get => _excludeInvisibles; set => SetProperty(ref _excludeInvisibles, value); }
 

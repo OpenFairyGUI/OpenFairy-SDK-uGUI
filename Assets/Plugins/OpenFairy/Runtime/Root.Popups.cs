@@ -137,7 +137,7 @@ namespace OpenFairy.UGUI
             if (_popupClosed.Remove(window.contentPane, out var previous)) previous.TrySetCanceled();
             RegisterWindow(window);
             window.contentPane.SetAsLastSibling();
-            if (!window.modal && _modalLayer != null && _modalLayer.activeSelf)
+            if (!window.modal && _modalLayer.gameObject.activeSelf)
                 window.contentPane.SetSiblingIndex(_modalLayer.transform.GetSiblingIndex());
             window.DoShow();
             RefreshModal();
@@ -177,7 +177,7 @@ namespace OpenFairy.UGUI
         public void BringToFront(Window window)
         {
             window.contentPane.SetAsLastSibling();
-            if (!window.modal && _modalLayer != null && _modalLayer.activeSelf)
+            if (!window.modal && _modalLayer.gameObject.activeSelf)
                 window.contentPane.SetSiblingIndex(_modalLayer.transform.GetSiblingIndex());
             if (_popups.Remove(window.contentPane)) _popups.Add(window.contentPane);
             RefreshModal();
