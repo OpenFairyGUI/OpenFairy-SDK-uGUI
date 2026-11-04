@@ -13,7 +13,7 @@ namespace OpenFairy.UGUI.Editor
             if (source.layout != ListLayoutType.SingleRow || source.renderOrder == ListRenderOrder.Arch) return;
             var content = source.content;
             if (!content.TryGetComponent<ListRowLayout>(out var layout)) layout = content.gameObject.AddComponent<ListRowLayout>();
-            if (!content.TryGetComponent<ContentSizeFitter>(out var size)) size = content.gameObject.AddComponent<ContentSizeFitter>();
+            if (!content.TryGetComponent<ContentSizeFitter>(out var size)) size = content.gameObject.AddComponent<AuthoredSizeFitter>();
             if (!content.TryGetComponent<LayoutElement>(out var minimum)) minimum = content.gameObject.AddComponent<LayoutElement>();
             source.rowLayout = layout; source.rowSize = size; source.rowMinimum = minimum;
             layout.foldInvisibleItems = source.foldInvisibleItems;

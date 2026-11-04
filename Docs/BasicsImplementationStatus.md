@@ -4,6 +4,13 @@
 
 ## 当前结论
 
+### 2026-11-04 编辑态布局预览与实例覆盖
+
+- 像素对齐通过编辑器属性快照显示临时坐标，序列化保留布局坐标和已有实例修改。原始Prefab更新仍可传递到已对齐的实例；编辑器内部API仅作静态绑定，Player中不包含反射或快照。
+- 滚动条将沿轴位置、尺寸与anchors声明为驱动属性，预览几何和显隐不形成场景定制。Migrate保存其像素对齐预览所有权；整轮迁移期间恢复布局位置并暂停显示偏移。
+- AuthoredSizeFitter在编辑态保存实际测量尺寸，避免原生驱动默认值随重建顺序变化；Player继续使用原生ContentSizeFitter。Group编辑态保存排布结果，不覆盖子fitter的驱动状态。更新后需要重新Migrate。
+- Builtin完整Editor **266/266**、PlayMode **282/282**，TMP完整Editor **290/290**、PlayMode **309/309**。新增11项回归覆盖嵌套修改、源更新传递、Prefab保存重载、外部位置写入和滚动条显隐；独立场景保存/重开保持原始布局坐标且无临时位置覆盖。这些验证不代表完整画面逐像素一致。
+
 ### 2026-11-04 编辑器pivot位置兼容
 
 - 新增默认关闭的Migrate选项editorPivotRounding。编辑器FObject在调用SDK前对pivot位置(int)截断，原SDK的GObject不截断；恢复工程与旧SDK的DisplayObject.cs逐字相同。按源数据在Migrate.SetRect和XY控制器位置页提前转换，不在运行时从RectTransform反推并截断；合法负整数-2可因RT父pivot算术读成-1.999998，运行时方案因此被否定，未发布该原型。

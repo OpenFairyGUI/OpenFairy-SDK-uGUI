@@ -194,6 +194,11 @@ namespace OpenFairy.UGUI
             foreach (var child in rectChildren)
             {
                 var size = Size(child, dimension);
+#if UNITY_EDITOR
+                // Save the computed layout in prefabs. Native driven defaults otherwise depend on
+                // whether a group or child fitter happened to rebuild last in the Editor.
+                if (Application.isPlaying)
+#endif
                 m_Tracker.Add(this, child, dimension == 0
                     ? DrivenTransformProperties.AnchorMinX | DrivenTransformProperties.AnchorMaxX | DrivenTransformProperties.AnchoredPositionX
                     : DrivenTransformProperties.AnchorMinY | DrivenTransformProperties.AnchorMaxY | DrivenTransformProperties.AnchoredPositionY);

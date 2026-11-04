@@ -16,12 +16,18 @@ namespace OpenFairy.UGUI
 
         protected override void OnEnable()
         {
+#if UNITY_EDITOR
+            BeginEditorPreview();
+#endif
             base.OnEnable();
             Canvas.preWillRenderCanvases += Queue;
         }
 
         private void Queue()
         {
+#if UNITY_EDITOR
+            BeginEditorPreview();
+#endif
             UpdateVisibility();
             CanvasUpdateRegistry.RegisterCanvasElementForLayoutRebuild(this);
         }
@@ -54,16 +60,27 @@ namespace OpenFairy.UGUI
             var anchorMin = handleRect.anchorMin;
             var anchorMax = handleRect.anchorMax;
             var axis = alongX ? 0 : 1;
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                _geometryTracker.Clear();
+                _geometryTracker.Add(this, handleRect, DrivenTransformProperties.Anchors | (alongX
+                    ? DrivenTransformProperties.AnchoredPositionX | DrivenTransformProperties.SizeDeltaX
+                    : DrivenTransformProperties.AnchoredPositionY | DrivenTransformProperties.SizeDeltaY));
+            }
+#endif
             anchorMin[axis] = movement;
             anchorMax[axis] = movement + size;
             handleRect.anchorMin = anchorMin;
             handleRect.anchorMax = anchorMax;
-            var min = handleRect.offsetMin;
-            var max = handleRect.offsetMax;
-            min[axis] = (alongX ? position : extent - position - length) - movement * extent;
-            max[axis] = min[axis] + length - size * extent;
-            handleRect.offsetMin = min;
-            handleRect.offsetMax = max;
+            var dimensions = handleRect.sizeDelta;
+            var anchored = handleRect.anchoredPosition;
+            dimensions[axis] = length - size * extent;
+            // Set the pivot directly instead of cancelling independently rounded offsetMin/offsetMax.
+            anchored[axis] = (alongX ? position : extent - position - length) + length * handleRect.pivot[axis]
+                - (movement + size * handleRect.pivot[axis]) * extent;
+            handleRect.sizeDelta = dimensions;
+            handleRect.anchoredPosition = anchored;
             UpdateVisibility();
         }
 
@@ -104,7 +121,33 @@ namespace OpenFairy.UGUI
             Canvas.preWillRenderCanvases -= Queue;
             if (pane != null) pane.SetBarDragging(false);
             base.OnDisable();
+#if UNITY_EDITOR
+            _geometryTracker.Clear();
+            RestoreEditorPreview();
+#endif
         }
+
+#if UNITY_EDITOR
+        private DrivenRectTransformTracker _geometryTracker;
+        private bool _previewing;
+        private void BeginEditorPreview()
+        {
+            if (_previewing || Application.isPlaying || PixelAlignment.importing || handleRect == null) return;
+            EditorPropertyPreview.Begin(this, handleRect, "m_AnchorMin");
+            EditorPropertyPreview.Begin(this, handleRect, "m_AnchorMax");
+            EditorPropertyPreview.Begin(this, handleRect, "m_SizeDelta");
+            EditorPropertyPreview.Begin(this, handleRect, "m_AnchoredPosition");
+            EditorPropertyPreview.Begin(this, handleRect.gameObject, "m_IsActive");
+            _previewing = true;
+        }
+
+        internal void RestoreEditorPreview()
+        {
+            if (!_previewing) return;
+            EditorPropertyPreview.End(this);
+            _previewing = false;
+        }
+#endif
 
         public override void OnPointerDown(PointerEventData data)
         {

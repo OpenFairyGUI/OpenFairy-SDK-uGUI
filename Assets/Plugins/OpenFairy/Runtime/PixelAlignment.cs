@@ -6,7 +6,7 @@ namespace OpenFairy.UGUI
 {
     [ExecuteAlways, DefaultExecutionOrder(-32000), DisallowMultipleComponent]
     [RequireComponent(typeof(RectTransform))]
-    public sealed class PixelAlignment : UIBehaviour, ICanvasElement
+    public sealed partial class PixelAlignment : UIBehaviour, ICanvasElement
     {
         [SerializeField] internal RectTransform coordinateSpace;
         internal static bool importing;
@@ -43,6 +43,17 @@ namespace OpenFairy.UGUI
         private void Restore()
         {
             if (!_aligned) return;
+#if UNITY_EDITOR
+            if (_previewing)
+            {
+                var position = _rect.anchoredPosition3D;
+                EditorPropertyPreview.End(this);
+                if (!position.Equals(_renderedPosition)) _rect.anchoredPosition3D = position;
+                _previewing = false;
+                _aligned = false;
+                return;
+            }
+#endif
             if (_rect.anchoredPosition3D.Equals(_renderedPosition)) _rect.anchoredPosition3D = _layoutPosition;
             _aligned = false;
         }
@@ -62,6 +73,14 @@ namespace OpenFairy.UGUI
             var topLeft = AuthorPoint(_rect, new Vector3(_rect.rect.xMin, _rect.rect.yMax), space);
             var delta = space.TransformVector(new Vector3(Mathf.Round(topLeft.x) - topLeft.x, Mathf.Round(topLeft.y) - topLeft.y));
             _layoutPosition = _rect.anchoredPosition3D;
+#if UNITY_EDITOR
+            if (!Application.isPlaying && !editorPositionDriven)
+            {
+                EditorPropertyPreview.Begin(this, _rect, "m_AnchoredPosition");
+                EditorPropertyPreview.Begin(this, _rect, "m_LocalPosition");
+                _previewing = true;
+            }
+#endif
             _rect.anchoredPosition3D += _rect.parent.InverseTransformVector(delta);
             _renderedPosition = _rect.anchoredPosition3D;
             _aligned = true;

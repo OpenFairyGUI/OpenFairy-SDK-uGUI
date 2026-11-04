@@ -16,7 +16,7 @@ namespace OpenFairy.UGUI.Editor
             layout.autoSizeDisabled = source.AutoSizeDisabled;
             if (!source.AutoSizeDisabled)
             {
-                var fitter = group.AddComponent<ContentSizeFitter>();
+                var fitter = group.AddComponent<AuthoredSizeFitter>();
                 fitter.horizontalFit = fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             }
         }

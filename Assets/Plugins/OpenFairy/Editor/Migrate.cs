@@ -96,6 +96,15 @@ namespace OpenFairy.UGUI.Editor
         [MenuItem("Tools/OpenFairyGUI Migrate %m")]
         public static void Execute()
         {
+            PixelAlignment.RestoreEditorPositions();
+            var wasImporting = PixelAlignment.importing;
+            PixelAlignment.importing = true;
+            try { ExecuteMigration(); }
+            finally { PixelAlignment.importing = wasImporting; }
+        }
+
+        private static void ExecuteMigration()
+        {
             EditorApplication.delayCall -= Execute;
             var gammaError = RenderingSettingsProvider.GammaConfigurationError();
             if (gammaError != null) throw new InvalidOperationException(gammaError);
@@ -2107,6 +2116,7 @@ namespace OpenFairy.UGUI.Editor
             grip.offsetMin = horizontal ? new Vector2(0, point.y - size.y - track.rect.yMin) : new Vector2(point.x - track.rect.xMin, 0);
             grip.offsetMax = horizontal ? new Vector2(0, point.y - track.rect.yMax) : new Vector2(point.x + size.x - track.rect.xMax, 0);
             bar.handleRect = grip;
+            if (grip.TryGetComponent<PixelAlignment>(out var alignment)) alignment.editorPositionDriven = true;
             bar.targetGraphic = grip.GetComponent<Graphic>();
             bar.transition = Selectable.Transition.None;
             bar.navigation = new Navigation { mode = Navigation.Mode.None };
@@ -2519,7 +2529,7 @@ namespace OpenFairy.UGUI.Editor
         private static void ConfigureTextLayout(GameObject go, Schema.Display element)
         {
             if (!AutoSizeText(element)) return;
-            var fitter = go.AddComponent<ContentSizeFitter>();
+            var fitter = go.AddComponent<AuthoredSizeFitter>();
             fitter.horizontalFit = element.AutoSize == Schema.TextAutoSize.Both
                 ? ContentSizeFitter.FitMode.PreferredSize : ContentSizeFitter.FitMode.Unconstrained;
             fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
