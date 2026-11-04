@@ -8,8 +8,8 @@
 
 - 对旧 FairyGUI Unity SDK 的171份源文件做语法树检索，合并正常与未激活预处理分支，并记录shader、整数cast：共305点，无未审阅项。其中142点映射已实现规则、43点后端替代/能力边界、24点尚无对应功能、96点枚举/索引/编码/alpha等非显示坐标转换。完整审计不表示全部原生特性已移植。
 - 补齐五种列表模式、虚拟固定格/显式测高行、分页、隐藏项、比例分组与固定分组初次分配、grip固定/自适应、滚动终点/显示位置/tween、Root和居中、位图字体缩放后取整及resizable导入、捕获RT尺寸与进度数字。Migrate与非虚拟Fill共用列表算术；尺寸、缩放与UV没有全局取整。分组比例和成员基线序列化，保存重载再布局及后续伸缩仍保持原生比例。
-- Scrollbar基类会重设anchor，原生整数几何通过offset补偿；自排队时跳过会在Editor Prelayout发送onValueChanged的基类实现，避免渲染刷新变成滚动输入。滚动逻辑精确保留小数，物理content辅助范围覆盖Ceil overlap，不能仅把maxScroll getter改成Ceil。
-- 原版SDK实际运行的180组列表、18组比例分组、144组滚动条对照全部误差小于.001。Builtin完整Editor **244/244**、PlayMode **280/280**；TMP完整Editor **268/268**、PlayMode **307/307**。新回归覆盖小数虚拟格/分页/测高、半页边界、固定grip、极小逻辑位移、可达的向上取整滚动终点、零尺寸分组，以及Prefab保存重载后的分组比例；比例列表按原SDK整数sourceWidth/sourceHeight构成权重，独立于当前矩形的小数尺寸。
+- Scrollbar基类会重设anchor，原生整数几何通过offset补偿；自排队时跳过会在Editor Prelayout发送onValueChanged的基类实现，避免渲染刷新变成滚动输入。grip显隐也不能在布局/图形重建循环中SetActive，否则真实Prefab卸载与捕获会触发队列注销错误；预渲染/Update/LateUpdate同步显隐并以真实Canvas+Image+PixelAlignment回归验证。滚动逻辑精确保留小数，物理content辅助范围覆盖Ceil overlap，不能仅把maxScroll getter改成Ceil。
+- 原版SDK实际运行的180组列表、18组比例分组、144组滚动条对照全部误差小于.001。Builtin完整Editor **244/244**、PlayMode **281/281**；TMP完整Editor **268/268**、PlayMode **308/308**。新回归覆盖小数虚拟格/分页/测高、半页边界、固定grip、极小逻辑位移、可达的向上取整滚动终点、零尺寸分组，以及Prefab保存重载后的分组比例；比例列表按原SDK整数sourceWidth/sourceHeight构成权重，独立于当前矩形的小数尺寸。
 - 详细规则及仍由uGUI/TMP接管、尚未实现的能力见[PixelRounding.md](../Assets/Plugins/OpenFairy/Documentation~/PixelRounding.md)。包括输入框caret、TMP度量/UV、任意变宽虚拟格、原生惯性/分页方向策略、RTL及部分HTML等；本轮不宣称这些后端与原渲染器完全一致，也不把编辑器FObject额外pivot截断或相机软裁剪差异混入SDK通用规则。
 
 ### 2026-11-04 可选 makePixelPerfect

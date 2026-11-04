@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.TestTools;
 
 namespace OpenFairy.UGUI.Tests
 {
@@ -170,6 +171,34 @@ namespace OpenFairy.UGUI.Tests
         [TestCase(150.001f, 2)]
         public void PageMidpointsBelongToTheEarlierPage(float position, int expected)
             => Assert.That(ScrollPane.PageIndex(position, 100), Is.EqualTo(expected));
+
+        [UnityTest]
+        public IEnumerator Scrollbar_visibility_changes_do_not_unregister_graphics_inside_the_canvas_rebuild()
+        {
+            var root = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas), typeof(AuthoredScrollbar));
+            try
+            {
+                var rect = (RectTransform)root.transform;
+                rect.sizeDelta = new Vector2(200, 200);
+                var grip = new GameObject("Grip", typeof(RectTransform), typeof(Image), typeof(PixelAlignment)).GetComponent<RectTransform>();
+                grip.SetParent(rect, false);
+                var bar = root.GetComponent<AuthoredScrollbar>();
+                bar.handleRect = grip;
+                bar.size = .25f;
+                Canvas.ForceUpdateCanvases();
+                Assert.IsTrue(grip.gameObject.activeSelf);
+                bar.size = 1;
+                Canvas.ForceUpdateCanvases();
+                yield return null;
+                Assert.IsFalse(grip.gameObject.activeSelf);
+                bar.size = .25f;
+                Canvas.ForceUpdateCanvases();
+                yield return null;
+                Assert.IsTrue(grip.gameObject.activeSelf);
+                LogAssert.NoUnexpectedReceived();
+            }
+            finally { Object.DestroyImmediate(root); }
+        }
 
         [TestCase(Scrollbar.Direction.LeftToRight, .333f, .5f, 36f)]
         [TestCase(Scrollbar.Direction.BottomToTop, .333f, .5f, 36f)]

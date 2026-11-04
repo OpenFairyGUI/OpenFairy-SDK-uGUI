@@ -20,7 +20,11 @@ namespace OpenFairy.UGUI
             Canvas.preWillRenderCanvases += Queue;
         }
 
-        private void Queue() => CanvasUpdateRegistry.RegisterCanvasElementForLayoutRebuild(this);
+        private void Queue()
+        {
+            UpdateVisibility();
+            CanvasUpdateRegistry.RegisterCanvasElementForLayoutRebuild(this);
+        }
 
         public override void Rebuild(CanvasUpdate executing)
         {
@@ -61,7 +65,14 @@ namespace OpenFairy.UGUI
             max[axis] = min[axis] + length - size * extent;
             handleRect.offsetMin = min;
             handleRect.offsetMax = max;
-            handleRect.gameObject.SetActive(size is > 0 and < 1);
+            UpdateVisibility();
+        }
+
+        private void UpdateVisibility()
+        {
+            // Disabling a grip unregisters its Graphics and layout elements, which is illegal inside either rebuild loop.
+            if (handleRect != null && !CanvasUpdateRegistry.IsRebuildingLayout() && !CanvasUpdateRegistry.IsRebuildingGraphics())
+                handleRect.gameObject.SetActive(size is > 0 and < 1);
         }
 
         public override void OnBeginDrag(PointerEventData data)
