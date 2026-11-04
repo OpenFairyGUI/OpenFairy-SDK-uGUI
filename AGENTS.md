@@ -71,6 +71,8 @@ Builtin InputField 在聚焦时会消费 EventSystem 的 updateSelected 导航�
 
 ## 环境
 
+- **临时Unity生命周期（2026-11-04用户要求）**：代理打开的旧SDK/测试Unity宿主在采样或验证完成后立即关闭以释放内存，不等整个任务结束才统一关闭；只保留当前仍依赖的实例和用户主工程。CLI quit在本机编辑态曾因PipelineQuitScheduler调用DontDestroyOnLoad失败，改用一次性EditorApplication.update调用EditorApplication.Exit(0)，并核对PID退出；不结束用户主工程。
+
 - **代码检索**：如果仓库根目录存在 `.codegraph/`，优先用 CodeGraph MCP 的 `codegraph_explore` 理解代码；没有 MCP 时用 `codegraph explore "..."`。没有 `.codegraph/` 才用 `rg`/文件读取。
 - **命令行工具**：已安装 `rg` 和 coreutils，直接使用。
 - **项目类型**：Unity 项目。应优先通过 unity mcp 执行菜单项；如果当前会话没有 unity mcp，先提示用户安装/连接。

@@ -1216,13 +1216,13 @@ namespace OpenFairy.UGUI.Editor
                 if (kind == Schema.GearKind.XY)
                 {
                     var rt = (RectTransform)go.transform;
-                    var origin = element.Position ?? Vector2.zero;
+                    var origin = AuthoredPosition(element, element.Position ?? Vector2.zero, rt.rect.size);
                     Vector2 Convert(string pair)
                     {
                         var parts = pair.Split(',');
-                        return rt.anchoredPosition + new Vector2(
-                            float.Parse(parts[0], CultureInfo.InvariantCulture) - origin.x,
-                            origin.y - float.Parse(parts[1], CultureInfo.InvariantCulture));
+                        var position = AuthoredPosition(element, new Vector2(float.Parse(parts[0], CultureInfo.InvariantCulture),
+                            float.Parse(parts[1], CultureInfo.InvariantCulture)), rt.rect.size);
+                        return rt.anchoredPosition + new Vector2(position.x - origin.x, origin.y - position.y);
                     }
                     var defaultValue = gearXml.Default is { } def ? Convert(def) : rt.anchoredPosition;
                     gearType.GetField("values").SetValue(gear, gearXml.Values.Split('|').AsValueEnumerable().Select(value => value == "-" ? defaultValue : Convert(value)).ToArray());
@@ -2537,9 +2537,17 @@ namespace OpenFairy.UGUI.Editor
                         && (rule.side == RelationSide.Width || rule.side >= RelationSide.LeftExtLeft))).ToArray();
         }
 
+        private static Vector2 AuthoredPosition(Schema.Display element, Vector2 position, Vector2 size)
+        {
+            if (!MigrationSettings.instance.editorPivotRounding || element.Kind == Schema.DisplayKind.Group) return position;
+            var offset = element.Anchor ? Vector2.zero : Vector2.Scale(element.Pivot ?? Vector2.zero, size);
+            position += offset;
+            return new Vector2((int)position.x, (int)position.y) - offset;
+        }
+
         private static void SetRect(RectTransform rt, Schema.Display element, Vector2 size, RectTransform parent)
         {
-            var xy = element.Position ?? Vector2.zero;
+            var xy = AuthoredPosition(element, element.Position ?? Vector2.zero, size);
             if (element.Anchor && element.Pivot is { } anchorPivot)
                 xy -= anchorPivot * size;
             Vector2 anchorMin = new(0, 1), anchorMax = new(0, 1);

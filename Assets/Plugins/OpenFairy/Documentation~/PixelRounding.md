@@ -2,6 +2,12 @@
 
 `MigrationSettings.makePixelPerfect` controls the original SDK's optional display-origin rounding. Enable **Project Settings > OpenFairy > Make Pixel Perfect**, then run Migrate. Its default is false. Canvas.pixelPerfect is a separate uGUI setting and does not implement these rules.
 
+`MigrationSettings.editorPivotRounding` is a separate, default-off **Editor Pivot Rounding** option. FairyGUI Editor's `FObject.HandleXYChanged` truncates the pivot location before submitting it to the SDK; runtime `GObject.HandlePositionChanged` does not. Migrate can bake this placement into authored positions and XY controller pages while those source values are still available. With a non-anchor pivot, it truncates `xy + pivot * size` and then subtracts the unscaled pivot offset; with an anchor pivot, it truncates `xy` directly. Group helpers retain their logical coordinates. Sizes, scale and UV are preserved. Enable both options to match the Editor's initial placement and display-origin rounding.
+
+This is authored-data conversion, not an extra runtime transform mode. Runtime movement and size changes retain the normal uGUI/SDK behavior; the option does not recreate the Editor's live `FObject` model. Reconstructing the original pivot from a RectTransform and truncating it every frame is unsafe: Unity can report an authored `-2` as `-1.999998` after parent-pivot arithmetic.
+
+For display-origin rounding, PixelAlignment accumulates anchor coordinates in each authored parent space, avoiding cancellation of the parent's pivot at half-pixel boundaries. It restores the exact anchored position before the next logical update, including corrections smaller than Vector3's approximate-zero comparison.
+
 The SDK also rounds intermediate layout values even when that option is off. These rules always apply:
 
 | Path | Rule |

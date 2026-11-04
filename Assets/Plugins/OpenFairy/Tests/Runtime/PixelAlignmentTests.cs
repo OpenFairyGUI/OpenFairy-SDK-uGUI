@@ -106,6 +106,17 @@ namespace OpenFairy.UGUI.Tests
             Assert.That(panel.anchoredPosition.y, Is.EqualTo(-21.7f).Within(.0001));
         }
 
+        [Test]
+        public void Tiny_render_corrections_restore_the_exact_logical_position()
+        {
+            var position = new Vector2(.000001f, -.000001f);
+            var panel = Rect("Panel", _root, new Vector2(10, 10), new Vector2(0, 1), position);
+            var alignment = panel.gameObject.AddComponent<PixelAlignment>();
+            for (var i = 0; i < 8; i++) Canvas.ForceUpdateCanvases();
+            alignment.enabled = false;
+            Assert.That(panel.anchoredPosition, Is.EqualTo(position));
+        }
+
         [TestCase(80, 46, 80, 54.2f, Loader.FillType.ScaleMatchHeight, -8, 0)]
         [TestCase(160, 80, 101, 63, Loader.FillType.None, -30, -9)]
         [TestCase(160, 80, 101, 63, Loader.FillType.Scale, 0, 6)]

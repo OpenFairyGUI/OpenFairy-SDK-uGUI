@@ -11,7 +11,7 @@ namespace OpenFairy.UGUI
         [SerializeField] internal RectTransform coordinateSpace;
         internal static bool importing;
         private RectTransform _rect;
-        private Vector3 _offset;
+        private bool _aligned;
         private Vector3 _layoutPosition;
         private Vector3 _renderedPosition;
 
@@ -42,9 +42,9 @@ namespace OpenFairy.UGUI
 
         private void Restore()
         {
-            if (_offset == Vector3.zero) return;
-            if (_rect.localPosition.Equals(_renderedPosition)) _rect.localPosition = _layoutPosition;
-            _offset = Vector3.zero;
+            if (!_aligned) return;
+            if (_rect.anchoredPosition3D.Equals(_renderedPosition)) _rect.anchoredPosition3D = _layoutPosition;
+            _aligned = false;
         }
 
         private void Queue()
@@ -59,18 +59,32 @@ namespace OpenFairy.UGUI
             if (executing != CanvasUpdate.PostLayout || importing || !IsActive()) return;
             var space = coordinateSpace != null ? coordinateSpace : _rect.parent as RectTransform;
             if (space == null || _rect.localEulerAngles != Vector3.zero) return;
-            var topLeft = LocalPoint(_rect, new Vector3(_rect.rect.xMin, _rect.rect.yMax), space)
-                - new Vector3(space.rect.xMin, space.rect.yMax);
+            var topLeft = AuthorPoint(_rect, new Vector3(_rect.rect.xMin, _rect.rect.yMax), space);
             var delta = space.TransformVector(new Vector3(Mathf.Round(topLeft.x) - topLeft.x, Mathf.Round(topLeft.y) - topLeft.y));
-            _offset = _rect.parent != null ? _rect.parent.InverseTransformVector(delta) : delta;
-            _layoutPosition = _rect.localPosition;
-            _rect.localPosition += _offset;
-            _renderedPosition = _rect.localPosition;
+            _layoutPosition = _rect.anchoredPosition3D;
+            _rect.anchoredPosition3D += _rect.parent.InverseTransformVector(delta);
+            _renderedPosition = _rect.anchoredPosition3D;
+            _aligned = true;
         }
 
         public void LayoutComplete() { }
         public void GraphicUpdateComplete() { }
         bool ICanvasElement.IsDestroyed() => this == null;
+
+        private static Vector3 AuthorPoint(RectTransform rect, Vector3 point, RectTransform space)
+        {
+            // Cancelling localPosition's parent-pivot offset can move an exact half-pixel across its rounding boundary.
+            for (var current = rect; ;)
+            {
+                var parent = (RectTransform)current.parent;
+                var anchor = current.anchorMin + Vector2.Scale(current.anchorMax - current.anchorMin, current.pivot);
+                point = current.localRotation * Vector3.Scale(current.localScale, point) + current.anchoredPosition3D
+                    + new Vector3(parent.rect.width * anchor.x, parent.rect.height * (anchor.y - 1));
+                if (parent == space) return point;
+                point += new Vector3(parent.rect.xMin, parent.rect.yMax);
+                current = parent;
+            }
+        }
 
         internal static Vector3 LocalPoint(Transform rect, Vector3 point, Transform space)
         {

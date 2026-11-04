@@ -11,6 +11,7 @@ namespace OpenFairy.UGUI.Editor
         public string[] dependencyDirectories = Array.Empty<string>();
         public bool gammaRendering;
         public bool makePixelPerfect;
+        public bool editorPivotRounding;
 
         public void Save() => Save(true);
     }

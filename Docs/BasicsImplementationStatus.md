@@ -4,6 +4,12 @@
 
 ## 当前结论
 
+### 2026-11-04 编辑器pivot位置兼容
+
+- 新增默认关闭的Migrate选项editorPivotRounding。编辑器FObject在调用SDK前对pivot位置(int)截断，原SDK的GObject不截断；恢复工程与旧SDK的DisplayObject.cs逐字相同。按源数据在Migrate.SetRect和XY控制器位置页提前转换，不在运行时从RectTransform反推并截断；合法负整数-2可因RT父pivot算术读成-1.999998，运行时方案因此被否定，未发布该原型。
+- PixelAlignment继续只负责原SDK可选显示原点Round，改用anchor坐标累计避免半像素边界消去误差，并用精确anchoredPosition3D副本恢复逻辑位置，极小偏移不因Vector3近似等于零而丢失。没有新增运行时Editor模式、逻辑对象图或scale/UV取整。
+- Builtin完整Editor **255/255**、PlayMode **282/282**；TMP完整Editor **279/279**、PlayMode **309/309**。Builtin到TMP的域重载令一次CLI状态请求socket hang up；Builtin结果保留，恢复连接后同一源码完成TMP两套，源码哈希期间不变。旧SDK288变换仍最大3.14568e-5；用旧SDK实际DisplayObject执行恢复Editor的前置截断，576组合与Migrate生成几何对照最大.000110033，全部小于.001；这是源码规则复现，不是用户IL2CPP编辑器逐方法验证。
+
 ### 2026-11-04 烘焙与静态绑定质量复核
 
 - 检索Runtime83份C#及29处GameObject/AddComponent创建，重点复核Migrate、列表、分组、滚动、弹窗与像素对齐；未发现运行时反射成员解析。ComboBox与PopupMenu的作者list名称现在仅在Migrate解析，Prefab保存PopupContent直接引用；改名后仍可使用。剩余Find("viewport")属于显式的程序化ScrollPane.Attach，导入视图不走此路径。
