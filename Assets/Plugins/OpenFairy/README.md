@@ -39,6 +39,22 @@
 
 缺少上述配置时保持旧行为：类名前缀为空、成员前缀为 `m_`、不过滤默认名称。修改前缀后，手写 partial 类和业务调用需同步更新；已有 UI 应重新转换，控制器的序列化类型包含生成类名。`getMemberByName` 不影响 Prefab 引用绑定。
 
+### 像素对齐（可选）
+
+在 **Project Settings → OpenFairy** 勾选 **Make Pixel Perfect**，再执行 **Apply / Migrate UI**。
+也可以设置 `MigrationSettings.instance.makePixelPerfect = true` 后调用 `Save()` 和 `Migrate.Execute()`。
+选项保存在 `ProjectSettings/OpenFairySettings.asset`，默认关闭，与原 FairyGUI SDK 的
+`UIConfig.makePixelPerfect` 默认值一致；更改后需要重新 Migrate。
+
+开启后，迁移器烘焙 `PixelAlignment`，在布局结束后将未旋转显示对象的左上原点按作者父组件的
+局部坐标四舍六入五成双取整。辅助组节点不成为取整坐标系；尺寸、缩放、UV 和逻辑动画步长保留小数。
+每帧更新前恢复布局位置，避免将上一帧的对齐误差累积到动画中。关闭选项后重新 Migrate 会移除该组件。
+父级缩放后，屏幕上的坐标仍可能包含小数；这是原 SDK 的局部取整规则。
+这与 Canvas 的 `pixelPerfect` 不同：Canvas 按屏幕空间调整 Graphic 矩形，不能替代父组件局部取整。
+
+Loader 的编辑器居中规则单独烘焙：水平居中、垂直居中向下取整；右对齐、底对齐保留差值。
+`makePixelPerfect` 再控制其内容显示位置的就近取整，不改变显示尺寸。手动创建的 Loader 默认保留原 SDK 的小数居中。
+
 ### Linear 工程中的 Gamma UI（可选）
 
 在 **Project Settings → OpenFairy** 勾选 **Gamma UI Rendering** 并执行 **Apply / Migrate UI**，再手动在实际使用的 **Universal Renderer Data → Add Renderer Feature** 中添加并启用 **OpenFairy Gamma UI**。SDK 不自动修改 URP 配置。支持 Unity 6.6 / URP 17.6+ / Direct3D 11、12 / SDR 输出的 Screen Space Overlay UI。UI 通过原生 RendererList 绘制一次，不增加 UI 合成 RT 或全屏拷贝；增加两次命令提交。导入选项默认关闭，关闭时重新 Migrate 并停用 Feature。

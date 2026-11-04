@@ -33,6 +33,8 @@ namespace OpenFairy.UGUI
         public AlignType align;
         public VertAlignType vAlign;
         public bool autoSize;
+        [SerializeField] internal bool editorAlignment;
+        [SerializeField] internal bool makePixelPerfect;
         [SerializeField] internal Component componentContent;
         [SerializeField] internal Vector2 componentSize;
         [SerializeField] private bool _showComponent;
@@ -118,9 +120,19 @@ namespace OpenFairy.UGUI
             };
         }
 
-        private Vector2 Offset(Vector2 available, Vector2 size) => new(
-            align switch { AlignType.Center => (available.x - size.x) / 2, AlignType.Right => available.x - size.x, _ => 0 },
-            vAlign switch { VertAlignType.Middle => (available.y - size.y) / 2, VertAlignType.Bottom => available.y - size.y, _ => 0 });
+        private Vector2 Offset(Vector2 available, Vector2 size)
+        {
+            var offset = new Vector2(
+                align switch { AlignType.Center => (available.x - size.x) / 2, AlignType.Right => available.x - size.x, _ => 0 },
+                vAlign switch { VertAlignType.Middle => (available.y - size.y) / 2, VertAlignType.Bottom => available.y - size.y, _ => 0 });
+            if (editorAlignment)
+            {
+                if (align == AlignType.Center) offset.x = Mathf.Floor(offset.x);
+                if (vAlign == VertAlignType.Middle) offset.y = Mathf.Floor(offset.y);
+            }
+            if (makePixelPerfect) offset = new Vector2(Mathf.Round(offset.x), Mathf.Round(offset.y));
+            return offset;
+        }
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {

@@ -681,6 +681,8 @@ namespace OpenFairy.UGUI.Editor
         {
             var xml = component.ComponentXml;
             var root = new GameObject(Path.GetFileNameWithoutExtension(component.File), typeof(RectTransform));
+            var wasImporting = PixelAlignment.importing;
+            PixelAlignment.importing = true;
             try
             {
                 var rt = (RectTransform)root.transform;
@@ -692,6 +694,7 @@ namespace OpenFairy.UGUI.Editor
                 var componentType = FindType($"{GeneratedNamespace(component)}.{ClassName(component)}");
                 var names = new GeneratedMembers(xml, ClassName(component));
                 var comp = (Component)root.AddComponent(componentType);
+                if (MigrationSettings.instance.makePixelPerfect) root.AddComponent<PixelAlignment>();
 
                 var controllers = new Dictionary<string, ControllerData>();
                 foreach (var element in xml.Controllers)
@@ -750,6 +753,8 @@ namespace OpenFairy.UGUI.Editor
                 {
                     var view = BuildScrollView(root, xml, rt.sizeDelta);
                     relationSpace = view.Content;
+                    foreach (var (_, childGo) in children)
+                        if (childGo.TryGetComponent(out PixelAlignment alignment)) alignment.coordinateSpace = view.Content;
                     foreach (var (_, childGo) in children)
                         if (childGo.transform.parent == rt)
                             ReparentPreservingRect((RectTransform)childGo.transform, view.Content, false);
@@ -911,6 +916,7 @@ namespace OpenFairy.UGUI.Editor
                 Object.DestroyImmediate(root);
                 throw;
             }
+            finally { PixelAlignment.importing = wasImporting; }
         }
 
         private static void StabilizeManagedReferences(Component component, IEnumerable<object> values)
@@ -1126,6 +1132,17 @@ namespace OpenFairy.UGUI.Editor
             }
 
             SetRect((RectTransform)go.transform, element, size ?? Vector2.zero, parent);
+            if (MigrationSettings.instance.makePixelPerfect && element.Kind != Schema.DisplayKind.Group)
+            {
+                var alignment = go.GetComponent<PixelAlignment>() ?? go.AddComponent<PixelAlignment>();
+                alignment.coordinateSpace = parent;
+                PrefabUtility.RecordPrefabInstancePropertyModifications(alignment);
+            }
+            if (go.TryGetComponent(out Loader alignedLoader))
+            {
+                alignedLoader.editorAlignment = true;
+                alignedLoader.makePixelPerfect = MigrationSettings.instance.makePixelPerfect;
+            }
             // 复刻 GObject.SetSize 的 restrictSize：最小尺寸约束内容自适应，文字按最大宽度换行。
             if (element.RestrictSize is { } restrict)
             {

@@ -6,6 +6,8 @@ SDK 提交只保留通用实现、文档与测试结论，不保存消费工程�
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-11-04 makePixelPerfect 是持久化 Migrate 选项，默认关闭；开关只控制本地显示位置 Round，不把尺寸、缩放或UV取整。PixelAlignment 必须跳过作者组辅助层，滚动项使用content坐标；.5边界禁止用世界矩阵往返计算，否则实测可偏整像素。恢复原始布局位置时保留精确副本，旋转判断不能使用Quaternion近似相等。Loader 编辑器中心Floor独立于该开关；不要混同原SDK默认小数居中。Builtin Editor242/242、Play213/213；原版SDK288组实际变换全部在.001阈值内（最大3.14568e-5），隔离170组件开关两态、连续1246文件稳定验证通过；整体截图仍非像素一致，尚未完成全部布局取整审计。
+
 2026-11-03 重复Migrate必须产生相同内容，作者重名也要处理。首次保存前统一分配整个Prefab层级的唯一名称：根和本组件作者节点优先，重复作者名用稳定XML id构成别名，继承及辅助节点按确定遍历顺序去重；嵌套实例名称覆盖须RecordPrefabInstancePropertyModifications。源XML、生成公开字段、控制器/动效和直接引用不改。TMP阴影刷新复用同一作者别名分配，保留旧层级和错误绑定的严格检查。仅修Mask/Color Filter辅助节点的75f60c5仍有31个Prefab变化，已被此次完整命名修正取代。Builtin Editor241/241、Play205/205、TMP Editor265/265通过；TMP宿主先补齐Essential Resources和默认字体sourceFontFile。不得引入整Prefab保存前比较、指纹跳过或连接/解包保存机制；校验用快照仅在外部测量工具中。
 
 2026-11-03 Migrate 性能：工程逐 Prefab 的组件、字段、材质定制使用 `[MigratePrefabPostProcess] static void Method(GameObject root)`，在首次保存前执行；不要在总后处理中再加载、遍历和保存所有 UI。跨资源/场景收尾继续用原 `[MigratePostProcess]`。控制器 gears/actions 按构造顺序指定 managed-reference ID，不能遍历 SerializedProperty 的整个图来找引用，display partner 存在循环。依用户要求保持正向构建与原生保存，不增加整 Prefab 比对或指纹缓存；原有按依赖层发布的边界保留，新原生资源必须先导入才可构建父层。

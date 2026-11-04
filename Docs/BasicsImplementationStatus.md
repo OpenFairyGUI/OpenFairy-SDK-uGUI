@@ -4,6 +4,13 @@
 
 ## 当前结论
 
+### 2026-11-04 可选 makePixelPerfect
+
+- `MigrationSettings.makePixelPerfect` 默认 false，保存到 `ProjectSettings/OpenFairySettings.asset`；Project Settings/OpenFairy 的 Make Pixel Perfect 修改后重新 Migrate。迁移烘焙 PixelAlignment，未旋转显示对象在布局结束后按作者父坐标取整，保留尺寸、缩放、UV 与小数动画步长；分组/蒙版辅助节点不变成新的作者坐标系，滚动内容使用自身 content 坐标系，Builtin 行内图片也烘焙对齐。禁用再迁移移除组件，不使用 Canvas.pixelPerfect 替代。
+- 避免世界坐标往返：恰好 .5 的本地坐标可能在矩阵转换后略微越过舍入边界，导致整整一像素错误。用本地父链累计位移后再取整，并在下一帧恢复精确的布局位置。旋转判断使用 localEulerAngles，不能用 Quaternion 的近似相等判定漏掉 .01 度旋转。
+- Loader 编辑器中心/中线使用 Floor，独立于通用开关；右/底差值仍保留小数，开关再控制内容显示原点的 Round。手动创建的 Loader 缺省仍为原 SDK 的小数居中。编辑器规则来源为恢复的编辑器源码，不能据此声明已核对特定 IL2CPP 编辑器二进制。
+- 独立 Unity6000.6.7f1 Builtin Editor **242/242**、PlayMode **213/213**。使用未改动的原版 FairyGUI SDK 实际运行导出 288 组父子变换，包含正负缩放、pivot、父子旋转及开关两态；OpenFairy 四角坐标全部在 .001 阈值内，最大差 **0.0000314568**。导入回归覆盖作者组坐标、尺寸、保存重载、禁用移除与连续发布稳定。
+
 ### 2026-11-03 重名与重复迁移的稳定标识
 
 - SaveAsPrefabAsset按名称匹配对象；设计本身的重名和辅助节点重名都会使内部fileID变化并触发下游导入。首次保存前统一分配整个Prefab层级的唯一名称，优先保留根与本组件的首个作者节点；重复作者名加稳定XML id，继承/辅助节点按确定遍历顺序去重，嵌套实例记录名称覆盖。源XML和公开字段不改，控制器、动效及运行时继续使用直接引用。没有整Prefab保存前比较、指纹缓存、跳过构建或连接/解包机制。

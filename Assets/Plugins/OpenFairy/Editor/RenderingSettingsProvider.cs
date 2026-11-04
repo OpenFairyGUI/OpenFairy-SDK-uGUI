@@ -25,6 +25,9 @@ namespace OpenFairy.UGUI.Editor
             {
                 var settings = MigrationSettings.instance;
                 EditorGUI.BeginChangeCheck();
+                var pixels = EditorGUILayout.Toggle(new GUIContent("Make Pixel Perfect", "Round unrotated display positions in their authored parent space, like FairyGUI UIConfig.makePixelPerfect. Run Migrate after changing this option."), settings.makePixelPerfect);
+                if (EditorGUI.EndChangeCheck()) { settings.makePixelPerfect = pixels; settings.Save(); }
+                EditorGUI.BeginChangeCheck();
                 var gamma = EditorGUILayout.Toggle(new GUIContent("Gamma UI Rendering", "Use Gamma UI colors and blending in a Linear URP project. Run Migrate after changing this option."), settings.gammaRendering);
                 if (EditorGUI.EndChangeCheck()) { settings.gammaRendering = gamma; settings.Save(); }
                 EditorGUILayout.HelpBox("Migrate prepares Gamma UI textures and materials. In a Linear project, also add and enable OpenFairy Gamma UI on your Universal Renderer Data. Requires Unity 6.6 / URP 17.6+ / Direct3D 11 or 12 / SDR / Screen Space Overlay. No UI compositing render texture is created. See the package README for setup and material requirements.", MessageType.Info);

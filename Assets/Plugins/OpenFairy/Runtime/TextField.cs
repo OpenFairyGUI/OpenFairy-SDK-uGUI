@@ -324,6 +324,7 @@ namespace OpenFairy.UGUI
                 go.transform.SetParent(transform, false);
                 var rt = (RectTransform)go.transform;
                 rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 1);
+                if (TryGetComponent<PixelAlignment>(out _)) go.AddComponent<PixelAlignment>();
                 _images[image] = rt;
                 rt.sizeDelta = sprite.rect.size;
                 var imageComponent = go.GetComponent<UnityEngine.UI.Image>();
