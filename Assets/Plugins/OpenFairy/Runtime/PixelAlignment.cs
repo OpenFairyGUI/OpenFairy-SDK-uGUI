@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -6,11 +7,15 @@ namespace OpenFairy.UGUI
 {
     [ExecuteAlways, DefaultExecutionOrder(-32000), DisallowMultipleComponent]
     [RequireComponent(typeof(RectTransform))]
-    public sealed partial class PixelAlignment : UIBehaviour, ICanvasElement
+    public sealed partial class PixelAlignment : UIBehaviour
     {
         [SerializeField] internal RectTransform coordinateSpace;
         internal static bool importing;
+        private static readonly List<PixelAlignment> Active = new();
+        private static readonly Pass AlignPass = new();
+        private static bool _sorted = true;
         private RectTransform _rect;
+        private int _depth;
         private bool _aligned;
         private Vector3 _layoutPosition;
         private Vector3 _renderedPosition;
@@ -19,14 +24,16 @@ namespace OpenFairy.UGUI
         {
             base.OnEnable();
             _rect = (RectTransform)transform;
-            Canvas.preWillRenderCanvases += Queue;
-            Queue();
+            if (Active.Count == 0) Canvas.preWillRenderCanvases += Queue;
+            Active.Add(this);
+            UpdateDepth();
+            if (!importing) Register();
         }
 
         protected override void OnDisable()
         {
-            Canvas.preWillRenderCanvases -= Queue;
-            CanvasUpdateRegistry.UnRegisterCanvasElementForRebuild(this);
+            Active.Remove(this);
+            if (Active.Count == 0) Canvas.preWillRenderCanvases -= Queue;
             Restore();
             base.OnDisable();
         }
@@ -38,6 +45,14 @@ namespace OpenFairy.UGUI
             base.OnTransformParentChanged();
             if (coordinateSpace != null && !transform.IsChildOf(coordinateSpace))
                 coordinateSpace = transform.parent as RectTransform;
+            UpdateDepth();
+        }
+
+        private void UpdateDepth()
+        {
+            _depth = 0;
+            for (var parent = transform.parent; parent != null; parent = parent.parent) _depth++;
+            _sorted = false;
         }
 
         private void Restore()
@@ -58,20 +73,51 @@ namespace OpenFairy.UGUI
             _aligned = false;
         }
 
-        private void Queue()
+        // A single layout element aligns every instance parent-first, after the PostLayout writers above them.
+        private static void Queue()
         {
-            if (importing) return;
-            Restore();
-            CanvasUpdateRegistry.RegisterCanvasElementForLayoutRebuild(this);
+            // An earlier subscriber in the same invocation can disable the last instance, e.g. a scrollbar hiding its grip.
+            if (importing || Active.Count == 0) return;
+            foreach (var alignment in Active) alignment.Restore();
+            Register();
         }
 
-        public void Rebuild(CanvasUpdate executing)
+        private static void Register()
         {
-            if (executing != CanvasUpdate.PostLayout || importing || !IsActive()) return;
+            if (!_sorted)
+            {
+                Active.Sort(static (a, b) => a._depth.CompareTo(b._depth));
+                _sorted = true;
+            }
+            AlignPass.transform = Active[^1]._rect;
+            CanvasUpdateRegistry.RegisterCanvasElementForLayoutRebuild(AlignPass);
+        }
+
+        private sealed class Pass : ICanvasElement
+        {
+            public Transform transform { get; set; }
+
+            public void Rebuild(CanvasUpdate executing)
+            {
+                if (executing != CanvasUpdate.PostLayout || importing) return;
+                foreach (var alignment in Active) alignment.Align();
+            }
+
+            public void LayoutComplete() { }
+            public void GraphicUpdateComplete() { }
+            public bool IsDestroyed() => false;
+        }
+
+        private void Align()
+        {
             var space = coordinateSpace != null ? coordinateSpace : _rect.parent as RectTransform;
             if (space == null || _rect.localEulerAngles != Vector3.zero) return;
-            var topLeft = AuthorPoint(_rect, new Vector3(_rect.rect.xMin, _rect.rect.yMax), space);
-            var delta = space.TransformVector(new Vector3(Mathf.Round(topLeft.x) - topLeft.x, Mathf.Round(topLeft.y) - topLeft.y));
+            var rect = _rect.rect;
+            var topLeft = AuthorPoint(_rect, new Vector3(rect.xMin, rect.yMax), space);
+            var offset = new Vector3(Mathf.Round(topLeft.x) - topLeft.x, Mathf.Round(topLeft.y) - topLeft.y);
+            // Whole-pixel elements keep their layout position; skipping the write leaves static ones untouched.
+            if (offset.x == 0 && offset.y == 0) return;
+            var delta = space.TransformVector(offset);
             _layoutPosition = _rect.anchoredPosition3D;
 #if UNITY_EDITOR
             if (!Application.isPlaying && !editorPositionDriven)
@@ -86,21 +132,18 @@ namespace OpenFairy.UGUI
             _aligned = true;
         }
 
-        public void LayoutComplete() { }
-        public void GraphicUpdateComplete() { }
-        bool ICanvasElement.IsDestroyed() => this == null;
-
         private static Vector3 AuthorPoint(RectTransform rect, Vector3 point, RectTransform space)
         {
             // Cancelling localPosition's parent-pivot offset can move an exact half-pixel across its rounding boundary.
             for (var current = rect; ;)
             {
                 var parent = (RectTransform)current.parent;
+                var parentRect = parent.rect;
                 var anchor = current.anchorMin + Vector2.Scale(current.anchorMax - current.anchorMin, current.pivot);
                 point = current.localRotation * Vector3.Scale(current.localScale, point) + current.anchoredPosition3D
-                    + new Vector3(parent.rect.width * anchor.x, parent.rect.height * (anchor.y - 1));
+                    + new Vector3(parentRect.width * anchor.x, parentRect.height * (anchor.y - 1));
                 if (parent == space) return point;
-                point += new Vector3(parent.rect.xMin, parent.rect.yMax);
+                point += new Vector3(parentRect.xMin, parentRect.yMax);
                 current = parent;
             }
         }

@@ -1,4 +1,6 @@
 using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -104,6 +106,77 @@ namespace OpenFairy.UGUI.Tests
             alignment.enabled = false;
             Assert.That(panel.anchoredPosition.x, Is.EqualTo(11.3f).Within(.0001));
             Assert.That(panel.anchoredPosition.y, Is.EqualTo(-21.7f).Within(.0001));
+        }
+
+        [UnityTest]
+        public IEnumerator Static_elements_share_one_registration_and_whole_pixels_are_not_rewritten()
+        {
+            var whole = Rect("Whole", _root, new Vector2(10, 10), new Vector2(0, 1), new Vector2(10, -20));
+            whole.gameObject.AddComponent<PixelAlignment>();
+            var fractions = new RectTransform[16];
+            for (var i = 0; i < fractions.Length; i++)
+            {
+                fractions[i] = Rect("Fraction", _root, new Vector2(10, 10), new Vector2(0, 1), new Vector2(10.3f + i, -20.7f));
+                fractions[i].gameObject.AddComponent<PixelAlignment>();
+            }
+            var queue = (IList<ICanvasElement>)typeof(CanvasUpdateRegistry)
+                .GetField("m_LayoutRebuildQueue", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(CanvasUpdateRegistry.instance);
+            var registered = -1;
+            void Probe()
+            {
+                registered = 0;
+                for (var i = 0; i < queue.Count; i++)
+                    if (queue[i].GetType().Assembly == typeof(PixelAlignment).Assembly) registered++;
+            }
+            Canvas.preWillRenderCanvases += Probe;
+            try
+            {
+                Canvas.ForceUpdateCanvases();
+                yield return null;
+                whole.hasChanged = false;
+                for (var i = 0; i < 4; i++)
+                {
+                    yield return null;
+                    Canvas.ForceUpdateCanvases();
+                    Assert.That(registered, Is.EqualTo(1));
+                    Assert.That(whole.hasChanged, Is.False);
+                    for (var j = 0; j < fractions.Length; j++)
+                        Assert.That(fractions[j].anchoredPosition, Is.EqualTo(new Vector2(10 + j, -21)));
+                }
+            }
+            finally { Canvas.preWillRenderCanvases -= Probe; }
+            foreach (var fraction in fractions) fraction.GetComponent<PixelAlignment>().enabled = false;
+            Assert.That(fractions[3].anchoredPosition.x, Is.EqualTo(13.3f));
+        }
+
+        [UnityTest]
+        public IEnumerator Moving_resizing_or_scaling_an_ancestor_realigns_the_child_in_the_same_update()
+        {
+            var panel = Rect("Panel", _root, new Vector2(200, 200), new Vector2(0, 1), Vector2.zero);
+            var group = Rect("Group", panel, new Vector2(100, 50), new Vector2(.5f, .5f), new Vector2(60, -40));
+            var image = Rect("Image", group, new Vector2(10, 10), new Vector2(0, 1), Vector2.zero);
+            image.anchorMin = image.anchorMax = Vector2.one;
+            var alignment = image.gameObject.AddComponent<PixelAlignment>();
+            alignment.coordinateSpace = panel;
+            void Expect(float x, float y)
+            {
+                Canvas.ForceUpdateCanvases();
+                var topLeft = panel.InverseTransformPoint(image.TransformPoint(new Vector3(image.rect.xMin, image.rect.yMax)));
+                Assert.That(topLeft.x, Is.EqualTo(x).Within(.0001));
+                Assert.That(topLeft.y, Is.EqualTo(y).Within(.0001));
+            }
+            Expect(110, -15);
+            yield return null;
+            group.anchoredPosition = new Vector2(60.75f, -40.25f);
+            Expect(111, -15);
+            yield return null;
+            group.sizeDelta = new Vector2(101.5f, 50);
+            Expect(112, -15);
+            yield return null;
+            group.localScale = new Vector3(.5f, 1, 1);
+            Expect(86, -15);
+            alignment.enabled = false;
+            Assert.That(image.anchoredPosition, Is.EqualTo(Vector2.zero));
         }
 
         [Test]
