@@ -81,7 +81,9 @@ namespace OpenFairy.UGUI
                     };
                     _texture.Create();
                 }
-                _capture.Capture(_texture, render, padding, source.rect);
+                // The captured meshes are pixel-rounded; capturing the rounded rect keeps the texture on whole pixels.
+                _capture.Capture(_texture, render, padding,
+                    new Rect(source.rect.position + (Vector2)PixelAlignment.LocalShift(source), source.rect.size));
                 bounds = _capture.bounds;
                 ProcessPmaTexture(_texture);
                 PositionPresentation(source);

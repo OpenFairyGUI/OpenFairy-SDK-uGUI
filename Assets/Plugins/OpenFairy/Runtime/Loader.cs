@@ -136,6 +136,12 @@ namespace OpenFairy.UGUI
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {
+            PopulateMesh(vh);
+            PixelAlignment.Shift(this, vh);
+        }
+
+        private void PopulateMesh(VertexHelper vh)
+        {
             if (_showComponent || overrideSprite == null)
             {
                 vh.Clear();
@@ -143,7 +149,7 @@ namespace OpenFairy.UGUI
             }
             if (type != Type.Simple)
             {
-                base.OnPopulateMesh(vh);
+                PopulateClip(vh);
                 return;
             }
 

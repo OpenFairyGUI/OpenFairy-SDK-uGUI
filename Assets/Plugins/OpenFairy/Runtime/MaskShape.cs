@@ -13,10 +13,9 @@ namespace OpenFairy.UGUI
         private readonly List<CanvasGroup> _groups = new();
 
         // Source mesh and texture changes arrive through the source's dirty callbacks; placement, ancestor alpha and
-        // activation have no callback, so they are compared before each canvas update. A frame starts with pixel-snapped
-        // elements restored to their layout positions while the mesh is built after snapping, so the inputs are unchanged
-        // when they match either the previous pre-update sample or the last build. Rebuilding unconditionally would dirty
-        // the whole canvas every frame.
+        // activation have no callback, so they are compared before each canvas update. Layout can still move the source
+        // after this sample and before the mesh is built, so the inputs are unchanged when they match either the previous
+        // pre-update sample or the last build. Rebuilding unconditionally would dirty the whole canvas every frame.
         private bool _sourceActive;
         private Matrix4x4 _matrix, _builtMatrix;
         private float _alpha, _builtAlpha;

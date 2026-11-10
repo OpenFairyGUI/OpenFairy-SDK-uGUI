@@ -4,22 +4,27 @@
 
 ## 当前结论
 
+### 2026-11-10 像素对齐改为平移网格
+
+- PixelAlignment不再写Transform，只平移渲染网格：SDK图形在建网格末尾平移自身及全部祖先的取整位移，同节点其他uGUI图形经网格修改器、TMP在上传前平移顶点；旋转或缩放后重建网格。RectMask2D以padding平移裁剪框，编辑态用属性快照，不形成覆盖；ObjectFilter按平移后的矩形捕获。TMP输入框的Text/Placeholder烘焙对齐，更新后需重新Migrate。
+- Builtin完整Editor **266/266**、PlayMode **287/287**，TMP完整Editor **290/290**、PlayMode **315/315**。PixelAlignment测试改为读取渲染网格；新增子图形/原生图形/RectMask2D跟随、旋转与缩放下保持祖先取整、TMP顶点平移三项回归。整屏对照FairyGUI编辑器导出图，结果与原写Transform版本相同。
+
 ### 2026-11-06 像素对齐按需写入
 
-- PixelAlignment改为一次全局布局登记：按层级深度父先子后，在更浅层PostLayout写入之后、裁剪之前统一对齐，取整算术与原逐实例Rebuild相同。整像素元素静止时不再写位置；有小数偏移的元素仍每帧还原并重新应用显示偏移，保证帧内脚本读写逻辑坐标。
-- Builtin完整Editor **266/266**、PlayMode **284/284**，TMP完整Editor **290/290**、PlayMode **311/311**。新增两项PlayMode回归：17个静止实例只占一个布局登记且整像素元素不被改写；祖先移动、改尺寸、缩放后子级在同一次更新重新对齐，停用后恢复原逻辑坐标。仅改运行时，序列化字段不变。
+- PixelAlignment改为一次全局布局登记：按层级深度父先子后，在更浅层PostLayout写入之后、裁剪之前统一对齐，取整算术与原逐实例Rebuild相同。
+- Builtin完整Editor **266/266**、PlayMode **284/284**，TMP完整Editor **290/290**、PlayMode **311/311**。新增两项PlayMode回归：17个静止实例只占一个布局登记；祖先移动、改尺寸、缩放后子级在同一次更新重新对齐。仅改运行时，序列化字段不变。
 
 ### 2026-11-04 编辑态布局预览与实例覆盖
 
-- 像素对齐通过编辑器属性快照显示临时坐标，序列化保留布局坐标和已有实例修改。原始Prefab更新仍可传递到已对齐的实例；编辑器内部API仅作静态绑定，Player中不包含反射或快照。
-- 滚动条将沿轴位置、尺寸与anchors声明为驱动属性，预览几何和显隐不形成场景定制。Migrate保存其像素对齐预览所有权；整轮迁移期间恢复布局位置并暂停显示偏移。
+- 像素对齐不写坐标；RectMask2D的裁剪偏移通过编辑器属性快照显示，序列化保留原padding和已有实例修改。原始Prefab更新仍可传递到已对齐的实例；编辑器内部API仅作静态绑定，Player中不包含反射或快照。
+- 滚动条将沿轴位置、尺寸与anchors声明为驱动属性，预览几何和显隐不形成场景定制。整轮迁移期间暂停像素对齐。
 - AuthoredSizeFitter在编辑态保存实际测量尺寸，避免原生驱动默认值随重建顺序变化；Player继续使用原生ContentSizeFitter。Group编辑态保存排布结果，不覆盖子fitter的驱动状态。更新后需要重新Migrate。
 - Builtin完整Editor **266/266**、PlayMode **282/282**，TMP完整Editor **290/290**、PlayMode **309/309**。新增11项回归覆盖嵌套修改、源更新传递、Prefab保存重载、外部位置写入和滚动条显隐；独立场景保存/重开保持原始布局坐标且无临时位置覆盖。这些验证不代表完整画面逐像素一致。
 
 ### 2026-11-04 编辑器pivot位置兼容
 
 - 新增默认关闭的Migrate选项editorPivotRounding。编辑器FObject在调用SDK前对pivot位置(int)截断，原SDK的GObject不截断；恢复工程与旧SDK的DisplayObject.cs逐字相同。按源数据在Migrate.SetRect和XY控制器位置页提前转换，不在运行时从RectTransform反推并截断；合法负整数-2可因RT父pivot算术读成-1.999998，运行时方案因此被否定，未发布该原型。
-- PixelAlignment继续只负责原SDK可选显示原点Round，改用anchor坐标累计避免半像素边界消去误差，并用精确anchoredPosition3D副本恢复逻辑位置，极小偏移不因Vector3近似等于零而丢失。没有新增运行时Editor模式、逻辑对象图或scale/UV取整。
+- PixelAlignment继续只负责原SDK可选显示原点Round，改用anchor坐标累计避免半像素边界消去误差。没有新增运行时Editor模式、逻辑对象图或scale/UV取整。
 - Builtin完整Editor **255/255**、PlayMode **282/282**；TMP完整Editor **279/279**、PlayMode **309/309**。Builtin到TMP的域重载令一次CLI状态请求socket hang up；Builtin结果保留，恢复连接后同一源码完成TMP两套，源码哈希期间不变。旧SDK288变换仍最大3.14568e-5；用旧SDK实际DisplayObject执行恢复Editor的前置截断，576组合与Migrate生成几何对照最大.000110033，全部小于.001；这是源码规则复现，不是用户IL2CPP编辑器逐方法验证。
 
 ### 2026-11-04 烘焙与静态绑定质量复核
@@ -40,7 +45,7 @@
 ### 2026-11-04 可选 makePixelPerfect
 
 - `MigrationSettings.makePixelPerfect` 默认 false，保存到 `ProjectSettings/OpenFairySettings.asset`；Project Settings/OpenFairy 的 Make Pixel Perfect 修改后重新 Migrate。迁移烘焙 PixelAlignment，未旋转显示对象在布局结束后按作者父坐标取整，保留尺寸、缩放、UV 与小数动画步长；分组/蒙版辅助节点不变成新的作者坐标系，滚动内容使用自身 content 坐标系，Builtin 行内图片也烘焙对齐。禁用再迁移移除组件，不使用 Canvas.pixelPerfect 替代。
-- 避免世界坐标往返：恰好 .5 的本地坐标可能在矩阵转换后略微越过舍入边界，导致整整一像素错误。用本地父链累计位移后再取整，并在下一帧恢复精确的布局位置。旋转判断使用 localEulerAngles，不能用 Quaternion 的近似相等判定漏掉 .01 度旋转。
+- 避免世界坐标往返：恰好 .5 的本地坐标可能在矩阵转换后略微越过舍入边界，导致整整一像素错误。用本地父链累计位移后再取整。旋转判断使用 localEulerAngles，不能用 Quaternion 的近似相等判定漏掉 .01 度旋转。
 - Loader 编辑器中心/中线使用 Floor，独立于通用开关；右/底差值仍保留小数，开关再控制内容显示原点的 Round。手动创建的 Loader 缺省仍为原 SDK 的小数居中。编辑器规则来源为恢复的编辑器源码，不能据此声明已核对特定 IL2CPP 编辑器二进制。
 - 独立 Unity6000.6.7f1 Builtin Editor **242/242**、PlayMode **213/213**。使用未改动的原版 FairyGUI SDK 实际运行导出 288 组父子变换，包含正负缩放、pivot、父子旋转及开关两态；OpenFairy 四角坐标全部在 .001 阈值内，最大差 **0.0000314568**。导入回归覆盖作者组坐标、尺寸、保存重载、禁用移除与连续发布稳定。
 

@@ -136,7 +136,7 @@ namespace OpenFairy.UGUI.Tests
             var image = source.gameObject.AddComponent<UnityEngine.UI.Image>();
             image.sprite = Sprite(Color.white);
             var alpha = source.gameObject.AddComponent<CanvasGroup>();
-            // A pixel-snapped source alternates between layout and rendered positions every frame without changing.
+            // A pixel-snapped source keeps its layout transform; only its rounded mesh reaches the stencil.
             source.anchoredPosition = new Vector2(.3f, -.3f);
             source.gameObject.AddComponent<PixelAlignment>();
             shape.source = source.gameObject.AddComponent<MaskSource>();

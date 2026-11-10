@@ -6,13 +6,13 @@
 
 This is authored-data conversion, not an extra runtime transform mode. Runtime movement and size changes retain the normal uGUI/SDK behavior; the option does not recreate the Editor's live `FObject` model. Reconstructing the original pivot from a RectTransform and truncating it every frame is unsafe: Unity can report an authored `-2` as `-1.999998` after parent-pivot arithmetic.
 
-For display-origin rounding, PixelAlignment accumulates anchor coordinates in each authored parent space, avoiding cancellation of the parent's pivot at half-pixel boundaries. It restores the exact anchored position before the next logical update, including corrections smaller than Vector3's approximate-zero comparison.
+For display-origin rounding, PixelAlignment accumulates anchor coordinates in each authored parent space, avoiding cancellation of the parent's pivot at half-pixel boundaries. The rounding only moves rendered geometry; RectTransforms keep their layout positions. A graphic moves by the sum of its own and every ancestor's rounding: SDK graphics apply it while populating their mesh, before any mesh modifier copies the vertices, so mask templates and captures follow; other uGUI graphics on an aligned object use a mesh modifier; TMP text, which has no mesh modifiers, moves its vertices before upload. Meshes hold the rounding in their local terms, so a changed scale or rotation, e.g. from a transition, rebuilds them while any rounding applies. RectMask2D clips with its layout rect, so its padding moves the clip by the same sum; Migrate never authors that padding. Object filters capture the rounded rect, keeping the texture on whole pixels.
 
 The SDK also rounds intermediate layout values even when that option is off. These rules always apply:
 
 | Path | Rule |
 |---|---|
-| Display origin | With makePixelPerfect, Round in the authored parent coordinate system after layout; skip rotated objects. Restore the exact logical pose before the next update. |
+| Display origin | With makePixelPerfect, Round in the authored parent coordinate system after layout; skip rotated objects. Move the rendered mesh and clip rect, never the transform. |
 | Loader | Editor center/middle Floor is separate from optional origin Round. Right/bottom offsets retain fractions. |
 | List single column/row | Advance by Ceil of each item's height/width; Ceil the cross-axis extent. Center the whole content block with an integer cast. |
 | Horizontal flow | Ceil item widths and line heights. With fixed column count and auto sizing, distribute remaining width with Round. |

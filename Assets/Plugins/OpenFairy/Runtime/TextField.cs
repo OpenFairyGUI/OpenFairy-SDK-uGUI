@@ -197,6 +197,12 @@ namespace OpenFairy.UGUI
 
         protected override void OnPopulateMesh(VertexHelper toFill)
         {
+            PopulateMesh(toFill);
+            PixelAlignment.Shift(this, toFill);
+        }
+
+        private void PopulateMesh(VertexHelper toFill)
+        {
             toFill.Clear();
             EnsureLayout();
             var rect = rectTransform.rect;

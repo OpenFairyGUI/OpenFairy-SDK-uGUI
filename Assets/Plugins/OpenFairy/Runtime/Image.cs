@@ -12,6 +12,12 @@ namespace OpenFairy.UGUI
 
         protected override void OnPopulateMesh(VertexHelper toFill)
         {
+            PopulateMesh(toFill);
+            PixelAlignment.Shift(this, toFill);
+        }
+
+        private void PopulateMesh(VertexHelper toFill)
+        {
             // 平铺：按 FairyGUI 语义直接生成单 quad（贴图 wrapMode=Repeat，UV 从原点铺出 N 格），把 flip 并进 UV。
             // FairyGUI 从内容左上角起铺、残缺格落在右下；单 quad 横向原点天然在左边（一致），但纵向原点
             // 落在底边（Unity Y-up），需把顶边对齐到整格边界，让残缺格回到底边。Unity 自带 Tiled 缺这步，

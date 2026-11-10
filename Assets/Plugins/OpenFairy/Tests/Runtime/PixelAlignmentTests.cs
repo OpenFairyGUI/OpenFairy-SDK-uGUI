@@ -24,6 +24,20 @@ namespace OpenFairy.UGUI.Tests
             return rect;
         }
 
+        // Where the rendered top-left corner of a graphic's mesh lands in another space.
+        private static Vector2 Rendered(Graphic graphic, Transform space)
+        {
+            var bounds = graphic.canvasRenderer.GetMesh().bounds;
+            return space.InverseTransformPoint(graphic.transform.TransformPoint(new Vector3(bounds.min.x, bounds.max.y)));
+        }
+
+        private static void ExpectRendered(Graphic graphic, Transform space, float x, float y)
+        {
+            var point = Rendered(graphic, space);
+            Assert.That(point.x, Is.EqualTo(x).Within(.0002), graphic.name + " x");
+            Assert.That(point.y, Is.EqualTo(y).Within(.0002), graphic.name + " y");
+        }
+
         [SetUp]
         public void Setup()
         {
@@ -46,14 +60,10 @@ namespace OpenFairy.UGUI.Tests
             var background = Rect("Background", panel, new Vector2(671, 450), new Vector2(0, 1), new Vector2(0, 65));
             var graphic = background.gameObject.AddComponent<Image>();
             graphic.raycastTarget = false;
-            Canvas.ForceUpdateCanvases();
-            Assert.That(_root.InverseTransformPoint(panel.TransformPoint(new Vector3(0, 385))).y, Is.EqualTo(-1094).Within(.0002));
-            Assert.That(_root.InverseTransformPoint(background.TransformPoint(new Vector3(0, 0))).y, Is.EqualTo(-1035.5f).Within(.0002));
-            Assert.That(background.rect.width, Is.EqualTo(671));
             for (var i = 0; i < 8; i++) Canvas.ForceUpdateCanvases();
-            Assert.That(_root.InverseTransformPoint(panel.TransformPoint(new Vector3(0, 385))).y, Is.EqualTo(-1094).Within(.0002));
-            panel.GetComponent<PixelAlignment>().enabled = false;
-            Assert.That(panel.anchoredPosition.y, Is.EqualTo(-1440).Within(.0002));
+            ExpectRendered(graphic, _root, 0, -1035.5f);
+            Assert.That(panel.anchoredPosition.y, Is.EqualTo(-1440));
+            Assert.That(background.rect.width, Is.EqualTo(671));
         }
 
         [Test]
@@ -66,59 +76,63 @@ namespace OpenFairy.UGUI.Tests
             var group = Rect("Group", panel, new Vector2(70, 70), new Vector2(0, 1), new Vector2(10.25f, -20.75f));
             var image = Rect("Image", group, new Vector2(10.4f, 8.6f), new Vector2(0, 1), new Vector2(.5f, -.5f));
             image.gameObject.AddComponent<PixelAlignment>().coordinateSpace = panel;
+            var graphic = image.gameObject.AddComponent<Image>();
             Canvas.ForceUpdateCanvases();
-            var point = _root.InverseTransformPoint(image.TransformPoint(image.rect.min + new Vector2(0, image.rect.height)));
-            Assert.That(point.x, Is.EqualTo(9.9f).Within(.0001));
-            Assert.That(point.y, Is.EqualTo(-18.9f).Within(.0001));
+            ExpectRendered(graphic, _root, 9.9f, -18.9f);
             Assert.That(image.rect.size, Is.EqualTo(new Vector2(10.4f, 8.6f)));
         }
 
         [TestCase(15)]
         [TestCase(.01f)]
-        public void Rotation_skips_own_rounding_and_an_absolute_write_is_not_undone(float rotation)
+        public void Rotation_skips_own_rounding_and_the_layout_position_is_never_written(float rotation)
         {
             var panel = Rect("Panel", _root, new Vector2(10, 10), new Vector2(0, 1), new Vector2(10.3f, -20.7f));
             panel.localRotation = Quaternion.Euler(0, 0, rotation);
-            var alignment = panel.gameObject.AddComponent<PixelAlignment>();
+            panel.gameObject.AddComponent<PixelAlignment>();
+            var graphic = panel.gameObject.AddComponent<Image>();
             Canvas.ForceUpdateCanvases();
-            Assert.That(panel.anchoredPosition, Is.EqualTo(new Vector2(10.3f, -20.7f)));
+            ExpectRendered(graphic, panel, 0, 0);
             panel.localRotation = Quaternion.identity;
             Canvas.ForceUpdateCanvases();
-            Assert.That(panel.anchoredPosition, Is.EqualTo(new Vector2(10, -21)));
+            ExpectRendered(graphic, _root, 10, -21);
             panel.anchoredPosition = new Vector2(30.2f, -40.8f);
             Canvas.ForceUpdateCanvases();
-            alignment.enabled = false;
+            ExpectRendered(graphic, _root, 30, -41);
             Assert.That(panel.anchoredPosition, Is.EqualTo(new Vector2(30.2f, -40.8f)));
         }
 
         [UnityTest]
-        public IEnumerator Fractional_motion_does_not_accumulate_the_previous_render_offset()
+        public IEnumerator Fractional_motion_rounds_every_frame_from_the_layout_position()
         {
             var panel = Rect("Panel", _root, new Vector2(10, 10), new Vector2(0, 1), new Vector2(10.3f, -20.7f));
-            var alignment = panel.gameObject.AddComponent<PixelAlignment>();
+            panel.gameObject.AddComponent<PixelAlignment>();
+            var graphic = panel.gameObject.AddComponent<Image>();
             for (var i = 0; i < 8; i++)
             {
                 yield return null;
                 panel.anchoredPosition += new Vector2(.125f, -.125f);
                 Canvas.ForceUpdateCanvases();
+                ExpectRendered(graphic, _root, Mathf.Round(panel.anchoredPosition.x), Mathf.Round(panel.anchoredPosition.y));
                 yield return new WaitForEndOfFrame();
             }
-            alignment.enabled = false;
             Assert.That(panel.anchoredPosition.x, Is.EqualTo(11.3f).Within(.0001));
             Assert.That(panel.anchoredPosition.y, Is.EqualTo(-21.7f).Within(.0001));
         }
 
         [UnityTest]
-        public IEnumerator Static_elements_share_one_registration_and_whole_pixels_are_not_rewritten()
+        public IEnumerator Static_elements_share_one_registration_and_are_not_rebuilt()
         {
-            var whole = Rect("Whole", _root, new Vector2(10, 10), new Vector2(0, 1), new Vector2(10, -20));
-            whole.gameObject.AddComponent<PixelAlignment>();
-            var fractions = new RectTransform[16];
-            for (var i = 0; i < fractions.Length; i++)
+            var graphics = new Image[17];
+            for (var i = 0; i < graphics.Length; i++)
             {
-                fractions[i] = Rect("Fraction", _root, new Vector2(10, 10), new Vector2(0, 1), new Vector2(10.3f + i, -20.7f));
-                fractions[i].gameObject.AddComponent<PixelAlignment>();
+                // The first element sits on whole pixels.
+                var rect = Rect("Element", _root, new Vector2(10, 10), new Vector2(0, 1),
+                    i == 0 ? new Vector2(10, -20) : new Vector2(10.3f + i, -20.7f));
+                rect.gameObject.AddComponent<PixelAlignment>();
+                graphics[i] = rect.gameObject.AddComponent<Image>();
             }
+            var rebuilt = 0;
+            foreach (var graphic in graphics) graphic.RegisterDirtyVerticesCallback(() => rebuilt++);
             var queue = (IList<ICanvasElement>)typeof(CanvasUpdateRegistry)
                 .GetField("m_LayoutRebuildQueue", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(CanvasUpdateRegistry.instance);
             var registered = -1;
@@ -133,20 +147,18 @@ namespace OpenFairy.UGUI.Tests
             {
                 Canvas.ForceUpdateCanvases();
                 yield return null;
-                whole.hasChanged = false;
+                rebuilt = 0;
                 for (var i = 0; i < 4; i++)
                 {
                     yield return null;
                     Canvas.ForceUpdateCanvases();
                     Assert.That(registered, Is.EqualTo(1));
-                    Assert.That(whole.hasChanged, Is.False);
-                    for (var j = 0; j < fractions.Length; j++)
-                        Assert.That(fractions[j].anchoredPosition, Is.EqualTo(new Vector2(10 + j, -21)));
+                    Assert.That(rebuilt, Is.Zero);
+                    for (var j = 1; j < graphics.Length; j++) ExpectRendered(graphics[j], _root, 10 + j, -21);
                 }
             }
             finally { Canvas.preWillRenderCanvases -= Probe; }
-            foreach (var fraction in fractions) fraction.GetComponent<PixelAlignment>().enabled = false;
-            Assert.That(fractions[3].anchoredPosition.x, Is.EqualTo(13.3f));
+            Assert.That(graphics[3].rectTransform.anchoredPosition.x, Is.EqualTo(13.3f));
         }
 
         [UnityTest]
@@ -156,14 +168,12 @@ namespace OpenFairy.UGUI.Tests
             var group = Rect("Group", panel, new Vector2(100, 50), new Vector2(.5f, .5f), new Vector2(60, -40));
             var image = Rect("Image", group, new Vector2(10, 10), new Vector2(0, 1), Vector2.zero);
             image.anchorMin = image.anchorMax = Vector2.one;
-            var alignment = image.gameObject.AddComponent<PixelAlignment>();
-            alignment.coordinateSpace = panel;
+            image.gameObject.AddComponent<PixelAlignment>().coordinateSpace = panel;
+            var graphic = image.gameObject.AddComponent<Image>();
             void Expect(float x, float y)
             {
                 Canvas.ForceUpdateCanvases();
-                var topLeft = panel.InverseTransformPoint(image.TransformPoint(new Vector3(image.rect.xMin, image.rect.yMax)));
-                Assert.That(topLeft.x, Is.EqualTo(x).Within(.0001));
-                Assert.That(topLeft.y, Is.EqualTo(y).Within(.0001));
+                ExpectRendered(graphic, panel, x, y);
             }
             Expect(110, -15);
             yield return null;
@@ -175,20 +185,73 @@ namespace OpenFairy.UGUI.Tests
             yield return null;
             group.localScale = new Vector3(.5f, 1, 1);
             Expect(86, -15);
-            alignment.enabled = false;
             Assert.That(image.anchoredPosition, Is.EqualTo(Vector2.zero));
         }
 
         [Test]
-        public void Tiny_render_corrections_restore_the_exact_logical_position()
+        public void Rotating_or_scaling_a_child_keeps_the_rounding_of_its_ancestors()
         {
-            var position = new Vector2(.000001f, -.000001f);
-            var panel = Rect("Panel", _root, new Vector2(10, 10), new Vector2(0, 1), position);
-            var alignment = panel.gameObject.AddComponent<PixelAlignment>();
-            for (var i = 0; i < 8; i++) Canvas.ForceUpdateCanvases();
-            alignment.enabled = false;
-            Assert.That(panel.anchoredPosition, Is.EqualTo(position));
+            var panel = Rect("Panel", _root, new Vector2(100, 100), new Vector2(0, 1), new Vector2(10.3f, -20.7f));
+            panel.gameObject.AddComponent<PixelAlignment>();
+            var icon = Rect("Icon", panel, new Vector2(10, 10), new Vector2(.5f, .5f), new Vector2(20, -20));
+            icon.gameObject.AddComponent<PixelAlignment>();
+            var graphic = icon.gameObject.AddComponent<Image>();
+            foreach (var (angle, scale) in new[] { (0f, 1f), (30f, 1f), (90f, 1f), (0f, 2f) })
+            {
+                icon.localRotation = Quaternion.Euler(0, 0, angle);
+                icon.localScale = new Vector3(scale, scale, 1);
+                Canvas.ForceUpdateCanvases();
+                var center = _root.InverseTransformPoint(icon.TransformPoint(graphic.canvasRenderer.GetMesh().bounds.center));
+                Assert.That(center.x, Is.EqualTo(30).Within(.0002), $"{angle} {scale}");
+                Assert.That(center.y, Is.EqualTo(-41).Within(.0002), $"{angle} {scale}");
+            }
         }
+
+        [Test]
+        public void Children_native_graphics_and_rect_masks_follow_the_rounded_ancestors()
+        {
+            var panel = Rect("Panel", _root, new Vector2(100, 100), new Vector2(0, 1), new Vector2(10.3f, -20.7f));
+            var alignment = panel.gameObject.AddComponent<PixelAlignment>();
+            var mask = panel.gameObject.AddComponent<RectMask2D>();
+            var child = Rect("Child", panel, new Vector2(10, 10), new Vector2(0, 1), new Vector2(5, -5)).gameObject.AddComponent<Image>();
+            var native = Rect("Native", panel, new Vector2(10, 10), new Vector2(0, 1), new Vector2(20.4f, -5));
+            native.gameObject.AddComponent<PixelAlignment>();
+            var raw = native.gameObject.AddComponent<RawImage>();
+            Canvas.ForceUpdateCanvases();
+            ExpectRendered(child, _root, 15, -26);
+            ExpectRendered(raw, _root, 30, -26);
+            Assert.That(mask.canvasRect.xMin + mask.padding.x, Is.EqualTo(10).Within(.0002));
+            Assert.That(mask.canvasRect.yMax - mask.padding.w, Is.EqualTo(-21).Within(.0002));
+            panel.anchoredPosition = new Vector2(10.6f, -20.7f);
+            Canvas.ForceUpdateCanvases();
+            ExpectRendered(child, _root, 16, -26);
+            Assert.That(mask.canvasRect.xMin + mask.padding.x, Is.EqualTo(11).Within(.0002));
+            alignment.enabled = false;
+            Canvas.ForceUpdateCanvases();
+            ExpectRendered(child, _root, 15.6f, -25.7f);
+            ExpectRendered(raw, _root, 30.6f, -25.7f);
+        }
+
+#if FAIRYGUI_TMPRO
+        [Test]
+        public void Tmp_vertices_move_with_the_rounding_without_changing_the_layout()
+        {
+            var panel = Rect("Panel", _root, new Vector2(100, 40), new Vector2(0, 1), new Vector2(10.3f, -20.7f));
+            // Migrate adds the alignment after the text component.
+            var text = panel.gameObject.AddComponent<TMPro.TextMeshProUGUI>();
+            var alignment = panel.gameObject.AddComponent<PixelAlignment>();
+            text.font = TMPro.TMP_Settings.defaultFontAsset;
+            text.text = "I";
+            Vector3 Shift()
+            {
+                Canvas.ForceUpdateCanvases();
+                return text.mesh.vertices[0] - text.textInfo.characterInfo[0].vertex_BL.position;
+            }
+            Assert.That(Vector3.Distance(Shift(), new Vector3(-.3f, -.3f)), Is.LessThan(.0002f));
+            alignment.enabled = false;
+            Assert.That(Shift().magnitude, Is.LessThan(.0002f));
+        }
+#endif
 
         [TestCase(80, 46, 80, 54.2f, Loader.FillType.ScaleMatchHeight, -8, 0)]
         [TestCase(160, 80, 101, 63, Loader.FillType.None, -30, -9)]

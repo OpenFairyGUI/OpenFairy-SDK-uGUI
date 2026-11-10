@@ -43,6 +43,12 @@ namespace OpenFairy.UGUI
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {
+            PopulateMesh(vh);
+            PixelAlignment.Shift(this, vh);
+        }
+
+        private void PopulateMesh(VertexHelper vh)
+        {
             vh.Clear();
             _rect = GetPixelAdjustedRect();
             _vh = vh;

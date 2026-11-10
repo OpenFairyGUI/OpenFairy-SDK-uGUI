@@ -36,6 +36,7 @@ namespace OpenFairy.UGUI.Tests
             rect.localScale = new Vector3(.8f, .8f, 1);
             rect.anchoredPosition = new Vector2(616, -175);
             child.AddComponent<PixelAlignment>();
+            child.AddComponent<RectMask2D>();
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, _folder + "/Original.prefab");
             UnityEngine.Object.DestroyImmediate(root);
             _instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, _scene);
@@ -54,18 +55,22 @@ namespace OpenFairy.UGUI.Tests
             for (var i = 0; i < 8; i++) Canvas.ForceUpdateCanvases();
         }
         private PropertyModification[] PositionOverrides() => PrefabUtility.GetPropertyModifications(_instance)
-            .Where(m => m.target != null && m.target.name == "Button" &&
-                (m.propertyPath.StartsWith("m_AnchoredPosition") || m.propertyPath.StartsWith("m_LocalPosition"))).ToArray();
+            .Where(m => m.target != null && m.target.name == "Button" && (m.propertyPath.StartsWith("m_AnchoredPosition")
+                || m.propertyPath.StartsWith("m_LocalPosition") || m.propertyPath.StartsWith("m_Padding"))).ToArray();
 
         [Test]
-        public void Display_offset_does_not_become_a_prefab_override_or_saved_position()
+        public void Display_offset_does_not_become_a_prefab_override_or_saved_value()
         {
             Render();
-            Assert.That(Rect.anchoredPosition.x, Is.EqualTo(615.8f).Within(.0001));
+            var mask = Rect.GetComponent<RectMask2D>();
+            Assert.That(Rect.anchoredPosition.x, Is.EqualTo(616));
+            Assert.That(mask.padding.x, Is.EqualTo(-.2f).Within(.0001));
             PrefabUtility.RecordPrefabInstancePropertyModifications(Rect);
+            PrefabUtility.RecordPrefabInstancePropertyModifications(mask);
             Assert.That(PositionOverrides(), Is.Empty);
             var saved = PrefabUtility.SaveAsPrefabAsset(_instance, _folder + "/Saved.prefab");
             Assert.That(((RectTransform)saved.transform.GetChild(0)).anchoredPosition.x, Is.EqualTo(616));
+            Assert.That(saved.transform.GetChild(0).GetComponent<RectMask2D>().padding, Is.EqualTo(Vector4.zero));
             var clone = (GameObject)PrefabUtility.InstantiatePrefab(saved, _scene);
             try
             {
@@ -177,7 +182,7 @@ namespace OpenFairy.UGUI.Tests
                 ((RectTransform)barObject.transform).sizeDelta = new Vector2(100, 10);
                 var handle = new GameObject("Handle", typeof(RectTransform));
                 handle.transform.SetParent(barObject.transform, false);
-                if (pixels) handle.AddComponent<PixelAlignment>().editorPositionDriven = true;
+                if (pixels) handle.AddComponent<PixelAlignment>();
                 var bar = barObject.AddComponent<AuthoredScrollbar>();
                 bar.handleRect = (RectTransform)handle.transform;
                 bar.direction = Scrollbar.Direction.LeftToRight;

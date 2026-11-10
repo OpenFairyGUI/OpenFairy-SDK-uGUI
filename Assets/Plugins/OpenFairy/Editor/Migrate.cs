@@ -2116,7 +2116,6 @@ namespace OpenFairy.UGUI.Editor
             grip.offsetMin = horizontal ? new Vector2(0, point.y - size.y - track.rect.yMin) : new Vector2(point.x - track.rect.xMin, 0);
             grip.offsetMax = horizontal ? new Vector2(0, point.y - track.rect.yMax) : new Vector2(point.x + size.x - track.rect.xMax, 0);
             bar.handleRect = grip;
-            if (grip.TryGetComponent<PixelAlignment>(out var alignment)) alignment.editorPositionDriven = true;
             bar.targetGraphic = grip.GetComponent<Graphic>();
             bar.transition = Selectable.Transition.None;
             bar.navigation = new Navigation { mode = Navigation.Mode.None };
@@ -2683,6 +2682,8 @@ namespace OpenFairy.UGUI.Editor
 
             var textGo = NewChild("Text", textAreaRect, typeof(TextMeshProUGUI));
             var text = textGo.GetComponent<TextMeshProUGUI>();
+            // TMP builds its mesh without modifiers; only an alignment on its own object moves the vertices.
+            if (MigrationSettings.instance.makePixelPerfect) textGo.AddComponent<PixelAlignment>();
             ConfigureTmpText(text, element, owner, true);
             text.text = "";
             text.raycastTarget = false;
@@ -2702,6 +2703,7 @@ namespace OpenFairy.UGUI.Editor
             if (!(field.placeholder is TMP_Text placeholder))
             {
                 var go = NewChild("Placeholder", field.textViewport, typeof(TextMeshProUGUI));
+                if (MigrationSettings.instance.makePixelPerfect) go.AddComponent<PixelAlignment>();
                 placeholder = go.GetComponent<TextMeshProUGUI>();
                 var text = field.textComponent;
                 placeholder.font = text.font;

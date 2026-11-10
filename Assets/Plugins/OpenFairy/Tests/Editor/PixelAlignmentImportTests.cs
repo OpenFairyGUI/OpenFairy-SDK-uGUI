@@ -104,8 +104,10 @@ namespace OpenFairy.UGUI.Tests
                     Kind=Schema.DisplayKind.Graph,Position=new Vector2(x,0),Pivot=new Vector2(.5f,.5f),
                     Anchor=anchor,Scale=new Vector2(scale,scale)}, new Vector2(width,80), parent});
                 if (pixels) rect.gameObject.AddComponent<PixelAlignment>();
+                var renderer = rect.gameObject.AddComponent<Image>().canvasRenderer;
                 for (var i = 0; i < 8; i++) Canvas.ForceUpdateCanvases();
-                var left = parent.InverseTransformPoint(rect.TransformPoint(new Vector3(rect.rect.xMin, rect.rect.yMax))).x;
+                var bounds = renderer.GetMesh().bounds;
+                var left = parent.InverseTransformPoint(rect.TransformPoint(new Vector3(bounds.min.x, bounds.max.y))).x;
                 Assert.That(left, Is.EqualTo(expected).Within(.0001));
                 Assert.That(rect.rect.size, Is.EqualTo(new Vector2(width, 80)));
                 Assert.That(rect.localScale.x, Is.EqualTo(scale));
@@ -183,7 +185,8 @@ namespace OpenFairy.UGUI.Tests
                     panel = UnityEngine.Object.Instantiate(asset, canvas.transform, false).GetComponent<GroupLayoutTestPanel>();
                     var root = (RectTransform)panel.transform;
                     Canvas.ForceUpdateCanvases();
-                    var point = root.InverseTransformPoint(panel.m_First.TransformPoint(new Vector3(panel.m_First.rect.xMin, panel.m_First.rect.yMax)));
+                    var bounds = panel.m_First.GetComponent<UnityEngine.UI.Graphic>().canvasRenderer.GetMesh().bounds;
+                    var point = root.InverseTransformPoint(panel.m_First.TransformPoint(new Vector3(bounds.min.x, bounds.max.y)));
                     Assert.That(point.x - root.rect.xMin, Is.EqualTo(!enabled ? 10.5f : pixels ? 10 : 9.8f).Within(.0001));
                     Assert.That(root.rect.yMax - point.y, Is.EqualTo(!enabled ? 20.5f : pixels ? 20 : 19.7f).Within(.0001));
                     Assert.That(Vector2.Distance(panel.m_First.rect.size, new Vector2(10.4f, 8.6f)), Is.LessThan(.0001));

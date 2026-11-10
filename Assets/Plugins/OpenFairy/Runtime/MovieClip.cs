@@ -9,6 +9,14 @@ namespace OpenFairy.UGUI
     // timeScale、Play（播放区间/次数/结束帧）。单帧步进（同 FairyGUI OnTimer，非一次排空）。
     public class MovieClip : UnityEngine.UI.Image
     {
+        protected override void OnPopulateMesh(VertexHelper vh)
+        {
+            PopulateClip(vh);
+            PixelAlignment.Shift(this, vh);
+        }
+
+        private protected void PopulateClip(VertexHelper vh) => base.OnPopulateMesh(vh);
+
         private enum Status
         {
             Playing,
