@@ -71,16 +71,17 @@ namespace OpenFairy.UGUI
 #endif
             anchorMin[axis] = movement;
             anchorMax[axis] = movement + size;
-            handleRect.anchorMin = anchorMin;
-            handleRect.anchorMax = anchorMax;
+            // Geometry is reapplied every canvas update; only changed values are written, since each write dirties the canvas.
+            if (!handleRect.anchorMin.Equals(anchorMin)) handleRect.anchorMin = anchorMin;
+            if (!handleRect.anchorMax.Equals(anchorMax)) handleRect.anchorMax = anchorMax;
             var dimensions = handleRect.sizeDelta;
             var anchored = handleRect.anchoredPosition;
             dimensions[axis] = length - size * extent;
             // Set the pivot directly instead of cancelling independently rounded offsetMin/offsetMax.
             anchored[axis] = (alongX ? position : extent - position - length) + length * handleRect.pivot[axis]
                 - (movement + size * handleRect.pivot[axis]) * extent;
-            handleRect.sizeDelta = dimensions;
-            handleRect.anchoredPosition = anchored;
+            if (!handleRect.sizeDelta.Equals(dimensions)) handleRect.sizeDelta = dimensions;
+            if (!handleRect.anchoredPosition.Equals(anchored)) handleRect.anchoredPosition = anchored;
             UpdateVisibility();
         }
 

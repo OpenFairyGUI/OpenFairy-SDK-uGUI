@@ -230,6 +230,38 @@ namespace OpenFairy.UGUI.Tests
         }
 
         [UnityTest]
+        public IEnumerator Settled_whole_pixel_scroll_does_not_rewrite_content_or_grip()
+        {
+            var root = Rect("Scroll", null, new Vector2(200, 120), Vector2.zero);
+            var viewport = Rect("viewport", root, root.rect.size, Vector2.zero);
+            var content = Rect("content", viewport, new Vector2(200, 300), Vector2.zero);
+            Rect("Text", content, new Vector2(200, 300), Vector2.zero);
+            var pane = root.gameObject.AddComponent<ScrollPane>();
+            pane.viewport = viewport;
+            pane.content = content;
+            pane.horizontal = false;
+            var track = Rect("Scrollbar", root, new Vector2(20, 120), new Vector2(200, 0));
+            var grip = Rect("Grip", track, new Vector2(20, 20), Vector2.zero);
+            var bar = track.gameObject.AddComponent<AuthoredScrollbar>();
+            bar.pane = pane;
+            bar.handleRect = grip;
+            pane.verticalScrollbar = bar;
+            yield return null;
+            yield return null;
+            pane.SetPosition(new Vector2(0, 50), false);
+            for (var i = 0; i < 3; i++) yield return null;
+            Assert.That(pane.position.y, Is.EqualTo(50).Within(.01f));
+            content.hasChanged = grip.hasChanged = false;
+            for (var i = 0; i < 3; i++)
+            {
+                yield return null;
+                Assert.That(content.hasChanged, Is.False, "content frame " + i);
+                Assert.That(grip.hasChanged, Is.False, "grip frame " + i);
+            }
+            Assert.That(pane.position.y, Is.EqualTo(50).Within(.01f));
+        }
+
+        [UnityTest]
         public IEnumerator Animated_scroll_uses_the_unscaled_engine_clock_with_manual_defaults()
         {
             DG.Tweening.DOTween.Init();

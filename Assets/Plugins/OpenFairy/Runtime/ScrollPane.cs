@@ -350,7 +350,8 @@ namespace OpenFairy.UGUI
             if (!_renderAligned) return;
             if (content.anchoredPosition.Equals(_renderedPosition))
             {
-                content.anchoredPosition = _layoutPosition;
+                // A whole-pixel position is already the layout position; rewriting it would move every child each frame.
+                if (!_layoutPosition.Equals(_renderedPosition)) content.anchoredPosition = _layoutPosition;
                 _renderedPosition = content.anchoredPosition;
             }
             _renderAligned = false;
@@ -367,8 +368,8 @@ namespace OpenFairy.UGUI
             base.Rebuild(executing);
             if (executing != CanvasUpdate.PostLayout || content == null) return;
             _layoutPosition = LogicalPosition;
-            _renderedPosition = new Vector2((int)_layoutPosition.x, (int)_layoutPosition.y);
-            content.anchoredPosition = _renderedPosition;
+            var rendered = new Vector2((int)_layoutPosition.x, (int)_layoutPosition.y);
+            if (!content.anchoredPosition.Equals(rendered)) content.anchoredPosition = rendered;
             _renderedPosition = content.anchoredPosition;
             _renderAligned = true;
             _positionRecorded = true;

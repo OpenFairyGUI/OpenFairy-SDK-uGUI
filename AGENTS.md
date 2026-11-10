@@ -6,6 +6,8 @@ SDK 提交只保留通用实现、文档与测试结论，不保存消费工程�
 
 本项目的 AI 协作约定。开始工作前先读本文件，再读 `Docs/BasicsImplementationStatus.md` 了解当前实现状态；有实质进展时同步更新状态文档。
 
+2026-11-10 每帧标脏：Canvas 中任一元素变脏都会让整块 Canvas 重新合批，每帧写入相同的值也算。MaskShape 不再每帧无条件 SetVerticesDirty/SetMaterialDirty：源网格与贴图的变化经源 Graphic 的脏回调转发；位置、源与载体之间 CanvasGroup 的 alpha、源的显隐没有回调，在 preWillRender 比较，与上一次 preWillRender 的采样或上一次建网格时的值之一相同就算未变（每帧开始时像素对齐已把位置还原为逻辑坐标，而建网格在取整之后，只和其中一方比会每帧误判）。ScrollPane 的整像素位置和 AuthoredScrollbar 未变的几何不再重写。在一个约 750 个渲染器的战斗界面上实测：图形重建 0.19→0.04ms/帧，UpdateBatches 1.47→1.31ms。剩下的 RectMask2D 每帧剔除、像素对齐遍历与小数偏移元素的还原/重写，是按元素总数计的固定开销。曾尝试按世界矩阵与 rect 缓存作者坐标，但坐标空间默认就是父节点，逐层计算本来只走一层，没有收益，已撤销。Builtin Editor 266/266、Play 286/286，TMP Editor 290/290、Play 313/313。
+
 2026-11-06 像素对齐每帧开销：PixelAlignment不再是逐实例ICanvasElement，也不逐实例订阅preWillRenderCanvases。全部启用实例在一个静态列表里按层级深度排序，preWillRender统一Restore并只登记一个布局元素；该元素的transform取最深实例，因而其PostLayout在所有更浅的PostLayout写入者（ScrollPane、AuthoredScrollbar）之后、ClipperRegistry.Cull之前执行，并父先子后对齐。取整偏移为0的元素不写位置、不做矩阵变换、不开编辑器预览；非0偏移仍每帧Update还原、PostLayout重新应用，因为脚本在帧内必须读到逻辑坐标（`+=`式移动不能累积显示偏移）。计算式与原逐实例Rebuild逐项相同。同一preWillRender调用链中较早订阅者（滚动条隐藏grip）可能停用最后一个实例，Queue需判空。uGUI的IndexedSet不支持foreach，测试读布局队列用索引。
 
 2026-11-04 编辑态布局与Prefab覆盖：像素对齐和滚动条显示几何使用Unity编辑器属性快照，不将临时显示值保存为实例覆盖；该内部Editor API只绑定一次，Player不包含反射或快照。滚动条沿轴尺寸与位置明确标记为驱动属性，避免浮点消去误差留下冗余覆盖；其像素对齐预览所有权在Migrate保存。AuthoredSizeFitter在编辑态保存测量尺寸，Player仍使用原生ContentSizeFitter；Group编辑态保存最终排布，不与子fitter互相清除驱动标记。整个Migrate期间恢复并暂停显示偏移。Builtin Editor266/266、Play282/282，TMP Editor290/290、Play309/309；新增11项覆盖源更新、嵌套实例修改、保存重载、外部位置写入及滚动条显隐，另有真实场景保存/重开验证。更新SDK后重新Migrate，不在业务场景中补位置。

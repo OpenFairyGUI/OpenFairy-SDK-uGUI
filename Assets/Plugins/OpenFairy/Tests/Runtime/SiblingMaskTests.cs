@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -121,6 +122,61 @@ namespace OpenFairy.UGUI.Tests
             Pixel(56, Color.blue);
             Assert.That(content.localScale, Is.EqualTo(Vector3.one));
             Assert.That(content.parent, Is.SameAs(source.parent));
+        }
+
+        [UnityTest]
+        public IEnumerator Static_mask_is_not_rebuilt_until_its_source_changes()
+        {
+            var canvas = Own(new GameObject("Canvas", typeof(RectTransform), typeof(Canvas)));
+            var carrier = Rect("Stencil", canvas.transform);
+            carrier.gameObject.SetActive(false);
+            var shape = carrier.gameObject.AddComponent<MaskShape>();
+            carrier.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+            var source = Rect("Authored mask", carrier);
+            var image = source.gameObject.AddComponent<UnityEngine.UI.Image>();
+            image.sprite = Sprite(Color.white);
+            var alpha = source.gameObject.AddComponent<CanvasGroup>();
+            // A pixel-snapped source alternates between layout and rendered positions every frame without changing.
+            source.anchoredPosition = new Vector2(.3f, -.3f);
+            source.gameObject.AddComponent<PixelAlignment>();
+            shape.source = source.gameObject.AddComponent<MaskSource>();
+            carrier.gameObject.SetActive(true);
+            var queue = (IList<ICanvasElement>)typeof(CanvasUpdateRegistry)
+                .GetField("m_GraphicRebuildQueue", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(CanvasUpdateRegistry.instance);
+            var queued = false;
+            void Probe()
+            {
+                queued = false;
+                for (var i = 0; i < queue.Count; i++) queued |= ReferenceEquals(queue[i], shape);
+            }
+            void Expect(bool rebuilt, string step)
+            {
+                Canvas.ForceUpdateCanvases();
+                Assert.That(queued, Is.EqualTo(rebuilt), step);
+                Canvas.ForceUpdateCanvases();
+                Assert.That(queued, Is.False, step + " then settled");
+            }
+            Canvas.preWillRenderCanvases += Probe;
+            try
+            {
+                Expect(true, "initial build");
+                yield return null;
+                Expect(false, "static");
+                source.anchoredPosition += new Vector2(3, 0);
+                Expect(true, "moved");
+                alpha.alpha = .5f;
+                Expect(true, "ancestor alpha");
+                image.sprite = Sprite(Color.white, Color.clear);
+                Expect(true, "source mesh and texture");
+                source.gameObject.SetActive(false);
+                Expect(true, "source hidden");
+                source.gameObject.SetActive(true);
+                Expect(true, "source shown");
+            }
+            finally
+            {
+                Canvas.preWillRenderCanvases -= Probe;
+            }
         }
     }
 }
