@@ -127,7 +127,8 @@ namespace OpenFairy.UGUI
         {
             if (!_recorded || _applying)
                 return;
-            var owner = Read((RectTransform)transform, pivotAsAnchor, coordinateSpace);
+            // Most frames no target moves; read the owner only once a binding has changed and nothing has been written yet.
+            var owner = default(RelationGeometry);
             var changed = false;
             for (var i = 0; i < bindings.Length; i++)
             {
@@ -135,6 +136,8 @@ namespace OpenFairy.UGUI
                 var target = ReadTarget(binding);
                 if (!binding.nativeAnchors && (target.origin != binding.previous.origin || target.size != binding.previous.size))
                 {
+                    if (!changed)
+                        owner = Read((RectTransform)transform, pivotAsAnchor, coordinateSpace);
                     RelationMath.Apply(ref owner, binding.previous, target, binding, bindings,
                         binding.target == reference, binding.target.parent == transform,
                         _constructionSize, _constructionTargets != null ? _constructionTargets[i] : default);
